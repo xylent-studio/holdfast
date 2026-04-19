@@ -4,7 +4,10 @@ import { SCHEMA_VERSION } from '@/domain/constants';
 import { buildCarryForwardTasks } from '@/domain/logic/close-day';
 import type { ItemRecord } from '@/domain/schemas/records';
 
-function makeItem(title: string, status: ItemRecord['status'] = 'upcoming'): ItemRecord {
+function makeItem(
+  title: string,
+  status: ItemRecord['status'] = 'upcoming',
+): ItemRecord {
   return {
     id: crypto.randomUUID(),
     schemaVersion: SCHEMA_VERSION,
@@ -13,6 +16,9 @@ function makeItem(title: string, status: ItemRecord['status'] = 'upcoming'): Ite
     lane: 'admin',
     status,
     body: '',
+    sourceText: null,
+    sourceItemId: null,
+    captureMode: null,
     sourceDate: '2026-04-18',
     scheduledDate: '2026-04-19',
     scheduledTime: null,
@@ -28,7 +34,11 @@ function makeItem(title: string, status: ItemRecord['status'] = 'upcoming'): Ite
 
 describe('buildCarryForwardTasks', () => {
   it('creates next-day tasks for each non-empty carry line', () => {
-    const result = buildCarryForwardTasks('Call the landlord\nBuy batteries', '2026-04-19', []);
+    const result = buildCarryForwardTasks(
+      'Call the landlord\nBuy batteries',
+      '2026-04-19',
+      [],
+    );
 
     expect(result).toEqual([
       { title: 'Call the landlord', scheduledDate: '2026-04-19' },
@@ -43,6 +53,8 @@ describe('buildCarryForwardTasks', () => {
       [makeItem('call   the landlord'), makeItem('Buy batteries', 'done')],
     );
 
-    expect(result).toEqual([{ title: 'Buy batteries', scheduledDate: '2026-04-19' }]);
+    expect(result).toEqual([
+      { title: 'Buy batteries', scheduledDate: '2026-04-19' },
+    ]);
   });
 });

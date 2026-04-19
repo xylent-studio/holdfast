@@ -1,22 +1,57 @@
 # Core Flows
 
-## 1. Quick Capture
+## 1. Capture
+
+Holdfast supports three real capture speeds.
 
 Entry point: `Add`
 
-The user chooses:
+### 1a. Uncertain capture
 
-- `task` or `note`
-- area
-- place: `Inbox`, `Now`, or `Upcoming`
-- optional timing if it belongs later
+Default behavior:
+
+- start with one calm text entry point
+- save to Inbox when destination is not yet clear
+- preserve the source thought quietly
+- do not require task, note, area, place, or timing as the first step
+
+Example:
+
+- `groceries, eggs, coffee, check pantry first`
+
+### 1b. Intentional capture in context
+
+When the user is already inside a destination surface:
+
+- Add should place directly into that surface
+- the current context outranks Inbox fallback
+
+Example:
+
+- while inside `Groceries`, adding `eggs` should create a grocery list item there immediately
+
+### 1c. Directed quick add
+
+When the user knows the destination but is not inside it:
+
+- let the user name the thing first
+- then allow direct placement into the chosen target
+- keep this secondary, not mandatory
+
+Examples:
+
+- quick-add to `Groceries`
+- quick-add to a pinned checklist
+- quick-add to a known note or collection
 
 Rules:
 
 - capture must not require tags, projects, or attachments up front
-- `Inbox` is the default landing place
+- `Inbox` is the fallback for uncertainty, not the mandatory funnel for every add
+- direct placement should win when destination is already obvious
 - `Now` should be intentional, not the default for everything
 - `Upcoming` supports both dated and undated items
+- original source context should survive reshaping
 
 ## 2. Start Day
 
@@ -95,7 +130,25 @@ Modes:
 
 `Planned` is date-based. `Queue` is undated. `Waiting on` means the user is blocked, not just deferring.
 
-## 8. Review
+## 8. Lists and repeated structure
+
+Lists are contextual objects, not a competing top-level navigation model.
+
+Expected list families:
+
+- replenishment lists
+- recurring checklists
+- one-off project lists
+- reference collections
+
+Rules:
+
+- list items stay attached to their list surface by default
+- they become top-level tasks only through explicit promotion
+- recurring checklists should grow toward template-plus-run behavior
+- reference collections should preserve things without pretending everything is actionable
+
+## 9. Review
 
 Review should answer:
 
@@ -103,10 +156,19 @@ Review should answer:
 - what keeps staying open?
 - what is building up?
 - what happened over the last few days?
+- where did I save that?
 
 It should not become dashboard theater.
 
-## 9. Settings And Routines
+Review should include retrieval for:
+
+- captures
+- tasks
+- notes
+- lists and list items
+- attachments and preserved context
+
+## 10. Settings And Routines
 
 Settings should stay minimal and meaningful.
 

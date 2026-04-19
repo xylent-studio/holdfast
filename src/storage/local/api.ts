@@ -1,25 +1,35 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 
-import { READINESS_CHECKS, SCHEMA_VERSION, SETTINGS_ROW_ID, SYNC_STATE_ROW_ID } from '@/domain/constants';
+import {
+  READINESS_CHECKS,
+  SCHEMA_VERSION,
+  SETTINGS_ROW_ID,
+  SYNC_STATE_ROW_ID,
+} from '@/domain/constants';
 import { addDays, nowIso, startOfWeek } from '@/domain/dates';
 import type { DateKey } from '@/domain/dates';
 import { buildCarryForwardTasks } from '@/domain/logic/close-day';
 import {
   AttachmentBlobRecordSchema,
   AttachmentRecordSchema,
+  ListItemRecordSchema,
+  ListRecordSchema,
   DailyRecordSchema,
   ItemRecordSchema,
   MutationRecordSchema,
   RoutineRecordSchema,
   SettingsRecordSchema,
-  SyncStateRecordSchema,
   WeeklyRecordSchema,
   type AttachmentKind,
   type AttachmentRecord,
+  type CaptureMode,
   type DailyRecord,
   type ItemKind,
   type ItemRecord,
   type ItemStatus,
+  type ListItemRecord,
+  type ListKind,
+  type ListRecord,
   type MutationRecord,
   type ReadinessKey,
   type RoutineRecord,
@@ -29,6 +39,10 @@ import {
 } from '@/domain/schemas/records';
 import { db } from '@/storage/local/db';
 import { getSupabaseSyncStatus } from '@/storage/sync/supabase/config';
+import {
+  createDefaultSyncState,
+  normalizeSyncStateRecord,
+} from '@/storage/sync/state';
 
 export interface ItemWithAttachments extends ItemRecord {
   attachments: AttachmentRecord[];
@@ -37,6 +51,8 @@ export interface ItemWithAttachments extends ItemRecord {
 export interface HoldfastSnapshot {
   currentDate: DateKey;
   items: ItemWithAttachments[];
+  lists: ListRecord[];
+  listItems: ListItemRecord[];
   dailyRecords: DailyRecord[];
   weeklyRecord: WeeklyRecord;
   currentDay: DailyRecord;
@@ -50,9 +66,29 @@ export interface CreateItemInput {
   kind: ItemKind;
   lane: ItemRecord['lane'];
   status: ItemStatus;
+  body?: string;
+  sourceText?: string | null;
+  sourceItemId?: string | null;
+  captureMode?: CaptureMode | null;
   sourceDate: DateKey;
   scheduledDate: DateKey | null;
   scheduledTime: string | null;
+}
+
+export interface CreateListInput {
+  title: string;
+  kind: ListKind;
+  lane: ListRecord['lane'];
+  pinned?: boolean;
+  sourceItemId?: string | null;
+}
+
+export interface CreateListItemInput {
+  listId: string;
+  title: string;
+  body?: string;
+  position?: number;
+  sourceItemId?: string | null;
 }
 
 export interface ItemDraftPatch {
@@ -79,7 +115,9 @@ function defaultDailyRecord(date: string): DailyRecord {
     schemaVersion: SCHEMA_VERSION,
     startedAt: null,
     closedAt: null,
-    readiness: Object.fromEntries(READINESS_CHECKS.map((check) => [check.key, false])),
+    readiness: Object.fromEntries(
+      READINESS_CHECKS.map((check) => [check.key, false]),
+    ),
     focusItemIds: [],
     launchNote: '',
     closeWin: '',
@@ -121,21 +159,6 @@ function defaultSettings(): SettingsRecord {
   });
 }
 
-function defaultSyncState(): SyncStateRecord {
-  const timestamp = nowIso();
-  const status = getSupabaseSyncStatus();
-  return SyncStateRecordSchema.parse({
-    id: SYNC_STATE_ROW_ID,
-    schemaVersion: SCHEMA_VERSION,
-    provider: 'supabase',
-    mode: status.configured ? 'ready' : 'disabled',
-    lastSyncedAt: null,
-    authState: 'signed-out',
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  });
-}
-
 function createMutationRecord(
   entity: MutationRecord['entity'],
   entityId: string,
@@ -165,11 +188,53 @@ function createItemRecord(input: CreateItemInput): ItemRecord {
     kind: input.kind,
     lane: input.lane,
     status: input.status,
-    body: '',
+    body: input.body ?? '',
+    sourceText: input.sourceText ?? null,
+    sourceItemId: input.sourceItemId ?? null,
+    captureMode: input.captureMode ?? null,
     sourceDate: input.sourceDate,
     scheduledDate: input.scheduledDate,
     scheduledTime: input.scheduledTime,
     routineId: null,
+    completedAt: null,
+    archivedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
+    syncState: 'pending',
+  });
+}
+
+function createListRecord(input: CreateListInput): ListRecord {
+  const timestamp = nowIso();
+  return ListRecordSchema.parse({
+    id: crypto.randomUUID(),
+    schemaVersion: SCHEMA_VERSION,
+    title: input.title.trim(),
+    kind: input.kind,
+    lane: input.lane,
+    pinned: input.pinned ?? false,
+    sourceItemId: input.sourceItemId ?? null,
+    archivedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
+    syncState: 'pending',
+  });
+}
+
+function createListItemRecord(input: CreateListItemInput): ListItemRecord {
+  const timestamp = nowIso();
+  return ListItemRecordSchema.parse({
+    id: crypto.randomUUID(),
+    schemaVersion: SCHEMA_VERSION,
+    listId: input.listId,
+    title: input.title.trim(),
+    body: input.body ?? '',
+    status: 'open',
+    position: input.position ?? 0,
+    sourceItemId: input.sourceItemId ?? null,
+    promotedItemId: null,
     completedAt: null,
     archivedAt: null,
     createdAt: timestamp,
@@ -201,8 +266,16 @@ async function ensureSettingsAndSync(): Promise<{
 
   let syncState = await db.syncState.get(SYNC_STATE_ROW_ID);
   if (!syncState) {
-    syncState = defaultSyncState();
+    syncState = createDefaultSyncState(getSupabaseSyncStatus());
     await db.syncState.put(syncState);
+  } else {
+    const normalized = normalizeSyncStateRecord(syncState);
+    if (JSON.stringify(normalized) !== JSON.stringify(syncState)) {
+      syncState = normalized;
+      await db.syncState.put(syncState);
+    } else {
+      syncState = normalized;
+    }
   }
 
   return { settings, syncState };
@@ -258,18 +331,39 @@ export async function bootstrapHoldfast(): Promise<void> {
   });
 }
 
-export async function getHoldfastSnapshot(currentDate: DateKey): Promise<HoldfastSnapshot> {
+export async function getHoldfastSnapshot(
+  currentDate: DateKey,
+): Promise<HoldfastSnapshot> {
   const weekStart = startOfWeek(currentDate);
-  const [{ settings, syncState }, currentDay, weeklyRecord, items, attachments, dailyRecords, routines] =
-    await Promise.all([
-      ensureSettingsAndSync(),
-      ensureDailyRecord(currentDate),
-      ensureWeeklyRecord(weekStart),
-      db.items.toArray(),
-      db.attachments.toArray(),
-      db.dailyRecords.toArray(),
-      db.routines.toArray(),
-    ]);
+  const [
+    { settings, syncState },
+    currentDay,
+    weeklyRecord,
+    items,
+    attachments,
+    dailyRecords,
+    routines,
+    lists,
+    listItems,
+  ] = await Promise.all([
+    ensureSettingsAndSync(),
+    ensureDailyRecord(currentDate),
+    ensureWeeklyRecord(weekStart),
+    db.items
+      .toArray()
+      .then((rows) => rows.map((item) => ItemRecordSchema.parse(item))),
+    db.attachments.toArray(),
+    db.dailyRecords.toArray(),
+    db.routines.toArray(),
+    db.lists
+      .toArray()
+      .then((rows) => rows.map((list) => ListRecordSchema.parse(list))),
+    db.listItems
+      .toArray()
+      .then((rows) =>
+        rows.map((listItem) => ListItemRecordSchema.parse(listItem)),
+      ),
+  ]);
 
   const attachmentMap = new Map<string, AttachmentRecord[]>();
   for (const attachment of attachments.filter((entry) => !entry.deletedAt)) {
@@ -290,6 +384,8 @@ export async function getHoldfastSnapshot(currentDate: DateKey): Promise<Holdfas
     currentDay,
     dailyRecords,
     items: enrichedItems,
+    lists: lists.filter((list) => !list.deletedAt),
+    listItems: listItems.filter((listItem) => !listItem.deletedAt),
     routines: routines.filter((routine) => !routine.deletedAt),
     settings,
     syncState,
@@ -297,8 +393,13 @@ export async function getHoldfastSnapshot(currentDate: DateKey): Promise<Holdfas
   };
 }
 
-export function useHoldfastSnapshot(currentDate: DateKey): HoldfastSnapshot | null | undefined {
-  return useLiveQuery(async () => getHoldfastSnapshot(currentDate), [currentDate]);
+export function useHoldfastSnapshot(
+  currentDate: DateKey,
+): HoldfastSnapshot | null | undefined {
+  return useLiveQuery(
+    async () => getHoldfastSnapshot(currentDate),
+    [currentDate],
+  );
 }
 
 export async function createItem(input: CreateItemInput): Promise<void> {
@@ -306,129 +407,204 @@ export async function createItem(input: CreateItemInput): Promise<void> {
 
   await db.transaction('rw', db.items, db.mutationQueue, async () => {
     await db.items.add(record);
-    await queueMutation(createMutationRecord('item', record.id, 'item.created', { item: record }));
+    await queueMutation(
+      createMutationRecord('item', record.id, 'item.created', { item: record }),
+    );
   });
 }
 
-export async function saveItem(itemId: string, patch: ItemDraftPatch): Promise<void> {
-  await db.transaction('rw', db.items, db.dailyRecords, db.mutationQueue, async () => {
-    const current = await db.items.get(itemId);
-    if (!current) {
-      return;
-    }
+export async function saveItem(
+  itemId: string,
+  patch: ItemDraftPatch,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.items,
+    db.dailyRecords,
+    db.mutationQueue,
+    async () => {
+      const current = await db.items.get(itemId);
+      if (!current) {
+        return;
+      }
 
-    const timestamp = nowIso();
-    const nextStatus = patch.status;
-    const updated = ItemRecordSchema.parse({
-      ...current,
-      title: patch.title.trim(),
-      kind: patch.kind,
-      lane: patch.lane,
-      status: nextStatus,
-      body: patch.body,
-      scheduledDate: patch.scheduledDate,
-      scheduledTime: patch.scheduledTime,
-      completedAt: nextStatus === 'done' ? current.completedAt ?? timestamp : null,
-      archivedAt: nextStatus === 'archived' ? current.archivedAt ?? timestamp : null,
-      updatedAt: timestamp,
-      syncState: 'pending',
-    });
+      const timestamp = nowIso();
+      const preservedSourceText =
+        current.sourceText ??
+        (current.kind === 'capture'
+          ? [current.title, current.body].filter(Boolean).join('\n\n')
+          : null);
+      const nextStatus =
+        patch.kind === 'capture'
+          ? patch.status === 'archived'
+            ? 'archived'
+            : 'inbox'
+          : patch.status;
+      const nextScheduledDate =
+        patch.kind === 'capture' ? null : patch.scheduledDate;
+      const nextScheduledTime =
+        patch.kind === 'capture' ? null : patch.scheduledTime;
+      const updated = ItemRecordSchema.parse({
+        ...current,
+        title: patch.title.trim(),
+        kind: patch.kind,
+        lane: patch.lane,
+        status: nextStatus,
+        body: patch.body,
+        sourceText: preservedSourceText,
+        sourceItemId: current.sourceItemId ?? null,
+        captureMode: current.captureMode ?? null,
+        scheduledDate: nextScheduledDate,
+        scheduledTime: nextScheduledTime,
+        completedAt:
+          nextStatus === 'done' ? (current.completedAt ?? timestamp) : null,
+        archivedAt:
+          nextStatus === 'archived' ? (current.archivedAt ?? timestamp) : null,
+        updatedAt: timestamp,
+        syncState: 'pending',
+      });
 
-    await db.items.put(updated);
-    if (nextStatus !== 'today') {
-      await removeItemFromFocusEverywhere(itemId);
-    }
+      await db.items.put(updated);
+      if (nextStatus !== 'today') {
+        await removeItemFromFocusEverywhere(itemId);
+      }
 
-    await queueMutation(createMutationRecord('item', itemId, 'item.updated', { item: updated }));
-  });
+      await queueMutation(
+        createMutationRecord('item', itemId, 'item.updated', { item: updated }),
+      );
+    },
+  );
 }
 
 export async function deleteItem(itemId: string): Promise<void> {
   await db.transaction(
     'rw',
-    [db.items, db.attachments, db.attachmentBlobs, db.dailyRecords, db.mutationQueue],
+    [
+      db.items,
+      db.attachments,
+      db.attachmentBlobs,
+      db.dailyRecords,
+      db.mutationQueue,
+    ],
     async () => {
-      const attachments = await db.attachments.where('itemId').equals(itemId).toArray();
+      const attachments = await db.attachments
+        .where('itemId')
+        .equals(itemId)
+        .toArray();
       await db.items.delete(itemId);
-      await db.attachments.bulkDelete(attachments.map((attachment) => attachment.id));
-      await db.attachmentBlobs.bulkDelete(attachments.map((attachment) => attachment.blobId));
+      await db.attachments.bulkDelete(
+        attachments.map((attachment) => attachment.id),
+      );
+      await db.attachmentBlobs.bulkDelete(
+        attachments.map((attachment) => attachment.blobId),
+      );
       await removeItemFromFocusEverywhere(itemId);
-      await queueMutation(createMutationRecord('item', itemId, 'item.deleted', { itemId }));
+      await queueMutation(
+        createMutationRecord('item', itemId, 'item.deleted', { itemId }),
+      );
     },
   );
 }
 
-export async function toggleTaskDone(itemId: string, currentDate: DateKey): Promise<void> {
-  await db.transaction('rw', db.items, db.dailyRecords, db.mutationQueue, async () => {
-    const current = await db.items.get(itemId);
-    if (!current) {
-      return;
-    }
+export async function toggleTaskDone(
+  itemId: string,
+  currentDate: DateKey,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.items,
+    db.dailyRecords,
+    db.mutationQueue,
+    async () => {
+      const current = await db.items.get(itemId);
+      if (!current || current.kind !== 'task') {
+        return;
+      }
 
-    const timestamp = nowIso();
-    const isDone = current.status === 'done';
-    const updated = ItemRecordSchema.parse({
-      ...current,
-      status: isDone ? 'today' : 'done',
-      scheduledDate: isDone ? currentDate : current.scheduledDate,
-      completedAt: isDone ? null : timestamp,
-      archivedAt: current.status === 'archived' ? timestamp : null,
-      updatedAt: timestamp,
-      syncState: 'pending',
-    });
+      const timestamp = nowIso();
+      const isDone = current.status === 'done';
+      const updated = ItemRecordSchema.parse({
+        ...current,
+        status: isDone ? 'today' : 'done',
+        scheduledDate: isDone ? currentDate : current.scheduledDate,
+        completedAt: isDone ? null : timestamp,
+        archivedAt: current.status === 'archived' ? timestamp : null,
+        updatedAt: timestamp,
+        syncState: 'pending',
+      });
 
-    await db.items.put(updated);
-    if (!isDone) {
-      await removeItemFromFocusEverywhere(itemId);
-    }
-    await queueMutation(createMutationRecord('item', itemId, 'item.status.changed', { item: updated }));
-  });
+      await db.items.put(updated);
+      if (!isDone) {
+        await removeItemFromFocusEverywhere(itemId);
+      }
+      await queueMutation(
+        createMutationRecord('item', itemId, 'item.status.changed', {
+          item: updated,
+        }),
+      );
+    },
+  );
 }
 
-export async function toggleFocus(date: DateKey, itemId: string): Promise<void> {
-  await db.transaction('rw', db.items, db.dailyRecords, db.mutationQueue, async () => {
-    const [item, day] = await Promise.all([db.items.get(itemId), ensureDailyRecord(date)]);
-    if (!item) {
-      return;
-    }
+export async function toggleFocus(
+  date: DateKey,
+  itemId: string,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.items,
+    db.dailyRecords,
+    db.mutationQueue,
+    async () => {
+      const [item, day] = await Promise.all([
+        db.items.get(itemId),
+        ensureDailyRecord(date),
+      ]);
+      if (!item || item.kind === 'capture') {
+        return;
+      }
 
-    const focusItemIds = day.focusItemIds.includes(itemId)
-      ? day.focusItemIds.filter((id) => id !== itemId)
-      : [...day.focusItemIds.filter((id) => id !== itemId).slice(-2), itemId];
+      const focusItemIds = day.focusItemIds.includes(itemId)
+        ? day.focusItemIds.filter((id) => id !== itemId)
+        : [...day.focusItemIds.filter((id) => id !== itemId).slice(-2), itemId];
 
-    const updatedDay = DailyRecordSchema.parse({
-      ...day,
-      focusItemIds,
-      updatedAt: nowIso(),
-      syncState: 'pending',
-    });
+      const updatedDay = DailyRecordSchema.parse({
+        ...day,
+        focusItemIds,
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      });
 
-    const updatedItem =
-      item.status === 'today'
-        ? item
-        : ItemRecordSchema.parse({
-            ...item,
-            status: 'today',
-            scheduledDate: date,
-            updatedAt: nowIso(),
-            syncState: 'pending',
-          });
+      const updatedItem =
+        item.status === 'today'
+          ? item
+          : ItemRecordSchema.parse({
+              ...item,
+              status: 'today',
+              scheduledDate: date,
+              updatedAt: nowIso(),
+              syncState: 'pending',
+            });
 
-    await db.dailyRecords.put(updatedDay);
-    if (updatedItem !== item) {
-      await db.items.put(updatedItem);
-    }
+      await db.dailyRecords.put(updatedDay);
+      if (updatedItem !== item) {
+        await db.items.put(updatedItem);
+      }
 
-    await queueMutation(
-      createMutationRecord('dailyRecord', date, 'daily.focus.changed', {
-        date,
-        focusItemIds: updatedDay.focusItemIds,
-      }),
-    );
-  });
+      await queueMutation(
+        createMutationRecord('dailyRecord', date, 'daily.focus.changed', {
+          date,
+          focusItemIds: updatedDay.focusItemIds,
+        }),
+      );
+    },
+  );
 }
 
-export async function toggleReadiness(date: DateKey, key: ReadinessKey): Promise<void> {
+export async function toggleReadiness(
+  date: DateKey,
+  key: ReadinessKey,
+): Promise<void> {
   await db.transaction('rw', db.dailyRecords, db.mutationQueue, async () => {
     const current = await ensureDailyRecord(date);
     const updated = DailyRecordSchema.parse({
@@ -453,119 +629,145 @@ export async function toggleReadiness(date: DateKey, key: ReadinessKey): Promise
 }
 
 export async function startDay(date: DateKey): Promise<void> {
-  await db.transaction('rw', db.dailyRecords, db.routines, db.items, db.mutationQueue, async () => {
-    const day = await ensureDailyRecord(date);
-    const weekday = new Date(`${date}T00:00:00`).getDay();
-    const routines = await db.routines.toArray();
-    const openItemsForDate = await db.items.toArray();
-    const itemsToCreate: ItemRecord[] = [];
-    const seededRoutineIds = [...day.seededRoutineIds];
+  await db.transaction(
+    'rw',
+    db.dailyRecords,
+    db.routines,
+    db.items,
+    db.mutationQueue,
+    async () => {
+      const day = await ensureDailyRecord(date);
+      const weekday = new Date(`${date}T00:00:00`).getDay();
+      const routines = await db.routines.toArray();
+      const openItemsForDate = await db.items.toArray();
+      const itemsToCreate: ItemRecord[] = [];
+      const seededRoutineIds = [...day.seededRoutineIds];
 
-    for (const routine of routines.filter(
-      (entry) => entry.active && !entry.deletedAt && entry.weekdays.includes(weekday),
-    )) {
-      if (seededRoutineIds.includes(routine.id)) {
-        continue;
-      }
+      for (const routine of routines.filter(
+        (entry) =>
+          entry.active && !entry.deletedAt && entry.weekdays.includes(weekday),
+      )) {
+        if (seededRoutineIds.includes(routine.id)) {
+          continue;
+        }
 
-      const exists = openItemsForDate.some(
-        (item) =>
-          !item.deletedAt &&
-          item.routineId === routine.id &&
-          item.sourceDate === date &&
-          !['done', 'archived'].includes(item.status),
-      );
-
-      if (!exists) {
-        itemsToCreate.push(
-          ItemRecordSchema.parse({
-            ...createItemRecord({
-              title: routine.title,
-              kind: 'task',
-              lane: routine.lane,
-              status: routine.destination === 'today' ? 'today' : 'upcoming',
-              sourceDate: date,
-              scheduledDate: routine.destination === 'today' ? date : null,
-              scheduledTime: routine.scheduledTime,
-            }),
-            routineId: routine.id,
-            body: routine.notes,
-          }),
+        const exists = openItemsForDate.some(
+          (item) =>
+            !item.deletedAt &&
+            item.routineId === routine.id &&
+            item.sourceDate === date &&
+            !['done', 'archived'].includes(item.status),
         );
+
+        if (!exists) {
+          itemsToCreate.push(
+            ItemRecordSchema.parse({
+              ...createItemRecord({
+                title: routine.title,
+                kind: 'task',
+                lane: routine.lane,
+                status: routine.destination === 'today' ? 'today' : 'upcoming',
+                sourceDate: date,
+                scheduledDate: routine.destination === 'today' ? date : null,
+                scheduledTime: routine.scheduledTime,
+              }),
+              routineId: routine.id,
+              body: routine.notes,
+            }),
+          );
+        }
+
+        seededRoutineIds.push(routine.id);
       }
 
-      seededRoutineIds.push(routine.id);
-    }
+      if (itemsToCreate.length) {
+        await db.items.bulkAdd(itemsToCreate);
+      }
 
-    if (itemsToCreate.length) {
-      await db.items.bulkAdd(itemsToCreate);
-    }
+      const updatedDay = DailyRecordSchema.parse({
+        ...day,
+        startedAt: day.startedAt ?? nowIso(),
+        seededRoutineIds,
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      });
 
-    const updatedDay = DailyRecordSchema.parse({
-      ...day,
-      startedAt: day.startedAt ?? nowIso(),
-      seededRoutineIds,
-      updatedAt: nowIso(),
-      syncState: 'pending',
-    });
-
-    await db.dailyRecords.put(updatedDay);
-    await queueMutation(
-      createMutationRecord('dailyRecord', date, 'daily.started', {
-        date,
-        seededRoutineIds: updatedDay.seededRoutineIds,
-        createdItemIds: itemsToCreate.map((item) => item.id),
-      }),
-    );
-  });
+      await db.dailyRecords.put(updatedDay);
+      await queueMutation(
+        createMutationRecord('dailyRecord', date, 'daily.started', {
+          date,
+          seededRoutineIds: updatedDay.seededRoutineIds,
+          createdItemIds: itemsToCreate.map((item) => item.id),
+        }),
+      );
+    },
+  );
 }
 
-export async function closeDay(date: DateKey, input: CloseDayInput): Promise<void> {
-  await db.transaction('rw', db.dailyRecords, db.items, db.mutationQueue, async () => {
-    const [day, items] = await Promise.all([ensureDailyRecord(date), db.items.toArray()]);
-    const updatedDay = DailyRecordSchema.parse({
-      ...day,
-      closedAt: nowIso(),
-      closeWin: input.closeWin,
-      closeCarry: input.closeCarry,
-      closeSeed: input.closeSeed,
-      closeNote: input.closeNote,
-      updatedAt: nowIso(),
-      syncState: 'pending',
-    });
-
-    const carryForward = buildCarryForwardTasks(input.closeCarry, addDays(date, 1), items);
-    const carryItems = carryForward.map((entry) =>
-      createItemRecord({
-        title: entry.title,
-        kind: 'task',
-        lane: 'admin',
-        status: 'upcoming',
-        sourceDate: date,
-        scheduledDate: entry.scheduledDate,
-        scheduledTime: null,
-      }),
-    );
-
-    await db.dailyRecords.put(updatedDay);
-    if (carryItems.length) {
-      await db.items.bulkAdd(carryItems);
-    }
-
-    await queueMutation(
-      createMutationRecord('dailyRecord', date, 'daily.closed', {
-        date,
+export async function closeDay(
+  date: DateKey,
+  input: CloseDayInput,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.dailyRecords,
+    db.items,
+    db.mutationQueue,
+    async () => {
+      const [day, items] = await Promise.all([
+        ensureDailyRecord(date),
+        db.items.toArray(),
+      ]);
+      const updatedDay = DailyRecordSchema.parse({
+        ...day,
+        closedAt: nowIso(),
         closeWin: input.closeWin,
         closeCarry: input.closeCarry,
         closeSeed: input.closeSeed,
         closeNote: input.closeNote,
-        carryItemIds: carryItems.map((item) => item.id),
-      }),
-    );
-  });
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      });
+
+      const carryForward = buildCarryForwardTasks(
+        input.closeCarry,
+        addDays(date, 1),
+        items,
+      );
+      const carryItems = carryForward.map((entry) =>
+        createItemRecord({
+          title: entry.title,
+          kind: 'task',
+          lane: 'admin',
+          status: 'upcoming',
+          sourceDate: date,
+          scheduledDate: entry.scheduledDate,
+          scheduledTime: null,
+        }),
+      );
+
+      await db.dailyRecords.put(updatedDay);
+      if (carryItems.length) {
+        await db.items.bulkAdd(carryItems);
+      }
+
+      await queueMutation(
+        createMutationRecord('dailyRecord', date, 'daily.closed', {
+          date,
+          closeWin: input.closeWin,
+          closeCarry: input.closeCarry,
+          closeSeed: input.closeSeed,
+          closeNote: input.closeNote,
+          carryItemIds: carryItems.map((item) => item.id),
+        }),
+      );
+    },
+  );
 }
 
-export async function seedLaunchFromYesterday(currentDate: DateKey): Promise<void> {
+export async function seedLaunchFromYesterday(
+  currentDate: DateKey,
+): Promise<void> {
   await db.transaction('rw', db.dailyRecords, db.mutationQueue, async () => {
     const [today, previous] = await Promise.all([
       ensureDailyRecord(currentDate),
@@ -597,7 +799,8 @@ export async function updateSettings(
   patch: Partial<Pick<SettingsRecord, 'direction' | 'standards' | 'why'>>,
 ): Promise<void> {
   await db.transaction('rw', db.settings, db.mutationQueue, async () => {
-    const current = (await db.settings.get(SETTINGS_ROW_ID)) ?? defaultSettings();
+    const current =
+      (await db.settings.get(SETTINGS_ROW_ID)) ?? defaultSettings();
     const updated = SettingsRecordSchema.parse({
       ...current,
       ...patch,
@@ -606,7 +809,14 @@ export async function updateSettings(
     });
 
     await db.settings.put(updated);
-    await queueMutation(createMutationRecord('settings', SETTINGS_ROW_ID, 'settings.updated', patch));
+    await queueMutation(
+      createMutationRecord(
+        'settings',
+        SETTINGS_ROW_ID,
+        'settings.updated',
+        patch,
+      ),
+    );
   });
 }
 
@@ -654,14 +864,53 @@ export async function createRoutine(): Promise<void> {
 
   await db.transaction('rw', db.routines, db.mutationQueue, async () => {
     await db.routines.add(routine);
-    await queueMutation(createMutationRecord('routine', routine.id, 'routine.created', { routine }));
+    await queueMutation(
+      createMutationRecord('routine', routine.id, 'routine.created', {
+        routine,
+      }),
+    );
+  });
+}
+
+export async function createList(input: CreateListInput): Promise<void> {
+  const record = createListRecord(input);
+
+  await db.transaction('rw', db.lists, db.mutationQueue, async () => {
+    await db.lists.add(record);
+    await queueMutation(
+      createMutationRecord('list', record.id, 'list.created', { list: record }),
+    );
+  });
+}
+
+export async function createListItem(
+  input: CreateListItemInput,
+): Promise<void> {
+  const record = createListItemRecord(input);
+
+  await db.transaction('rw', db.listItems, db.mutationQueue, async () => {
+    await db.listItems.add(record);
+    await queueMutation(
+      createMutationRecord('listItem', record.id, 'list-item.created', {
+        listItem: record,
+      }),
+    );
   });
 }
 
 export async function updateRoutine(
   routineId: string,
   patch: Partial<
-    Pick<RoutineRecord, 'title' | 'lane' | 'destination' | 'weekdays' | 'scheduledTime' | 'notes' | 'active'>
+    Pick<
+      RoutineRecord,
+      | 'title'
+      | 'lane'
+      | 'destination'
+      | 'weekdays'
+      | 'scheduledTime'
+      | 'notes'
+      | 'active'
+    >
   >,
 ): Promise<void> {
   await db.transaction('rw', db.routines, db.mutationQueue, async () => {
@@ -678,7 +927,11 @@ export async function updateRoutine(
     });
 
     await db.routines.put(updated);
-    await queueMutation(createMutationRecord('routine', routineId, 'routine.updated', { routine: updated }));
+    await queueMutation(
+      createMutationRecord('routine', routineId, 'routine.updated', {
+        routine: updated,
+      }),
+    );
   });
 }
 
@@ -698,67 +951,93 @@ export async function deleteRoutine(routineId: string): Promise<void> {
     });
 
     await db.routines.put(updated);
-    await queueMutation(createMutationRecord('routine', routineId, 'routine.deleted', { routineId }));
+    await queueMutation(
+      createMutationRecord('routine', routineId, 'routine.deleted', {
+        routineId,
+      }),
+    );
   });
 }
 
-export async function addFilesToItem(itemId: string, files: File[]): Promise<void> {
+export async function addFilesToItem(
+  itemId: string,
+  files: File[],
+): Promise<void> {
   if (!files.length) {
     return;
   }
 
-  await db.transaction('rw', db.attachments, db.attachmentBlobs, db.mutationQueue, async () => {
-    const timestamp = nowIso();
-    const blobRows = files.map((file) =>
-      AttachmentBlobRecordSchema.parse({
-        id: crypto.randomUUID(),
-        schemaVersion: SCHEMA_VERSION,
-        blob: file,
-        createdAt: timestamp,
-      }),
-    );
-
-    const attachmentRows = files.map((file, index) =>
-      AttachmentRecordSchema.parse({
-        id: crypto.randomUUID(),
-        schemaVersion: SCHEMA_VERSION,
-        itemId,
-        blobId: blobRows[index]?.id,
-        kind: attachmentKindForFile(file),
-        name: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        size: file.size,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        deletedAt: null,
-        syncState: 'pending',
-      }),
-    );
-
-    await db.attachmentBlobs.bulkAdd(blobRows);
-    await db.attachments.bulkAdd(attachmentRows);
-
-    for (const attachment of attachmentRows) {
-      await queueMutation(
-        createMutationRecord('attachment', attachment.id, 'attachment.created', { attachment }),
+  await db.transaction(
+    'rw',
+    db.attachments,
+    db.attachmentBlobs,
+    db.mutationQueue,
+    async () => {
+      const timestamp = nowIso();
+      const blobRows = files.map((file) =>
+        AttachmentBlobRecordSchema.parse({
+          id: crypto.randomUUID(),
+          schemaVersion: SCHEMA_VERSION,
+          blob: file,
+          createdAt: timestamp,
+        }),
       );
-    }
-  });
+
+      const attachmentRows = files.map((file, index) =>
+        AttachmentRecordSchema.parse({
+          id: crypto.randomUUID(),
+          schemaVersion: SCHEMA_VERSION,
+          itemId,
+          blobId: blobRows[index]?.id,
+          kind: attachmentKindForFile(file),
+          name: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          size: file.size,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          deletedAt: null,
+          syncState: 'pending',
+        }),
+      );
+
+      await db.attachmentBlobs.bulkAdd(blobRows);
+      await db.attachments.bulkAdd(attachmentRows);
+
+      for (const attachment of attachmentRows) {
+        await queueMutation(
+          createMutationRecord(
+            'attachment',
+            attachment.id,
+            'attachment.created',
+            { attachment },
+          ),
+        );
+      }
+    },
+  );
 }
 
 export async function removeAttachment(attachmentId: string): Promise<void> {
-  await db.transaction('rw', db.attachments, db.attachmentBlobs, db.mutationQueue, async () => {
-    const attachment = await db.attachments.get(attachmentId);
-    if (!attachment) {
-      return;
-    }
+  await db.transaction(
+    'rw',
+    db.attachments,
+    db.attachmentBlobs,
+    db.mutationQueue,
+    async () => {
+      const attachment = await db.attachments.get(attachmentId);
+      if (!attachment) {
+        return;
+      }
 
-    await db.attachments.delete(attachmentId);
-    await db.attachmentBlobs.delete(attachment.blobId);
-    await queueMutation(
-      createMutationRecord('attachment', attachmentId, 'attachment.deleted', { attachmentId }),
-    );
-  });
+      await db.attachments.delete(attachmentId);
+      await db.attachmentBlobs.delete(attachment.blobId);
+      await queueMutation(
+        createMutationRecord('attachment', attachmentId, 'attachment.deleted', {
+          attachmentId,
+        }),
+      );
+    },
+  );
 }
 
 export async function getAttachmentDownload(

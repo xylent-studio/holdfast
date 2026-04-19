@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
-import { repeatedOpenTitles, scheduledUpcomingItems } from '@/domain/logic/selectors';
+import {
+  repeatedOpenTitles,
+  scheduledUpcomingItems,
+} from '@/domain/logic/selectors';
 import type { ItemRecord } from '@/domain/schemas/records';
 
 function makeItem(overrides: Partial<ItemRecord>): ItemRecord {
@@ -13,6 +16,9 @@ function makeItem(overrides: Partial<ItemRecord>): ItemRecord {
     lane: 'admin',
     status: 'upcoming',
     body: '',
+    sourceText: null,
+    sourceItemId: null,
+    captureMode: null,
     sourceDate: '2026-04-18',
     scheduledDate: null,
     scheduledTime: null,
@@ -47,7 +53,11 @@ describe('scheduledUpcomingItems', () => {
         makeItem({ title: 'This week', scheduledDate: '2026-04-19' }),
         makeItem({ title: 'Next month', scheduledDate: '2026-05-04' }),
         makeItem({ title: 'Queue only', scheduledDate: null }),
-        makeItem({ title: 'Waiting', status: 'waiting', scheduledDate: '2026-04-21' }),
+        makeItem({
+          title: 'Waiting',
+          status: 'waiting',
+          scheduledDate: '2026-04-21',
+        }),
       ],
       '2026-04-18',
       'week',

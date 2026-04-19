@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
-import { LANES } from '@/domain/constants';
-import { resolveQuickDate } from '@/domain/dates';
+import {
+  planQuickAddItem,
+  type QuickAddTimingMode,
+} from '@/domain/logic/capture';
 import type { DateKey } from '@/domain/dates';
-import type { ItemKind, ItemStatus } from '@/domain/schemas/records';
 import { createItem } from '@/storage/local/api';
 import { Modal } from '@/shared/ui/Modal';
 
@@ -13,24 +14,24 @@ interface QuickAddDialogProps {
   onClose: () => void;
 }
 
-type TimingMode = 'tomorrow' | 'thisweek' | 'nextweek' | 'date' | 'someday';
-
-export function QuickAddDialog({ currentDate, isOpen, onClose }: QuickAddDialogProps) {
-  const [title, setTitle] = useState('');
-  const [kind, setKind] = useState<ItemKind>('task');
-  const [lane, setLane] = useState<(typeof LANES)[number]['key']>('admin');
-  const [status, setStatus] = useState<ItemStatus>('inbox');
-  const [timingMode, setTimingMode] = useState<TimingMode>('tomorrow');
+export function QuickAddDialog({
+  currentDate,
+  isOpen,
+  onClose,
+}: QuickAddDialogProps) {
+  const [rawText, setRawText] = useState('');
+  const [shapeNow, setShapeNow] = useState(false);
+  const [kind, setKind] = useState<'task' | 'note'>('task');
+  const [placement, setPlacement] = useState<'today' | 'upcoming'>('today');
+  const [timingMode, setTimingMode] = useState<QuickAddTimingMode>('tomorrow');
   const [chosenDate, setChosenDate] = useState<DateKey>(currentDate);
   const [chosenTime, setChosenTime] = useState('');
 
-  const resolvedDate = useMemo(() => resolveQuickDate(timingMode, currentDate, chosenDate), [chosenDate, currentDate, timingMode]);
-
   const reset = (): void => {
-    setTitle('');
+    setRawText('');
+    setShapeNow(false);
     setKind('task');
-    setLane('admin');
-    setStatus('inbox');
+    setPlacement('today');
     setTimingMode('tomorrow');
     setChosenDate(currentDate);
     setChosenTime('');
@@ -42,25 +43,22 @@ export function QuickAddDialog({ currentDate, isOpen, onClose }: QuickAddDialogP
   };
 
   const handleSubmit = async (): Promise<void> => {
-    const trimmed = title.trim();
-    if (!trimmed) {
+    const planned = planQuickAddItem({
+      rawText,
+      currentDate,
+      shapeNow,
+      kind,
+      placement,
+      timingMode,
+      chosenDate,
+      chosenTime,
+    });
+
+    if (!planned) {
       return;
     }
 
-    const scheduledDate =
-      status === 'today' ? currentDate : status === 'upcoming' ? resolvedDate : null;
-    const scheduledTime = status === 'inbox' ? null : chosenTime || null;
-
-    await createItem({
-      title: trimmed,
-      kind,
-      lane,
-      status,
-      sourceDate: currentDate,
-      scheduledDate,
-      scheduledTime,
-    });
-
+    await createItem(planned);
     handleClose();
   };
 
@@ -70,87 +68,145 @@ export function QuickAddDialog({ currentDate, isOpen, onClose }: QuickAddDialogP
         <div>
           <div className="eyebrow">Capture</div>
           <h2>Add</h2>
-          <p>Catch it fast, then give it the right place.</p>
+          <p>
+            Catch it first. Place it now only when the destination is already
+            clear.
+          </p>
         </div>
         <label className="field-stack">
-          <span>Title</span>
-          <input autoFocus onChange={(event) => setTitle(event.target.value)} placeholder="What needs a place?" type="text" value={title} />
+          <span>What do you need to keep?</span>
+          <textarea
+            autoFocus
+            onChange={(event) => setRawText(event.target.value)}
+            placeholder="What do you need to keep?"
+            rows={4}
+            value={rawText}
+          />
         </label>
-        <div className="grid two">
-          <label className="field-stack">
-            <span>Type</span>
-            <select onChange={(event) => setKind(event.target.value as ItemKind)} value={kind}>
-              <option value="task">Task</option>
-              <option value="note">Note</option>
-            </select>
-          </label>
-          <label className="field-stack">
-            <span>Area</span>
-            <select onChange={(event) => setLane(event.target.value as (typeof LANES)[number]['key'])} value={lane}>
-              {LANES.map((entry) => (
-                <option key={entry.key} value={entry.key}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
         <div className="field-stack">
-          <span>Place</span>
+          <span>Destination</span>
           <div className="chip-row">
-            {(['inbox', 'today', 'upcoming'] as const).map((entry) => (
-              <button
-                className={`chip ${status === entry ? 'active' : ''}`}
-                key={entry}
-                onClick={() => setStatus(entry)}
-                type="button"
-              >
-                {entry === 'inbox' ? 'Inbox' : entry === 'today' ? 'Now' : 'Upcoming'}
-              </button>
-            ))}
+            <button
+              className={`chip ${!shapeNow ? 'active' : ''}`}
+              onClick={() => setShapeNow(false)}
+              type="button"
+            >
+              Inbox first
+            </button>
+            <button
+              className={`chip ${shapeNow ? 'active' : ''}`}
+              onClick={() => setShapeNow(true)}
+              type="button"
+            >
+              Place it now
+            </button>
           </div>
         </div>
-        {status === 'upcoming' ? (
-          <div className="field-stack">
-            <span>When</span>
-            <div className="chip-row">
-              {([
-                ['tomorrow', 'Tomorrow'],
-                ['thisweek', 'This week'],
-                ['nextweek', 'Next week'],
-                ['date', 'Pick date'],
-                ['someday', 'No date'],
-              ] as const).map(([value, label]) => (
-                <button
-                  className={`chip ${timingMode === value ? 'active' : ''}`}
-                  key={value}
-                  onClick={() => setTimingMode(value)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
+        {shapeNow ? (
+          <>
+            <div className="field-stack">
+              <span>Shape</span>
+              <div className="chip-row">
+                {(
+                  [
+                    ['task', 'Task'],
+                    ['note', 'Note'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    className={`chip ${kind === value ? 'active' : ''}`}
+                    key={value}
+                    onClick={() => setKind(value)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : null}
-        {status === 'upcoming' && timingMode === 'date' ? (
-          <label className="field-stack">
-            <span>Date</span>
-            <input onChange={(event) => setChosenDate(event.target.value as DateKey)} type="date" value={chosenDate} />
-          </label>
-        ) : null}
-        {status !== 'inbox' && timingMode !== 'someday' ? (
-          <label className="field-stack">
-            <span>Time</span>
-            <input onChange={(event) => setChosenTime(event.target.value)} type="time" value={chosenTime} />
-          </label>
+            <div className="field-stack">
+              <span>Place</span>
+              <div className="chip-row">
+                {(
+                  [
+                    ['today', 'Now'],
+                    ['upcoming', 'Upcoming'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    className={`chip ${placement === value ? 'active' : ''}`}
+                    key={value}
+                    onClick={() => setPlacement(value)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {placement === 'upcoming' ? (
+              <div className="field-stack">
+                <span>When</span>
+                <div className="chip-row">
+                  {(
+                    [
+                      ['tomorrow', 'Tomorrow'],
+                      ['thisweek', 'This week'],
+                      ['nextweek', 'Next week'],
+                      ['date', 'Pick date'],
+                      ['someday', 'No date'],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      className={`chip ${timingMode === value ? 'active' : ''}`}
+                      key={value}
+                      onClick={() => setTimingMode(value)}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {placement === 'upcoming' && timingMode === 'date' ? (
+              <label className="field-stack">
+                <span>Date</span>
+                <input
+                  onChange={(event) =>
+                    setChosenDate(event.target.value as DateKey)
+                  }
+                  type="date"
+                  value={chosenDate}
+                />
+              </label>
+            ) : null}
+            {placement === 'today' || timingMode !== 'someday' ? (
+              <label className="field-stack">
+                <span>Time</span>
+                <input
+                  onChange={(event) => setChosenTime(event.target.value)}
+                  type="time"
+                  value={chosenTime}
+                />
+              </label>
+            ) : null}
+          </>
         ) : null}
         <div className="dialog-actions">
           <button className="button ghost" onClick={handleClose} type="button">
             Cancel
           </button>
-          <button className="button accent" onClick={() => void handleSubmit()} type="button">
-            {status === 'today' ? 'Add to Now' : status === 'upcoming' ? 'Add to Upcoming' : 'Add to Inbox'}
+          <button
+            className="button accent"
+            onClick={() => void handleSubmit()}
+            type="button"
+          >
+            {!shapeNow
+              ? 'Save to Inbox'
+              : placement === 'today'
+                ? 'Add to Now'
+                : 'Add to Upcoming'}
           </button>
         </div>
       </div>

@@ -4,12 +4,49 @@ import { SCHEMA_VERSION } from '@/domain/constants';
 
 const schemaVersion = z.literal(SCHEMA_VERSION);
 
-export const LaneSchema = z.enum(['work', 'health', 'home', 'people', 'build', 'admin']);
-export const ItemKindSchema = z.enum(['task', 'note']);
-export const ItemStatusSchema = z.enum(['inbox', 'today', 'upcoming', 'waiting', 'done', 'archived']);
+export const LaneSchema = z.enum([
+  'work',
+  'health',
+  'home',
+  'people',
+  'build',
+  'admin',
+]);
+export const ItemKindSchema = z.enum(['capture', 'task', 'note']);
+export const ItemStatusSchema = z.enum([
+  'inbox',
+  'today',
+  'upcoming',
+  'waiting',
+  'done',
+  'archived',
+]);
+export const CaptureModeSchema = z.enum(['uncertain', 'direct', 'context']);
+export const ListKindSchema = z.enum([
+  'replenishment',
+  'checklist',
+  'project',
+  'reference',
+]);
+export const ListItemStatusSchema = z.enum(['open', 'done', 'archived']);
 export const AttachmentKindSchema = z.enum(['image', 'audio', 'file']);
 export const SyncRecordStateSchema = z.enum(['pending', 'synced', 'conflict']);
-export const MutationStatusSchema = z.enum(['pending', 'sent', 'acknowledged', 'failed']);
+export const MutationStatusSchema = z.enum([
+  'pending',
+  'sent',
+  'acknowledged',
+  'failed',
+]);
+export const SyncAuthStateSchema = z.enum([
+  'signed-out',
+  'anonymous',
+  'signed-in',
+]);
+export const SyncIdentityStateSchema = z.enum([
+  'device-guest',
+  'anonymous-user',
+  'member',
+]);
 export const ReadinessKeySchema = z.enum([
   'water',
   'food',
@@ -27,10 +64,46 @@ export const ItemRecordSchema = z.object({
   lane: LaneSchema,
   status: ItemStatusSchema,
   body: z.string(),
+  sourceText: z.string().nullable().default(null),
+  sourceItemId: z.string().uuid().nullable().default(null),
+  captureMode: CaptureModeSchema.nullable().default(null),
   sourceDate: z.string(),
   scheduledDate: z.string().nullable(),
   scheduledTime: z.string().nullable(),
   routineId: z.string().uuid().nullable(),
+  completedAt: z.string().nullable(),
+  archivedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+  syncState: SyncRecordStateSchema,
+});
+
+export const ListRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  title: z.string().min(1),
+  kind: ListKindSchema,
+  lane: LaneSchema,
+  pinned: z.boolean(),
+  sourceItemId: z.string().uuid().nullable().default(null),
+  archivedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+  syncState: SyncRecordStateSchema,
+});
+
+export const ListItemRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  listId: z.string().uuid(),
+  title: z.string().min(1),
+  body: z.string(),
+  status: ListItemStatusSchema,
+  position: z.number().int().nonnegative(),
+  sourceItemId: z.string().uuid().nullable().default(null),
+  promotedItemId: z.string().uuid().nullable().default(null),
   completedAt: z.string().nullable(),
   archivedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -127,7 +200,16 @@ export const AttachmentBlobRecordSchema = z.object({
 export const MutationRecordSchema = z.object({
   id: z.string().uuid(),
   schemaVersion,
-  entity: z.enum(['item', 'dailyRecord', 'weeklyRecord', 'routine', 'settings', 'attachment']),
+  entity: z.enum([
+    'item',
+    'list',
+    'listItem',
+    'dailyRecord',
+    'weeklyRecord',
+    'routine',
+    'settings',
+    'attachment',
+  ]),
   entityId: z.string(),
   type: z.string(),
   payload: z.record(z.string(), z.unknown()),
@@ -143,7 +225,9 @@ export const SyncStateRecordSchema = z.object({
   provider: z.enum(['supabase']),
   mode: z.enum(['disabled', 'ready', 'syncing', 'error']),
   lastSyncedAt: z.string().nullable(),
-  authState: z.enum(['signed-out', 'signed-in']),
+  authState: SyncAuthStateSchema,
+  identityState: SyncIdentityStateSchema.default('device-guest'),
+  remoteUserId: z.string().uuid().nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -151,11 +235,18 @@ export const SyncStateRecordSchema = z.object({
 export type Lane = z.infer<typeof LaneSchema>;
 export type ItemKind = z.infer<typeof ItemKindSchema>;
 export type ItemStatus = z.infer<typeof ItemStatusSchema>;
+export type CaptureMode = z.infer<typeof CaptureModeSchema>;
+export type ListKind = z.infer<typeof ListKindSchema>;
+export type ListItemStatus = z.infer<typeof ListItemStatusSchema>;
 export type AttachmentKind = z.infer<typeof AttachmentKindSchema>;
 export type SyncRecordState = z.infer<typeof SyncRecordStateSchema>;
+export type SyncAuthState = z.infer<typeof SyncAuthStateSchema>;
+export type SyncIdentityState = z.infer<typeof SyncIdentityStateSchema>;
 export type ReadinessKey = z.infer<typeof ReadinessKeySchema>;
 
 export type ItemRecord = z.infer<typeof ItemRecordSchema>;
+export type ListRecord = z.infer<typeof ListRecordSchema>;
+export type ListItemRecord = z.infer<typeof ListItemRecordSchema>;
 export type DailyRecord = z.infer<typeof DailyRecordSchema>;
 export type WeeklyRecord = z.infer<typeof WeeklyRecordSchema>;
 export type RoutineRecord = z.infer<typeof RoutineRecordSchema>;

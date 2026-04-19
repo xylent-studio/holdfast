@@ -9,8 +9,10 @@ Holdfast is a personal operating system for staying in command of real life day 
 It exists to help the user:
 
 - catch something immediately
+- place something directly when the destination is already obvious
 - decide what matters now
 - park things for later without losing them
+- keep things worth preserving even when they are not tasks
 - finish the day cleanly
 - pick back up on any device without friction
 - trust that nothing important quietly vanished
@@ -41,7 +43,7 @@ The command view for the day. It should help the user:
 
 ### Inbox
 
-The lightest place in the app. It should catch tasks and notes before they disappear without forcing planning at capture time.
+The lightest place in the app. It should catch uncertain captures before they disappear without forcing planning at capture time.
 
 ### Upcoming
 
@@ -59,6 +61,29 @@ The retrieval and reflection surface. It should help the user:
 - see what keeps staying open
 - notice pressure building up
 - recover context from recent days
+- refind saved things, list items, and preserved captures
+
+## Product Object Direction
+
+The top-level product spine stays:
+
+- Now
+- Inbox
+- Upcoming
+- Review
+
+Within that spine, Holdfast should support several real object types:
+
+- captures
+- tasks
+- notes
+- lists
+- list items
+- attachments and preserved context
+
+This does not justify a second competing nav model.
+
+Lists should live as contextual surfaces, pinned objects, and retrieval targets rather than automatically becoming a new top-level tab.
 
 ## Product Boundaries
 
@@ -75,8 +100,21 @@ Holdfast is not:
 
 - the four core areas stay purposeful and distinct
 - capture stays faster than organization
+- direct placement works when the destination is already obvious
 - routines support the day without becoming a habit engine
 - review stays decision-relevant, not analytical theater
 - the normal long-term experience is signed-in and synced
+- a user can start immediately in a guest workspace without signup friction
+- creating an account should upgrade that workspace, not fork the product into a separate mode
 - offline behavior is resilient and quiet
 - attachments and voice memos are real product data, not extras
+- preserved saved things remain retrievable without being forced into fake task semantics
+
+## Account Shape
+
+Holdfast should behave like a modern app that just works:
+
+- the normal expectation is cross-device continuity through an account-backed session
+- a first-time user can still begin immediately without a form wall
+- guest use should upgrade cleanly into an account-backed workspace
+- the user should not feel forced into manual export, import, or mode switching

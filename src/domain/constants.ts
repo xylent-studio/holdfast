@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1 as const;
+export const SCHEMA_VERSION = 2 as const;
 
 export const LANES = [
   { key: 'work', label: 'Store / Work' },
@@ -32,6 +32,12 @@ export const ITEM_STATUS_LABELS = {
   waiting: 'Waiting on',
   done: 'Done',
   archived: 'Archived',
+} as const;
+
+export const ITEM_KIND_LABELS = {
+  capture: 'Capture',
+  task: 'Task',
+  note: 'Note',
 } as const;
 
 export const SETTINGS_ROW_ID = 'settings' as const;

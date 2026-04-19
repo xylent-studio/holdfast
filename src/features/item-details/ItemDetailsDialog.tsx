@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { LANES } from '@/domain/constants';
+import { ITEM_KIND_LABELS, LANES } from '@/domain/constants';
 import { todayDateKey, type DateKey } from '@/domain/dates';
 import type { ItemKind, ItemStatus } from '@/domain/schemas/records';
 import {
@@ -52,19 +52,30 @@ export function ItemDetailsDialog({
   const [status, setStatus] = useState<ItemStatus>(item.status);
   const [scheduledDate, setScheduledDate] = useState(item.scheduledDate ?? '');
   const [scheduledTime, setScheduledTime] = useState(item.scheduledTime ?? '');
-  const moveToCurrentDayLabel = currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
+  const moveToCurrentDayLabel =
+    currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
+  const normalizedStatus =
+    kind === 'capture'
+      ? status === 'archived'
+        ? 'archived'
+        : 'inbox'
+      : status;
 
   const handleSave = async (): Promise<void> => {
     const nextScheduledDate =
-      status === 'today' ? currentDate : status === 'upcoming' ? scheduledDate || null : null;
-    const nextScheduledTime = status === 'inbox' ? null : scheduledTime || null;
+      normalizedStatus === 'today'
+        ? currentDate
+        : normalizedStatus === 'upcoming'
+          ? scheduledDate || null
+          : null;
+    const nextScheduledTime = nextScheduledDate ? scheduledTime || null : null;
 
     await saveItem(item.id, {
       title,
       body,
       kind,
       lane,
-      status,
+      status: normalizedStatus,
       scheduledDate: nextScheduledDate,
       scheduledTime: nextScheduledTime,
     });
@@ -98,67 +109,115 @@ export function ItemDetailsDialog({
       <div className="dialog-stack">
         <div className="dialog-header">
           <div>
-            <div className="eyebrow">{item.kind === 'note' ? 'Note' : 'Task'}</div>
+            <div className="eyebrow">{ITEM_KIND_LABELS[kind]}</div>
             <h2>Details</h2>
             <p>Keep it clear and in the right place.</p>
           </div>
-          <button className="button ghost" onClick={() => void toggleFocus(currentDate, item.id)} type="button">
-            {item.status === 'today'
-              ? isFocused
-                ? 'Remove focus'
-                : 'Add focus'
-              : `${moveToCurrentDayLabel} + focus`}
-          </button>
+          {kind !== 'capture' ? (
+            <button
+              className="button ghost"
+              onClick={() => void toggleFocus(currentDate, item.id)}
+              type="button"
+            >
+              {normalizedStatus === 'today'
+                ? isFocused
+                  ? 'Remove focus'
+                  : 'Add focus'
+                : `${moveToCurrentDayLabel} + focus`}
+            </button>
+          ) : null}
         </div>
         <label className="field-stack">
           <span>Title</span>
-          <input onChange={(event) => setTitle(event.target.value)} type="text" value={title} />
+          <input
+            onChange={(event) => setTitle(event.target.value)}
+            type="text"
+            value={title}
+          />
         </label>
         <div className="grid two">
           <label className="field-stack">
             <span>Type</span>
-            <select onChange={(event) => setKind(event.target.value as ItemKind)} value={kind}>
+            <select
+              onChange={(event) => setKind(event.target.value as ItemKind)}
+              value={kind}
+            >
+              <option value="capture">Capture</option>
               <option value="task">Task</option>
               <option value="note">Note</option>
             </select>
           </label>
-          <label className="field-stack">
-            <span>Area</span>
-            <select onChange={(event) => setLane(event.target.value as (typeof LANES)[number]['key'])} value={lane}>
-              {LANES.map((entry) => (
-                <option key={entry.key} value={entry.key}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {kind !== 'capture' ? (
+            <label className="field-stack">
+              <span>Area</span>
+              <select
+                onChange={(event) =>
+                  setLane(event.target.value as (typeof LANES)[number]['key'])
+                }
+                value={lane}
+              >
+                {LANES.map((entry) => (
+                  <option key={entry.key} value={entry.key}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
         <label className="field-stack">
           <span>Status</span>
-          <select onChange={(event) => setStatus(event.target.value as ItemStatus)} value={status}>
+          <select
+            onChange={(event) => setStatus(event.target.value as ItemStatus)}
+            value={normalizedStatus}
+          >
             <option value="inbox">Inbox</option>
-            <option value="today">Now</option>
-            <option value="upcoming">Upcoming</option>
-            <option value="waiting">Waiting on</option>
-            <option value="done">Done</option>
+            {kind !== 'capture' ? <option value="today">Now</option> : null}
+            {kind !== 'capture' ? (
+              <option value="upcoming">Upcoming</option>
+            ) : null}
+            {kind !== 'capture' ? (
+              <option value="waiting">Waiting on</option>
+            ) : null}
+            {kind === 'task' ? <option value="done">Done</option> : null}
             <option value="archived">Archived</option>
           </select>
         </label>
-        {status === 'today' || status === 'upcoming' ? (
+        {normalizedStatus === 'today' || normalizedStatus === 'upcoming' ? (
           <div className="grid two">
             <label className="field-stack">
               <span>Date</span>
-              <input onChange={(event) => setScheduledDate(event.target.value)} type="date" value={status === 'today' ? currentDate : scheduledDate} />
+              <input
+                onChange={(event) => setScheduledDate(event.target.value)}
+                type="date"
+                value={
+                  normalizedStatus === 'today' ? currentDate : scheduledDate
+                }
+              />
             </label>
             <label className="field-stack">
               <span>Time</span>
-              <input onChange={(event) => setScheduledTime(event.target.value)} type="time" value={scheduledTime} />
+              <input
+                onChange={(event) => setScheduledTime(event.target.value)}
+                type="time"
+                value={scheduledTime}
+              />
             </label>
           </div>
         ) : null}
         <label className="field-stack">
-          <span>{kind === 'note' ? 'Notes' : 'Instructions'}</span>
-          <textarea onChange={(event) => setBody(event.target.value)} rows={6} value={body} />
+          <span>
+            {kind === 'note'
+              ? 'Notes'
+              : kind === 'capture'
+                ? 'Details'
+                : 'Instructions'}
+          </span>
+          <textarea
+            onChange={(event) => setBody(event.target.value)}
+            rows={6}
+            value={body}
+          />
         </label>
         <div className="field-stack">
           <span>Attachments</span>
@@ -173,10 +232,18 @@ export function ItemDetailsDialog({
                     </div>
                   </div>
                   <div className="attachment-actions">
-                    <button className="button ghost small" onClick={() => void handleDownload(attachment.id)} type="button">
+                    <button
+                      className="button ghost small"
+                      onClick={() => void handleDownload(attachment.id)}
+                      type="button"
+                    >
                       Download
                     </button>
-                    <button className="button danger small" onClick={() => void removeAttachment(attachment.id)} type="button">
+                    <button
+                      className="button danger small"
+                      onClick={() => void removeAttachment(attachment.id)}
+                      type="button"
+                    >
                       Remove
                     </button>
                   </div>
@@ -202,14 +269,22 @@ export function ItemDetailsDialog({
           </label>
         </div>
         <div className="dialog-actions spread">
-          <button className="button danger" onClick={() => void handleDelete()} type="button">
+          <button
+            className="button danger"
+            onClick={() => void handleDelete()}
+            type="button"
+          >
             Delete
           </button>
           <div className="dialog-actions">
             <button className="button ghost" onClick={onClose} type="button">
               Cancel
             </button>
-            <button className="button accent" onClick={() => void handleSave()} type="button">
+            <button
+              className="button accent"
+              onClick={() => void handleSave()}
+              type="button"
+            >
               Save
             </button>
           </div>

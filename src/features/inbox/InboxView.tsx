@@ -14,11 +14,18 @@ interface InboxViewProps {
   snapshot: HoldfastSnapshot;
 }
 
-export function InboxView({ currentDate, onOpenItem, snapshot }: InboxViewProps) {
-  const [filter, setFilter] = useState<'unsorted' | 'open' | 'archived'>('unsorted');
+export function InboxView({
+  currentDate,
+  onOpenItem,
+  snapshot,
+}: InboxViewProps) {
+  const [filter, setFilter] = useState<'unsorted' | 'open' | 'archived'>(
+    'unsorted',
+  );
   const items = inboxItems(snapshot.items, filter);
   const focusIds = new Set(snapshot.currentDay.focusItemIds);
-  const moveToCurrentDayLabel = currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
+  const moveToCurrentDayLabel =
+    currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
 
   return (
     <div className="stack">
@@ -28,12 +35,19 @@ export function InboxView({ currentDate, onOpenItem, snapshot }: InboxViewProps)
           <p>Use Add to catch it fast. Sort it when you need to.</p>
         </div>
         <div className="chip-row">
-          {([
-            ['unsorted', 'Unsorted'],
-            ['open', 'All open'],
-            ['archived', 'Archived'],
-          ] as const).map(([value, label]) => (
-            <button className={`chip ${filter === value ? 'active' : ''}`} key={value} onClick={() => setFilter(value)} type="button">
+          {(
+            [
+              ['unsorted', 'Unsorted'],
+              ['open', 'All open'],
+              ['archived', 'Archived'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              className={`chip ${filter === value ? 'active' : ''}`}
+              key={value}
+              onClick={() => setFilter(value)}
+              type="button"
+            >
               {label}
             </button>
           ))}
@@ -46,14 +60,24 @@ export function InboxView({ currentDate, onOpenItem, snapshot }: InboxViewProps)
                 key={item.id}
                 meta={itemMeta(item, currentDate, item.attachments)}
                 onOpen={() => onOpenItem(item.id)}
-                onPrimaryAction={() => void toggleFocus(currentDate, item.id)}
-                onToggleDone={item.kind === 'task' ? () => void toggleTaskDone(item.id, currentDate) : undefined}
+                onPrimaryAction={
+                  item.kind === 'capture'
+                    ? () => onOpenItem(item.id)
+                    : () => void toggleFocus(currentDate, item.id)
+                }
+                onToggleDone={
+                  item.kind === 'task'
+                    ? () => void toggleTaskDone(item.id, currentDate)
+                    : undefined
+                }
                 primaryActionLabel={
-                  item.status === 'today'
-                    ? focusIds.has(item.id)
-                      ? 'Remove focus'
-                      : 'Add focus'
-                    : moveToCurrentDayLabel
+                  item.kind === 'capture'
+                    ? 'Shape it'
+                    : item.status === 'today'
+                      ? focusIds.has(item.id)
+                        ? 'Remove focus'
+                        : 'Add focus'
+                      : moveToCurrentDayLabel
                 }
               />
             ))}

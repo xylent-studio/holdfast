@@ -5,6 +5,8 @@
 Holdfast is centered on a small set of explicit entities:
 
 - item
+- list
+- list item
 - daily record
 - weekly record
 - routine
@@ -36,7 +38,7 @@ That naming mismatch is known and documented. It should only change through a de
 
 ### Item
 
-Represents a task or note.
+Represents a capture, task, or note that participates in the main product spine.
 
 Key fields:
 
@@ -46,10 +48,62 @@ Key fields:
 - `lane`
 - `status`
 - `body`
+- `sourceText`
+- `sourceItemId`
+- `captureMode`
 - `sourceDate`
 - `scheduledDate`
 - `scheduledTime`
 - `routineId`
+- `completedAt`
+- `archivedAt`
+- `deletedAt`
+- `syncState`
+
+Notes:
+
+- `kind` is no longer task/note-only; it must also support raw capture as a real first-step product object
+- `sourceText` preserves the original thought quietly when the user reshapes an entry later
+- `sourceItemId` links derived objects back to the original source when needed
+- `captureMode` distinguishes uncertain capture, directed quick add, and in-context direct placement
+
+### List
+
+Represents a contextual list surface.
+
+Key fields:
+
+- `id`
+- `title`
+- `kind`
+- `lane`
+- `pinned`
+- `sourceItemId`
+- `archivedAt`
+- `deletedAt`
+- `syncState`
+
+List kinds should cover:
+
+- replenishment
+- checklist
+- project
+- reference
+
+### ListItem
+
+Represents an entry inside a list surface.
+
+Key fields:
+
+- `id`
+- `listId`
+- `title`
+- `body`
+- `status`
+- `position`
+- `sourceItemId`
+- `promotedItemId`
 - `completedAt`
 - `archivedAt`
 - `deletedAt`
@@ -143,6 +197,25 @@ Key fields:
 
 Tracks provider mode and auth state for the device.
 
+Key fields:
+
+- `provider`
+- `mode`
+- `authState`
+- `identityState`
+- `remoteUserId`
+- `lastSyncedAt`
+
+## Session Progression
+
+The intended account path is:
+
+1. `device-guest`
+2. `anonymous-user`
+3. `member`
+
+`authState` tracks whether there is an authenticated backend session. `identityState` tracks what kind of workspace owner the device is currently attached to.
+
 ## Versioning
 
 Every persistent entity includes:
@@ -159,6 +232,8 @@ This keeps migrations explicit and searchable.
 Defined in [src/storage/local/db.ts](/C:/dev/GitHub/Holdfast/src/storage/local/db.ts).
 
 - `items`
+- `lists`
+- `listItems`
 - `dailyRecords`
 - `weeklyRecords`
 - `routines`
@@ -172,9 +247,10 @@ Defined in [src/storage/local/db.ts](/C:/dev/GitHub/Holdfast/src/storage/local/d
 
 Planned Supabase mapping:
 
-- Postgres tables for items, daily records, weekly records, routines, settings, and attachment metadata
+- Postgres tables for items, lists, list items, daily records, weekly records, routines, settings, and attachment metadata
 - Storage buckets for attachment binaries
 - auth-scoped rows per user
+- anonymous users distinguished in RLS through Supabase auth claims
 - a sync worker translating local mutation records into remote upserts and deletes
 
 ## Migration Note
@@ -186,3 +262,10 @@ The prototype used:
 - mixed UI, domain, and persistence fields
 
 The new model intentionally separates those concerns.
+
+Current extension direction:
+
+- keep the existing `Now / Inbox / Upcoming / Review` spine intact
+- add raw-capture preservation without forcing immediate classification
+- add first-class list primitives without creating a second navigation model
+- preserve migration sanity by evolving the schema deliberately rather than smuggling list semantics into the existing task/note shape

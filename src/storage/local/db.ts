@@ -5,6 +5,8 @@ import type {
   AttachmentRecord,
   DailyRecord,
   ItemRecord,
+  ListItemRecord,
+  ListRecord,
   MutationRecord,
   RoutineRecord,
   SettingsRecord,
@@ -14,6 +16,8 @@ import type {
 
 export class HoldfastDatabase extends Dexie {
   items!: Table<ItemRecord, string>;
+  lists!: Table<ListRecord, string>;
+  listItems!: Table<ListItemRecord, string>;
   dailyRecords!: Table<DailyRecord, string>;
   weeklyRecords!: Table<WeeklyRecord, string>;
   routines!: Table<RoutineRecord, string>;
@@ -37,6 +41,82 @@ export class HoldfastDatabase extends Dexie {
       mutationQueue: 'id, entity, entityId, status, createdAt',
       syncState: 'id, updatedAt',
     });
+
+    this.version(2)
+      .stores({
+        items:
+          'id, status, kind, lane, scheduledDate, updatedAt, routineId, sourceItemId, deletedAt',
+        lists: 'id, kind, pinned, updatedAt, archivedAt, deletedAt',
+        listItems:
+          'id, listId, status, position, promotedItemId, updatedAt, deletedAt',
+        dailyRecords: 'date, updatedAt',
+        weeklyRecords: 'weekStart, updatedAt',
+        routines: 'id, active, updatedAt, deletedAt',
+        settings: 'id, updatedAt',
+        attachments: 'id, itemId, kind, updatedAt, deletedAt',
+        attachmentBlobs: 'id, createdAt',
+        mutationQueue: 'id, entity, entityId, status, createdAt',
+        syncState: 'id, updatedAt',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('items')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+            record.sourceText ??= null;
+            record.sourceItemId ??= null;
+            record.captureMode ??= null;
+          });
+        await tx
+          .table('dailyRecords')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+          });
+        await tx
+          .table('weeklyRecords')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+          });
+        await tx
+          .table('routines')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+          });
+        await tx
+          .table('settings')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+          });
+        await tx
+          .table('attachments')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+          });
+        await tx
+          .table('attachmentBlobs')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+          });
+        await tx
+          .table('mutationQueue')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+          });
+        await tx
+          .table('syncState')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 2;
+          });
+      });
   }
 }
 

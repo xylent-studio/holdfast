@@ -9,6 +9,7 @@ It must prove that Holdfast can be:
 - used offline without drama
 - fast enough for real life
 - distinct from generic productivity apps
+- able to catch, place, and refind real-life things without turning capture into administration
 
 ## Must-ship outcomes
 By the time V1 is done, a user should be able to:
@@ -20,6 +21,8 @@ By the time V1 is done, a user should be able to:
 - manage today without drowning in backlog
 - park things for later without losing them
 - retrieve context and see patterns in review
+- place something directly when the destination is already obvious
+- keep preserved things without pretending everything is a task
 - attach files, photos, and voice memos without the feature feeling bolted on
 
 ## Must-ship capabilities
@@ -36,15 +39,17 @@ By the time V1 is done, a user should be able to:
 - Upcoming
 - Review
 
-### Core item behavior
-- create task
-- create note
-- edit task/note
+### Core capture and object behavior
+- capture to Inbox without forced classification
+- add directly into the current destination when context is already clear
+- directed quick add into a chosen target
+- create and edit task/note from a captured entry
+- support first-class list containers and list items
 - complete task
-- archive task/note
+- archive task, note, or preserved capture
 - schedule for later
 - mark waiting on
-- search and retrieve
+- search and retrieve across captures, tasks, notes, and list surfaces
 
 ### Day behavior
 - focus on what matters today
@@ -106,8 +111,8 @@ Must be:
 - fast
 
 Should contain:
-- newly captured tasks and notes
-- light follow-up edits
+- newly captured uncertain entries
+- lightly shaped tasks and notes
 - quick decisions such as keep, schedule, move, archive
 
 Must not require:
@@ -148,6 +153,7 @@ Should contain:
 - retrieval
 - repeated-loop visibility
 - historical context that supports decisions
+- refinding across preserved captures, list items, and saved context
 
 Must not become:
 - analytics theater
@@ -156,6 +162,7 @@ Must not become:
 
 ## Nice soon after V1
 - richer review/history views
+- checklist template and run history refinement
 - attachment preview improvements
 - push or reminder features only if they truly help
 - optional exports/backups
@@ -169,7 +176,7 @@ Must not become:
 - automation engines
 - habit-tracker bloat
 - social/community features
-- “AI assistant inside the app” features
+- "AI assistant inside the app" features
 - settings that mostly expose implementation detail
 
 ## Anti-scope rules
