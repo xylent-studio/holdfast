@@ -14,6 +14,8 @@ This repo contains:
 - a real React + TypeScript + Vite app foundation
 - IndexedDB-backed local persistence shaped as a durable device replica
 - a sync-ready mutation queue and Supabase boundary for signed-in continuity
+- a guest-to-account auth model shaped around anonymous bootstrap and later account upgrade
+- Cloudflare Pages and Wrangler groundwork for the eventual public deploy
 - control docs, implementation docs, and agent guidance for long-term development
 - archived source artifacts from the prototype and manager control-pack drop
 
@@ -32,6 +34,7 @@ This repo contains:
 - Formatting/linting: Prettier + ESLint
 - CI: GitHub Actions
 - PWA foundation: manifest + service worker
+- Deployment direction: Cloudflare Pages + Wrangler
 
 ## Quick Start
 
@@ -47,6 +50,35 @@ npm run lint
 npm run typecheck
 npm run test
 npm run build
+```
+
+## Local Tooling
+
+Verified in this workspace:
+
+- `rg` / ripgrep is installed and working
+- `git`, `node`, `npm`, and `codex` are installed and working
+- Wrangler CLI is installed as a project dev dependency and available through `npx wrangler` or the npm scripts below
+- Supabase CLI is installed as a project dev dependency and available through `npx supabase` or the npm scripts below
+
+Installed but still needs shell refresh or login work:
+
+- GitHub CLI is installed at `C:\Program Files\GitHub CLI\gh.exe`
+- `gh` is not visible on the current shell `PATH` yet
+- `gh` is not authenticated yet
+- `wrangler` is not authenticated yet
+
+Still missing for local Supabase stack work:
+
+- Docker or another Docker-compatible container runtime
+
+Useful commands:
+
+```bash
+npm run cf:whoami
+npm run supabase -- --version
+npm run supabase:link
+npm run supabase:status
 ```
 
 ## Repo Map
@@ -66,7 +98,9 @@ npm run build
 - [docs/product.md](/C:/dev/GitHub/Holdfast/docs/product.md)
 - [docs/core-flows.md](/C:/dev/GitHub/Holdfast/docs/core-flows.md)
 - [docs/architecture.md](/C:/dev/GitHub/Holdfast/docs/architecture.md)
+- [docs/auth-and-accounts.md](/C:/dev/GitHub/Holdfast/docs/auth-and-accounts.md)
 - [docs/data-model.md](/C:/dev/GitHub/Holdfast/docs/data-model.md)
+- [docs/deployment.md](/C:/dev/GitHub/Holdfast/docs/deployment.md)
 - [docs/roadmap.md](/C:/dev/GitHub/Holdfast/docs/roadmap.md)
 - [docs/migration/prototype-audit.md](/C:/dev/GitHub/Holdfast/docs/migration/prototype-audit.md)
 - [docs/migration/prototype-gaps.md](/C:/dev/GitHub/Holdfast/docs/migration/prototype-gaps.md)
@@ -82,6 +116,10 @@ The current app foundation is offline-capable and shaped for a sync-first signed
 
 - the local database is the device replica
 - writes already create mutation-log entries for future sync
+- the session model now explicitly distinguishes device guest, anonymous user, and member
 - auth and remote sync are not wired until Supabase is configured
 
 Environment variables live in [.env.example](/C:/dev/GitHub/Holdfast/.env.example).
+
+Reference:
+- [Supabase CLI docs](https://supabase.com/docs/guides/local-development/cli/getting-started)

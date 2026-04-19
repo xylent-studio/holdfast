@@ -8,7 +8,9 @@ Treat this repo as a real product codebase, not a demo.
 2. [docs/product.md](/C:/dev/GitHub/Holdfast/docs/product.md)
 3. [docs/core-flows.md](/C:/dev/GitHub/Holdfast/docs/core-flows.md)
 4. [docs/architecture.md](/C:/dev/GitHub/Holdfast/docs/architecture.md)
-5. [docs/data-model.md](/C:/dev/GitHub/Holdfast/docs/data-model.md)
+5. [docs/auth-and-accounts.md](/C:/dev/GitHub/Holdfast/docs/auth-and-accounts.md)
+6. [docs/data-model.md](/C:/dev/GitHub/Holdfast/docs/data-model.md)
+7. [docs/deployment.md](/C:/dev/GitHub/Holdfast/docs/deployment.md)
 
 The files in [docs/control](/C:/dev/GitHub/Holdfast/docs/control) are the governing product contract. If code, docs, or naming conflict with them, surface the conflict explicitly and resolve it on purpose.
 
@@ -17,6 +19,7 @@ The files in [docs/control](/C:/dev/GitHub/Holdfast/docs/control) are the govern
 - Do not genericize Holdfast into a broad productivity suite.
 - Preserve the `Now / Inbox / Upcoming / Review` spine.
 - Design for signed-in sync as the normal experience.
+- Let first-run guest use feel immediate, then upgrade that workspace into a real account without data loss.
 - Keep offline behavior strong and quiet.
 - Keep capture fast and settings minimal.
 - Treat attachments, photos, and voice memos as first-class product data.
@@ -35,11 +38,22 @@ User-facing language uses `Now`. The current storage/model alias remains `today`
 
 If a change affects product meaning or persistence semantics, start in `src/domain` or `src/storage`, not in a component.
 
+## Tooling Baseline
+
+- Prefer `rg` for search. It is installed and working in this workspace.
+- Use the project-local Wrangler CLI via `npx wrangler` or `npm run cf:*`.
+- Use the project-local Supabase CLI via `npx supabase` or `npm run supabase:*`.
+- GitHub CLI is installed at `C:\Program Files\GitHub CLI\gh.exe`, but may require a fresh shell to appear on `PATH`.
+- `gh` auth is not configured yet. Do not assume GitHub CLI is ready until `gh auth status` passes.
+- `wrangler` is installed, but Cloudflare auth is not configured yet. Do not assume Pages or DNS actions are available until `npm run cf:whoami` passes.
+- Docker is not installed, so `supabase start` will not work until a Docker-compatible runtime is added.
+
 ## Search Strategy
 
 Preferred ripgrep anchors:
 
 - `rg "Now|Inbox|Upcoming|Review" src docs`
+- `rg "guest|anonymous|member|authState|identityState" src docs`
 - `rg "'today'|status: 'today'|destination: 'today'" src/domain src/storage`
 - `rg "ItemRecord|DailyRecord|RoutineRecord|MutationRecord" src/domain src/storage`
 - `rg "toggleFocus|startDay|closeDay|createItem|saveItem" src`
@@ -53,7 +67,9 @@ High-signal files:
 - [docs/control/product-charter.md](/C:/dev/GitHub/Holdfast/docs/control/product-charter.md)
 - [docs/control/state-and-transitions.md](/C:/dev/GitHub/Holdfast/docs/control/state-and-transitions.md)
 - [docs/architecture.md](/C:/dev/GitHub/Holdfast/docs/architecture.md)
+- [docs/auth-and-accounts.md](/C:/dev/GitHub/Holdfast/docs/auth-and-accounts.md)
 - [docs/data-model.md](/C:/dev/GitHub/Holdfast/docs/data-model.md)
+- [docs/deployment.md](/C:/dev/GitHub/Holdfast/docs/deployment.md)
 
 ## Required Workflow For Meaningful Changes
 
@@ -67,7 +83,7 @@ High-signal files:
 ## Current Gaps To Respect
 
 - Voice memo recording and dictation from the prototype are not yet ported.
-- Supabase auth and sync are not wired yet; only the boundary and local mutation queue exist.
+- Supabase auth and sync are not wired yet; only the boundary, guest/member session model, and local mutation queue exist.
 - Export/import and richer attachment preview are not yet ported.
 - The schema still uses `today` as the stored state key for user-facing `Now`.
 

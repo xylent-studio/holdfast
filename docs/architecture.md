@@ -11,6 +11,7 @@ Holdfast is built as an installable web app with:
 - a mutation queue for future sync
 - a PWA shell for installability and offline resilience
 - a sync boundary shaped for Supabase auth, database sync, and file storage
+- a Cloudflare Pages deployment target prepared through Wrangler config and repo-local tooling
 
 ## Product-Led Architecture Rules
 
@@ -24,6 +25,17 @@ The intended user experience is:
 - automatic recovery when connectivity returns
 
 That means local persistence is not a side mode. It is the device-level replica behind a synced account-based product.
+
+### Guest start, account continuity
+
+The first session model should match how strong modern apps behave:
+
+- the app opens immediately even before account creation
+- if the device is online and the backend is configured, the app should bootstrap an anonymous authenticated session in the background
+- if the device is offline, the app should keep a local guest workspace and attach it to the account path once connectivity returns
+- creating an account should upgrade the active workspace instead of asking the user to move data by hand
+
+This is not a separate "local mode". It is the bootstrap path into the same synced product.
 
 ### IndexedDB instead of localStorage
 
@@ -72,6 +84,8 @@ The current storage alias is still `today` in schemas and selectors. That is an 
 The local database stores:
 
 - items
+- lists
+- list items
 - daily records
 - weekly records
 - routines
@@ -105,14 +119,23 @@ The current foundation includes:
 
 The frontend output is intentionally compatible with Cloudflare Pages. Supabase is the preferred backend path for auth, database sync, and attachment storage.
 
+Current hosting posture:
+
+- the repo is prepared for Cloudflare Pages through `wrangler.jsonc`
+- public deployment is intentionally gated until the auth flow is at least as trustworthy as the prototype
+- the production hostname is planned as `holdfast.xylent.studio`
+- GitHub remains the source-control system of record
+
 ## Expected Sync Model
 
-1. User signs in.
-2. The device writes to IndexedDB immediately.
-3. Mutation records upload in the background.
-4. Remote changes are pulled back into the local replica.
-5. Attachments upload separately from metadata.
-6. Offline changes remain safe until the network returns.
+1. The app opens into a device-local workspace immediately.
+2. If the backend is ready and the device is online, the app creates or resumes an anonymous authenticated session.
+3. The device writes to IndexedDB immediately.
+4. Mutation records upload in the background.
+5. Remote changes are pulled back into the local replica.
+6. The user can upgrade the anonymous workspace into a permanent account through linked email or OAuth.
+7. Attachments upload separately from metadata.
+8. Offline changes remain safe until the network returns.
 
 ## Conflict Direction
 
@@ -122,11 +145,22 @@ Holdfast is single-user and multi-device. The conflict posture should be:
 - keep mutation ids and timestamps explicit
 - prefer preservation over silent loss
 - use field-aware merges where daily records need them
+- preserve source context when a capture becomes a task, note, or list item
+
+## Auth And Abuse Controls
+
+The preferred auth path is:
+
+- Supabase anonymous auth for low-friction bootstrap
+- Supabase manual identity linking for upgrade to email or OAuth
+- Cloudflare Turnstile for abuse protection around anonymous sign-in
+- RLS policies that distinguish anonymous users from durable member accounts where needed
 
 ## Intentionally Not Here Yet
 
 - Supabase auth wiring
 - sync worker implementation
+- guest-to-member upgrade UI
 - attachment preview pipeline
 - voice memo recording port
 - background retry worker
