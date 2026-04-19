@@ -13,6 +13,7 @@ import { AuthLandingView } from '@/app/auth/AuthLandingView';
 import { AuthProvider, useAuth } from '@/app/auth/AuthProvider';
 import { AuthRecoveryPanel } from '@/app/auth/AuthRecoveryPanel';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
+import { SyncProvider } from '@/app/sync/SyncProvider';
 import { AppShell } from '@/app/shell/AppShell';
 import { QuickAddDialog } from '@/features/capture/QuickAddDialog';
 import { InboxView } from '@/features/inbox/InboxView';
@@ -180,7 +181,9 @@ export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <SyncProvider>
+          <AppRoutes />
+        </SyncProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -19,6 +19,7 @@ import {
   MutationRecordSchema,
   RoutineRecordSchema,
   SettingsRecordSchema,
+  SyncStateRecordSchema,
   WeeklyRecordSchema,
   type AttachmentKind,
   type AttachmentRecord,
@@ -38,6 +39,7 @@ import {
   type WeeklyRecord,
 } from '@/domain/schemas/records';
 import { db } from '@/storage/local/db';
+import { downloadAttachmentBlob } from '@/storage/sync/supabase/attachments';
 import { getSupabaseSyncStatus } from '@/storage/sync/supabase/config';
 import {
   createDefaultSyncState,
@@ -564,6 +566,18 @@ export async function deleteItem(itemId: string): Promise<void> {
         attachments.map((attachment) => attachment.blobId),
       );
       await removeItemFromFocusEverywhere(itemId);
+      for (const attachment of attachments) {
+        await queueMutation(
+          createMutationRecord(
+            'attachment',
+            attachment.id,
+            'attachment.deleted',
+            {
+              attachmentId: attachment.id,
+            },
+          ),
+        );
+      }
       await queueMutation(
         createMutationRecord('item', itemId, 'item.deleted', { itemId }),
       );
@@ -1285,7 +1299,31 @@ export async function getAttachmentDownload(
 
   const blobRow = await db.attachmentBlobs.get(attachment.blobId);
   if (!blobRow) {
-    return null;
+    const syncState = await getCurrentSyncState();
+    if (!syncState.remoteUserId) {
+      return null;
+    }
+
+    const blob = await downloadAttachmentBlob(syncState.remoteUserId, attachmentId)
+      .catch(() => null);
+    if (!blob) {
+      return null;
+    }
+
+    await db.attachmentBlobs.put(
+      AttachmentBlobRecordSchema.parse({
+        id: attachment.blobId,
+        schemaVersion: SCHEMA_VERSION,
+        blob,
+        createdAt: nowIso(),
+      }),
+    );
+
+    return {
+      blob,
+      name: attachment.name,
+      type: attachment.mimeType,
+    };
   }
 
   return {

@@ -1,6 +1,7 @@
 import { AuthAccessActions } from '@/app/auth/AuthAccessActions';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
+import { useSync } from '@/app/sync/SyncProvider';
 import { LANES } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import { currentWeekLabel } from '@/domain/logic/selectors';
@@ -23,6 +24,8 @@ interface SettingsViewProps {
 function syncStatusLabel(
   configured: boolean,
   signedIn: boolean,
+  isOnline: boolean,
+  pendingMutationCount: number,
   syncMode: HoldfastSnapshot['syncState']['mode'],
   identityState: HoldfastSnapshot['syncState']['identityState'],
 ): string {
@@ -31,7 +34,19 @@ function syncStatusLabel(
   }
 
   if (signedIn) {
-    return syncMode === 'ready' ? 'Up to date' : 'Saved offline';
+    if (syncMode === 'syncing') {
+      return 'Syncing...';
+    }
+
+    if (syncMode === 'error') {
+      return "Couldn't sync yet";
+    }
+
+    if (!isOnline || pendingMutationCount > 0) {
+      return 'Saved offline';
+    }
+
+    return 'Up to date';
   }
 
   return identityState === 'member'
@@ -41,6 +56,7 @@ function syncStatusLabel(
 
 export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
   const auth = useAuth();
+  const sync = useSync();
   const localDataExists = hasMeaningfulLocalState(snapshot);
 
   return (
@@ -63,6 +79,8 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
               {syncStatusLabel(
                 auth.configured,
                 Boolean(auth.session),
+                sync.isOnline,
+                sync.pendingMutationCount,
                 snapshot.syncState.mode,
                 snapshot.syncState.identityState,
               )}
@@ -87,6 +105,16 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                 </div>
               ) : null}
               <div className="dialog-actions">
+                {snapshot.syncState.mode === 'error' ||
+                sync.pendingMutationCount > 0 ? (
+                  <button
+                    className="button ghost"
+                    onClick={() => void sync.retrySync()}
+                    type="button"
+                  >
+                    Retry
+                  </button>
+                ) : null}
                 <button
                   className="button ghost"
                   onClick={() => {

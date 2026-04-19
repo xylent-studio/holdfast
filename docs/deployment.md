@@ -57,11 +57,18 @@ This does not create a public deployment by itself.
 - set `VITE_SUPABASE_ANON_KEY`
 - enable Google auth
 - configure email magic link or OTP fallback
+- keep the connected Supabase project aligned with the repo migrations
 - add redirect allow-list entries for:
   - `http://localhost:4173/auth/callback`
   - `https://holdfast.xylent.studio/auth/callback`
   - preview callback URLs before public preview testing
-- define RLS and storage policies
+
+Current repo/backend foundation already includes:
+
+- remote Postgres tables for Holdfast user data
+- `user_id`-scoped RLS policies
+- a private `holdfast-attachments` storage bucket
+- attachment storage policies for read, insert, update, and delete
 
 ### Google OAuth
 
@@ -94,4 +101,4 @@ This does not create a public deployment by itself.
 
 ## Current Blocker
 
-Cloudflare API access from Codex is currently failing with an authentication error. Repo preparation is complete, but Cloudflare account actions still require you to fix that auth path or provide an equivalent authenticated route.
+Cloudflare API access from Codex is currently failing with an authentication error. Repo and Supabase schema preparation are complete, but hosted Pages and DNS actions still require you to fix that auth path or provide an equivalent authenticated route.

@@ -181,7 +181,7 @@ The local blob stored for offline access.
 
 ### MutationRecord
 
-The local mutation queue entry used by future sync.
+The local mutation queue entry used by the current sync engine.
 
 Key fields:
 
@@ -249,15 +249,16 @@ Defined in [src/storage/local/db.ts](/C:/dev/GitHub/Holdfast/src/storage/local/d
 - `mutationQueue`
 - `syncState`
 
-## Remote Shape Direction
+## Remote Shape Foundation
 
-Planned Supabase mapping:
+Current Supabase mapping:
 
-- Postgres tables for items, lists, list items, daily records, weekly records, routines, settings, and attachment metadata
-- Storage buckets for attachment binaries
+- Postgres tables for items, lists, list items, daily records, weekly records, routines, settings, attachment metadata, and deletion tombstones
+- a private `holdfast-attachments` bucket for attachment binaries
 - auth-scoped rows per user
 - `user_id`-scoped RLS policies on every user-owned table
-- a sync worker translating local mutation records into remote upserts and deletes
+- storage policies that scope attachment access to the owning authenticated user
+- a browser sync engine translating local mutation records into remote upserts, deletes, and pull-based replica updates
 
 ## Migration Note
 

@@ -8,11 +8,13 @@ import {
   createList,
   createListItem,
   deleteList,
+  deleteItem,
   getHoldfastSnapshot,
   toggleFocus,
   toggleTaskDone,
   updateList,
   updateListItem,
+  addFilesToItem,
 } from '@/storage/local/api';
 import { HOLDFAST_DB_NAME, db } from '@/storage/local/db';
 
@@ -113,5 +115,41 @@ describe('list mutation logging', () => {
         'listItem:list-item.updated',
       ].sort(),
     );
+  });
+});
+
+describe('item deletion sync coverage', () => {
+  it('queues attachment deletions before deleting the item', async () => {
+    await createItem({
+      title: 'Receipt',
+      kind: 'task',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    const [item] = await db.items.toArray();
+    const file = new File(['receipt'], 'receipt.txt', { type: 'text/plain' });
+    await addFilesToItem(item!.id, [file]);
+    const [attachment] = await db.attachments.toArray();
+
+    await deleteItem(item!.id);
+
+    const mutations = (await db.mutationQueue.toArray())
+      .map((mutation) => `${mutation.entity}:${mutation.entityId}:${mutation.type}`)
+      .sort();
+
+    expect(mutations).toContain(
+      `attachment:${attachment!.id}:attachment.deleted`,
+    );
+    expect(mutations).toContain(`item:${item!.id}:item.deleted`);
+    expect(await db.attachments.count()).toBe(0);
+    expect(await db.attachmentBlobs.count()).toBe(0);
   });
 });

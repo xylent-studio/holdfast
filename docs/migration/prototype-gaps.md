@@ -9,7 +9,10 @@ This document tracks what the new foundation still lacks relative to the prototy
 - versioned local data model
 - IndexedDB storage
 - attachment and blob separation
-- mutation queue for future sync
+- mutation queue and browser sync foundation
+- Supabase auth shell and signed-out landing
+- remote Supabase schema with RLS-scoped user tables
+- attachment upload/download flow through Supabase Storage
 - lint, typecheck, tests, build, and CI
 - PWA installability foundation
 - control-doc integration into the main docs tree
@@ -59,17 +62,9 @@ The prototype had inline preview paths for image, audio, and file viewing. The n
 
 ## Not Yet Built But Required For Product Intent
 
-### Supabase auth
+### Richer conflict handling
 
-Required to make the app feel like a normal signed-in multi-device product.
-
-### Sync engine
-
-Needed to move from sync-shaped local writes to actual account-based continuity.
-
-### Attachment upload pipeline
-
-Needed to move from the local blob cache to seamless cross-device media availability.
+Needed to move from safe basic sync toward broader multi-device merge confidence.
 
 ### Background sync and retry
 

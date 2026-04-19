@@ -124,16 +124,20 @@ Default user-facing line:
 
 ## Ownership Direction
 
-Before remote sync is safe, every remote table must be scoped to the authenticated user through Supabase RLS.
+The repo and connected Supabase project now include:
 
-Local foundation for that direction:
+- user-scoped Postgres tables for items, lists, list items, day/week records, routines, settings, attachments, and tombstones
+- `user_id`-scoped RLS on every user-owned table
+- a private attachment bucket with per-user storage policies
+
+Local foundation for that direction remains:
 
 - `authState` tracks whether this device currently has an active backend session
 - `identityState` tracks whether the device is still a local guest workspace or a member-owned workspace
 - `remoteUserId` keeps the last known signed-in owner on the device
 
 That local marker is not a full replacement for per-record remote ownership.
-Per-record `user_id` scoping still belongs in the remote schema before real sync ships.
+Per-record `user_id` scoping now exists remotely, but richer conflict handling and hosted-provider setup still need to be finished before broad public use.
 
 ## Redirect And Provider Setup
 
@@ -165,10 +169,12 @@ The repo now includes:
 - a callback handoff route
 - a small account surface in Settings
 - session recovery prompts that preserve local work
+- a browser sync engine that pushes/pulls signed-in changes
+- a remote Supabase schema with RLS-scoped user tables
+- a private attachment bucket and storage policies for synced media
 
 What is still not done:
 
-- remote sync worker
-- RLS-backed remote tables
 - cross-device merge logic
+- hosted Google OAuth and redirect setup
 - delete-account and remove-device-data flows

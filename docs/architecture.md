@@ -8,9 +8,9 @@ Holdfast is built as an installable web app with:
 
 - React + TypeScript + Vite
 - IndexedDB via Dexie for the device replica
-- a mutation queue for future sync
+- a mutation queue and browser sync worker for account-backed sync
 - a PWA shell for installability and offline resilience
-- a sync boundary shaped for Supabase auth, database sync, and file storage
+- a Supabase-backed auth, database, and file-storage boundary
 - a Cloudflare Pages deployment target prepared through Wrangler config and repo-local tooling
 
 ## Product-Led Architecture Rules
@@ -49,7 +49,7 @@ Dexie plus IndexedDB gives us:
 - incremental writes
 - cleaner sync boundaries
 
-### Mutation queue now, sync worker next
+### Mutation queue and sync worker foundation
 
 Writes already create mutation-log entries. That shapes the local write model for:
 
@@ -58,7 +58,14 @@ Writes already create mutation-log entries. That shapes the local write model fo
 - idempotent handling
 - conflict inspection
 
-The full sync engine is not wired yet, but the write path is already designed for it.
+The signed-in shell now runs a background sync pass that:
+
+- uploads pending local mutations
+- pulls remote changes back into IndexedDB
+- syncs attachment binaries through Supabase Storage
+- records device sync state quietly for the UI
+
+Conflict handling is intentionally simple for now. Richer merge behavior and broader release hardening still belong on the roadmap.
 
 ## Module Boundaries
 
@@ -67,7 +74,7 @@ The full sync engine is not wired yet, but the write path is already designed fo
 - `src/storage/local`
   IndexedDB table definitions, bootstrapping, snapshot assembly, and write commands.
 - `src/storage/sync`
-  Provider-neutral contracts plus the Supabase config and auth boundary.
+  Provider-neutral contracts plus the Supabase config, auth boundary, schema mapping, attachment helpers, and sync engine.
 - `src/features`
   Route-level product flows and dialogs.
 - `src/app`
@@ -132,8 +139,8 @@ Current hosting posture:
 2. If auth is configured and the device is empty, the app shows the signed-out landing instead of dropping straight into the shell.
 3. Google OAuth is the primary sign-in path, with email magic link as fallback.
 4. Once signed in, the device writes to IndexedDB immediately and prepares for background sync.
-5. Mutation records upload in the background once sync is wired.
-6. Remote changes are pulled back into the local replica once sync is wired.
+5. Mutation records upload in the background.
+6. Remote changes are pulled back into the local replica.
 7. Attachments upload separately from metadata.
 8. Offline changes remain safe until the network returns.
 
@@ -159,11 +166,10 @@ The preferred auth path is:
 
 ## Intentionally Not Here Yet
 
-- sync worker implementation
 - remote merge worker
 - remove-device-data and delete-account flows
 - attachment preview pipeline
 - voice memo recording port
-- background retry worker
+- richer background retry and multi-tab coordination
 
 Those are roadmap items, not hidden assumptions.

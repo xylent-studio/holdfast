@@ -13,12 +13,13 @@ export function AuthCallbackView() {
   const nextPath = normalizeAuthNextPath(
     new URLSearchParams(window.location.search).get('next'),
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    getSupabaseBrowserClient() ? null : "Account setup isn't ready yet.",
+  );
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
     if (!client) {
-      setError("Account setup isn't ready yet.");
       return;
     }
 

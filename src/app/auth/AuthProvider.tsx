@@ -77,7 +77,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!client) {
-      setIsReady(true);
       return;
     }
 
@@ -128,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [client, syncSessionToLocal]);
+  }, [client]);
 
   const clearFeedback = (): void => {
     setError(null);
