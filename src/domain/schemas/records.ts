@@ -1,0 +1,166 @@
+import { z } from 'zod';
+
+import { SCHEMA_VERSION } from '@/domain/constants';
+
+const schemaVersion = z.literal(SCHEMA_VERSION);
+
+export const LaneSchema = z.enum(['work', 'health', 'home', 'people', 'build', 'admin']);
+export const ItemKindSchema = z.enum(['task', 'note']);
+export const ItemStatusSchema = z.enum(['inbox', 'today', 'upcoming', 'waiting', 'done', 'archived']);
+export const AttachmentKindSchema = z.enum(['image', 'audio', 'file']);
+export const SyncRecordStateSchema = z.enum(['pending', 'synced', 'conflict']);
+export const MutationStatusSchema = z.enum(['pending', 'sent', 'acknowledged', 'failed']);
+export const ReadinessKeySchema = z.enum([
+  'water',
+  'food',
+  'supplements',
+  'hygiene',
+  'movement',
+  'sleepSetup',
+]);
+
+export const ItemRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  title: z.string().min(1),
+  kind: ItemKindSchema,
+  lane: LaneSchema,
+  status: ItemStatusSchema,
+  body: z.string(),
+  sourceDate: z.string(),
+  scheduledDate: z.string().nullable(),
+  scheduledTime: z.string().nullable(),
+  routineId: z.string().uuid().nullable(),
+  completedAt: z.string().nullable(),
+  archivedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+  syncState: SyncRecordStateSchema,
+});
+
+export const DailyRecordSchema = z.object({
+  date: z.string(),
+  schemaVersion,
+  startedAt: z.string().nullable(),
+  closedAt: z.string().nullable(),
+  readiness: z.object({
+    water: z.boolean(),
+    food: z.boolean(),
+    supplements: z.boolean(),
+    hygiene: z.boolean(),
+    movement: z.boolean(),
+    sleepSetup: z.boolean(),
+  }),
+  focusItemIds: z.array(z.string().uuid()),
+  launchNote: z.string(),
+  closeWin: z.string(),
+  closeCarry: z.string(),
+  closeSeed: z.string(),
+  closeNote: z.string(),
+  seededRoutineIds: z.array(z.string().uuid()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  syncState: SyncRecordStateSchema,
+});
+
+export const WeeklyRecordSchema = z.object({
+  weekStart: z.string(),
+  schemaVersion,
+  focus: z.string(),
+  protect: z.string(),
+  notes: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  syncState: SyncRecordStateSchema,
+});
+
+export const RoutineRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  title: z.string().min(1),
+  lane: LaneSchema,
+  destination: z.enum(['today', 'upcoming']),
+  weekdays: z.array(z.number().int().min(0).max(6)),
+  scheduledTime: z.string().nullable(),
+  notes: z.string(),
+  active: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+  syncState: SyncRecordStateSchema,
+});
+
+export const SettingsRecordSchema = z.object({
+  id: z.literal('settings'),
+  schemaVersion,
+  direction: z.string(),
+  standards: z.string(),
+  why: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  syncState: SyncRecordStateSchema,
+});
+
+export const AttachmentRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  itemId: z.string().uuid(),
+  blobId: z.string().uuid(),
+  kind: AttachmentKindSchema,
+  name: z.string().min(1),
+  mimeType: z.string(),
+  size: z.number().nonnegative(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+  syncState: SyncRecordStateSchema,
+});
+
+export const AttachmentBlobRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  blob: z.instanceof(Blob),
+  createdAt: z.string(),
+});
+
+export const MutationRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  entity: z.enum(['item', 'dailyRecord', 'weeklyRecord', 'routine', 'settings', 'attachment']),
+  entityId: z.string(),
+  type: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+  status: MutationStatusSchema,
+  attempts: z.number().int().nonnegative(),
+  lastError: z.string().nullable(),
+});
+
+export const SyncStateRecordSchema = z.object({
+  id: z.literal('sync'),
+  schemaVersion,
+  provider: z.enum(['supabase']),
+  mode: z.enum(['disabled', 'ready', 'syncing', 'error']),
+  lastSyncedAt: z.string().nullable(),
+  authState: z.enum(['signed-out', 'signed-in']),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type Lane = z.infer<typeof LaneSchema>;
+export type ItemKind = z.infer<typeof ItemKindSchema>;
+export type ItemStatus = z.infer<typeof ItemStatusSchema>;
+export type AttachmentKind = z.infer<typeof AttachmentKindSchema>;
+export type SyncRecordState = z.infer<typeof SyncRecordStateSchema>;
+export type ReadinessKey = z.infer<typeof ReadinessKeySchema>;
+
+export type ItemRecord = z.infer<typeof ItemRecordSchema>;
+export type DailyRecord = z.infer<typeof DailyRecordSchema>;
+export type WeeklyRecord = z.infer<typeof WeeklyRecordSchema>;
+export type RoutineRecord = z.infer<typeof RoutineRecordSchema>;
+export type SettingsRecord = z.infer<typeof SettingsRecordSchema>;
+export type AttachmentRecord = z.infer<typeof AttachmentRecordSchema>;
+export type AttachmentBlobRecord = z.infer<typeof AttachmentBlobRecordSchema>;
+export type MutationRecord = z.infer<typeof MutationRecordSchema>;
+export type SyncStateRecord = z.infer<typeof SyncStateRecordSchema>;

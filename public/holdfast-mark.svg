@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Holdfast mark</title>
+  <desc id="desc">A shield-like monogram for Holdfast.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#173228" />
+      <stop offset="100%" stop-color="#0a1412" />
+    </linearGradient>
+    <linearGradient id="stroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#78f0bb" />
+      <stop offset="100%" stop-color="#9ef3cd" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="64" fill="url(#bg)" />
+  <path
+    d="M69 51h34v63h50V51h34v154h-34v-61h-50v61H69z"
+    fill="none"
+    stroke="url(#stroke)"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="22"
+  />
+</svg>

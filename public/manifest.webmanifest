@@ -1,0 +1,18 @@
+{
+  "name": "Holdfast",
+  "short_name": "Holdfast",
+  "description": "A personal operating system for daily control, capture, prioritization, and reflection.",
+  "theme_color": "#0c1714",
+  "background_color": "#08100e",
+  "display": "standalone",
+  "start_url": "/today",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/holdfast-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

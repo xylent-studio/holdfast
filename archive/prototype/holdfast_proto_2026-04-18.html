@@ -1,0 +1,2732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Holdfast</title>
+<style>
+:root{
+  --bg:#08100e;
+  --bg2:#0c1513;
+  --panel:#12201b;
+  --panel2:#172822;
+  --soft:rgba(255,255,255,.06);
+  --soft2:rgba(255,255,255,.1);
+  --line:rgba(255,255,255,.12);
+  --line2:rgba(255,255,255,.18);
+  --text:#f6fcf8;
+  --muted:rgba(246,252,248,.9);
+  --dim:rgba(246,252,248,.78);
+  --faint:rgba(246,252,248,.58);
+  --accent:#55d49a;
+  --accentSoft:rgba(85,212,154,.16);
+  --warn:#e9d188;
+  --warnSoft:rgba(233,209,136,.16);
+  --danger:#ff8e84;
+  --dangerSoft:rgba(255,142,132,.15);
+  --shadow:0 24px 52px rgba(0,0,0,.28);
+  --navH:74px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%);color:var(--text)}
+body{min-height:100vh;background:
+  radial-gradient(circle at top, rgba(85,212,154,.18), transparent 28%),
+  radial-gradient(circle at bottom right, rgba(85,212,154,.08), transparent 24%),
+  linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%);
+}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+.wrap{max-width:920px;margin:0 auto;padding:12px 12px calc(var(--navH) + 22px)}
+.topbar,.card,.sheet{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.topbar,.card{border:1px solid var(--line);background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));box-shadow:var(--shadow)}
+.topbar{position:sticky;top:8px;z-index:20;border-radius:22px;padding:10px 12px;margin-bottom:14px;background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.045));}
+.card{border-radius:26px;padding:16px}
+.stack{display:grid;gap:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.datebar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.datepick{display:flex;gap:8px;align-items:center;min-width:0}
+.datepick .field{min-width:0}
+.native-date-proxy,.native-time-proxy{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;padding:0;margin:0;border:0}
+.space{justify-content:space-between}
+.tiny{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:rgba(246,252,248,.82)}
+.h1{font-size:clamp(28px,5vw,40px);line-height:1.03;letter-spacing:-.045em;margin:4px 0 0}
+.h2{font-size:22px;line-height:1.05;letter-spacing:-.03em;margin:0}
+.sub{font-size:14px;line-height:1.55;color:rgba(246,252,248,.88)}
+.subtle{font-size:13px;line-height:1.45;color:rgba(246,252,248,.72)}
+.actions.primary{display:flex;gap:8px;flex-wrap:wrap}
+.actions.secondary{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.label{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(246,252,248,.8);margin-bottom:8px}
+.btn{min-height:44px;padding:10px 14px;border:1px solid var(--line2);border-radius:16px;background:var(--soft);color:var(--text);display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:.18s ease;text-decoration:none}
+.btn:hover{background:var(--soft2)}
+.btn.primary{background:var(--accentSoft);border-color:rgba(85,212,154,.34)}
+.btn.warn{background:var(--warnSoft);border-color:rgba(233,209,136,.3)}
+.btn.danger{background:var(--dangerSoft);border-color:rgba(255,142,132,.32)}
+.btn[disabled]{opacity:.58;cursor:default;pointer-events:none}
+.btn.slim{min-height:34px;padding:7px 10px;border-radius:13px;font-size:13px}
+.btn.full{width:100%}
+.field, textarea, input[type="date"], input[type="time"], input[type="text"], select{width:100%;padding:12px 14px;border-radius:16px;border:1px solid var(--line2);background:rgba(3,8,7,.46);color:var(--text);outline:none}
+.timepick{display:flex;gap:8px;align-items:center;min-width:0}
+.timepick .field{min-width:0}
+textarea{min-height:92px;resize:vertical;line-height:1.6}
+input::placeholder,textarea::placeholder{color:rgba(246,252,248,.3)}
+.field:focus, textarea:focus, input:focus, select:focus{border-color:rgba(85,212,154,.45);box-shadow:0 0 0 3px rgba(85,212,154,.12)}
+.nav{position:fixed;left:50%;transform:translateX(-50%);width:min(760px, calc(100% - 24px));bottom:12px;z-index:40;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:8px;border:1px solid var(--line2);border-radius:24px;background:rgba(8,13,12,.84);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow)}
+.nav button{min-height:54px;border-radius:18px;border:1px solid transparent;background:transparent;color:var(--dim);display:grid;gap:2px;place-items:center}
+.nav button.active{color:var(--text);background:var(--accentSoft);border-color:rgba(85,212,154,.28)}
+.icon{font-size:18px;line-height:1}
+.navlabel{font-size:11px}
+.stat{padding:14px;border:1px solid var(--line);border-radius:22px;background:rgba(255,255,255,.05)}
+.stat .value{font-size:28px;letter-spacing:-.03em;margin-top:6px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--soft);font-size:13px;color:var(--muted)}
+.chip.active{background:var(--accentSoft);color:var(--text);border-color:rgba(85,212,154,.28)}
+.item{display:grid;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:18px;background:rgba(0,0,0,.14);transition:.18s ease}
+.item.kind-note{background:rgba(255,255,255,.05);border-color:rgba(138,196,255,.18)}
+.item.kind-note .itemtop{gap:12px}
+.item.state-waiting{border-color:rgba(233,209,136,.22)}
+.item.state-done{opacity:.86}
+.item.state-archived{opacity:.72}
+.item.focused{border-color:rgba(85,212,154,.28);box-shadow:0 0 0 2px rgba(85,212,154,.06) inset}
+.itemtop{display:flex;gap:10px;align-items:flex-start}
+.itembody{width:100%}
+.itemtext{width:100%;background:transparent;border:none;color:var(--text);outline:none;padding:0;font-size:15px;line-height:1.45}
+.itemtext.done{text-decoration:line-through;color:var(--dim)}
+.item.kind-note .itemtext{font-weight:600}
+.meta{font-size:12px;color:var(--dim);display:flex;gap:8px;flex-wrap:wrap}
+.meta.note{margin-top:8px}
+.note-eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(138,196,255,.85);margin-bottom:4px}
+.note-preview{margin-top:6px;font-size:14px;line-height:1.5;color:rgba(246,252,248,.84)}
+.task-preview{margin-top:4px;font-size:13px;line-height:1.45;color:rgba(246,252,248,.68)}
+.note-attachments{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.note-thumb{width:64px;height:64px;border-radius:12px;border:1px solid var(--line);object-fit:cover}
+.note-chip{padding:6px 10px;border-radius:999px;border:1px solid rgba(138,196,255,.18);background:rgba(138,196,255,.08);color:rgba(246,252,248,.82);font-size:12px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.badge{padding:6px 9px;border-radius:999px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);color:var(--dim)}
+.badge.today{background:var(--accentSoft);color:var(--text);border-color:rgba(85,212,154,.28)}
+.badge.waiting{background:var(--warnSoft);color:var(--text);border-color:rgba(233,209,136,.28)}
+.badge.later{background:rgba(255,255,255,.07)}
+.badge.done{background:rgba(255,255,255,.08)}
+.badge.focus{background:rgba(85,212,154,.22);color:var(--text);border-color:rgba(85,212,154,.32)}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 15px;border:1px solid rgba(255,255,255,.2);border-radius:18px;background:rgba(255,255,255,.085);color:var(--text);font-size:15px;font-weight:600;transition:.18s ease}
+.toggle:hover{background:rgba(255,255,255,.11);border-color:rgba(255,255,255,.32)}
+.toggle.on{background:rgba(85,212,154,.18);border-color:rgba(85,212,154,.42);box-shadow:0 0 0 3px rgba(85,212,154,.08) inset}
+.toggle span:first-child{color:rgba(246,252,248,1);text-shadow:0 1px 0 rgba(0,0,0,.18)}
+.check{width:22px;height:22px;border-radius:999px;border:1px solid rgba(255,255,255,.22);display:grid;place-items:center;flex:0 0 auto;background:rgba(255,255,255,.04);color:rgba(246,252,248,.86);font-size:13px;line-height:1}
+.check.on{background:var(--accentSoft);border-color:rgba(85,212,154,.38);color:var(--text);box-shadow:0 0 0 3px rgba(85,212,154,.08)}
+.check.note{background:rgba(138,196,255,.08);border-color:rgba(138,196,255,.18);color:rgba(138,196,255,.9)}
+.sep{height:1px;background:var(--line);margin:2px 0}
+.empty{padding:18px;border:1px dashed var(--line2);border-radius:20px;color:var(--dim);text-align:center}
+.list{display:grid;gap:10px}
+.kbd{padding:2px 7px;border-radius:8px;border:1px solid var(--line);font-size:12px;color:var(--dim)}
+.sheetback{position:fixed;inset:0;background:rgba(0,0,0,.48);opacity:0;pointer-events:none;transition:.18s ease;z-index:60}
+.sheetback.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:12px;right:12px;bottom:12px;z-index:61;border:1px solid var(--line2);border-radius:28px;background:linear-gradient(180deg, rgba(24,36,32,.98), rgba(13,20,18,.98));box-shadow:var(--shadow);transform:translateY(14px);opacity:0;pointer-events:none;transition:.18s ease;max-height:80vh;overflow:auto}
+.sheet.open{transform:none;opacity:1;pointer-events:auto}
+.sheetin{padding:18px}
+.fab{position:fixed;right:18px;bottom:calc(var(--navH) + 22px);z-index:45;width:58px;height:58px;border-radius:999px;border:1px solid rgba(85,212,154,.3);background:linear-gradient(180deg, rgba(85,212,154,.26), rgba(85,212,154,.18));color:var(--text);box-shadow:var(--shadow);font-size:28px}
+.footerhelp{font-size:13px;color:var(--dim)}
+.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(14px);bottom:calc(var(--navH) + 16px);z-index:72;min-width:min(520px,calc(100% - 24px));max-width:calc(100% - 24px);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:16px;border:1px solid var(--line2);background:rgba(8,13,12,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.18s ease}
+.toast.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+.toast .msg{font-size:14px;color:var(--muted)}
+.toast .btn{min-height:36px;padding:8px 12px;border-radius:12px}
+@media (max-width:760px){
+  .grid2,.grid3{grid-template-columns:1fr}
+  .wrap{padding-inline:10px}
+  .topbar{border-radius:20px}
+  .card{border-radius:24px;padding:15px}
+  .nav{left:8px;right:auto;transform:none;width:calc(100% - 16px);bottom:8px;gap:8px;padding:7px}
+  .fab{right:14px;bottom:calc(var(--navH) + 18px)}
+}
+.sheet-grid{display:grid;gap:12px}.seg{display:flex;gap:8px;flex-wrap:wrap}.seg .chip,.seg .btn{min-height:40px}.helper{font-size:13px;line-height:1.5;color:rgba(246,252,248,.72)}@media (min-width:761px){.sheet-grid.two{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar" id="topbar"></div>
+  <main id="app"></main>
+</div>
+<div class="sheetback" id="sheetBack"></div>
+<div class="sheet" id="sheet"><div class="sheetin" id="sheetIn"></div></div>
+<button class="fab" id="fab" aria-label="Quick add" style="display:none">＋</button>
+<div class="toast" id="toast"></div>
+<nav class="nav" id="nav"></nav>
+<script>
+(()=>{
+  const STORAGE_KEY = 'justin-os-standalone-v1';
+  const VERSION = 5;
+  const NAV = [
+    {id:'now', label:'Now', icon:'⌂'},
+    {id:'inbox', label:'Inbox', icon:'＋'},
+    {id:'later', label:'Upcoming', icon:'◷'},
+    {id:'review', label:'Review', icon:'◔'}
+  ];
+  const LANES = [
+    {key:'work', label:'Store / Work'},
+    {key:'health', label:'Body'},
+    {key:'home', label:'Home / Errands'},
+    {key:'people', label:'Relationships'},
+    {key:'build', label:'Build / Future'},
+    {key:'admin', label:'Money / Admin'}
+  ];
+  const CARE = [
+    ['water','Water'],['food','Food'],['vitamins','Supplements'],['hygiene','Hygiene'],['movement','Movement'],['sleep','Sleep setup']
+  ];
+  const STATUS_LABEL = { inbox:'Inbox', today:'Today', later:'Queued', waiting:'Waiting on', done:'Done', archived:'Archived' };
+  const WORK_DAYS = [0,1,4,5,6];
+  const LONG_DAYS = [0,1];
+  const TUESDAY = [2];
+  const WEDNESDAY = [3];
+  const PERSONAL_FOCUS = 'Become a man I respect in the mirror. Handle reality early. Keep my body, money, and time under command.';
+  const PERSONAL_STANDARDS = 'Carry less in my head. Tell the truth sooner. Keep body, time, and money under command.';
+  const PERSONAL_WHY = 'Holdfast is my operating system. It keeps me from drifting, keeps me honest, and helps me build a life I can respect and enjoy.';
+  const OLD_GENERIC_FOCUS = 'Protect the basics. Run the day with intention. Build the next version of my life.';
+  const OLD_GENERIC_STANDARDS = 'Water. Food. Hygiene. Movement. One real priority. Carry less in my head. Finish what matters.';
+  const OLD_GENERIC_WHY = 'This is my operating system. It keeps me steadier, more honest, and moving toward the man I am choosing to become.';
+  const DEFAULT_ROUTINES = [];
+  const LEGACY_PRESET_ROUTINE_IDS = new Set(['r-water','r-shower','r-food','r-vitamins','r-pack-work','r-long-food','r-leave-work','r-friday-money','r-tuesday-reset','r-tuesday-home','r-wednesday-body','r-wednesday-build','r-close']);
+
+  const $app = document.getElementById('app');
+  const $nav = document.getElementById('nav');
+  const $topbar = document.getElementById('topbar');
+  const $fab = document.getElementById('fab');
+  const $sheet = document.getElementById('sheet');
+  const $sheetBack = document.getElementById('sheetBack');
+  const $sheetIn = document.getElementById('sheetIn');
+  const $toast = document.getElementById('toast');
+  let sheetBeforeClose = null;
+  let sheetCleanup = null;
+
+  const uid = () => crypto?.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
+  const now = () => Date.now();
+  const formatLocalIso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const todayIso = () => formatLocalIso(new Date());
+  const toDate = iso => new Date(iso + 'T00:00:00');
+  const iso = date => formatLocalIso(date);
+  const addDays = (isoStr, n) => { const d = toDate(isoStr); d.setDate(d.getDate()+n); return iso(d); };
+  const niceDate = isoStr => toDate(isoStr).toLocaleDateString(undefined,{ weekday:'short', month:'short', day:'numeric' });
+  const niceStamp = ms => new Date(ms).toLocaleString(undefined,{ month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+  const weekdayIndex = isoStr => toDate(isoStr).getDay();
+  const startOfWeek = isoStr => { const d = toDate(isoStr); const day = d.getDay(); const diff = day === 0 ? -6 : 1 - day; d.setDate(d.getDate()+diff); return iso(d); };
+  const endOfWeek = isoStr => addDays(startOfWeek(isoStr), 6);
+  const monthKey = isoStr => isoStr.slice(0,7);
+  const inWindow = (target, base, span) => {
+    if(!target) return false;
+    if(span === 'day') return target === base;
+    if(span === 'week') return target >= startOfWeek(base) && target <= endOfWeek(base);
+    if(span === 'month') return monthKey(target) === monthKey(base);
+    return false;
+  };
+
+  function mergePersonalRoutines(existing=[]) {
+    return (existing || []).map(r => ({
+      id:r.id || uid(),
+      text:r.text || '',
+      lane:r.lane || 'admin',
+      seed:r.seed || 'today',
+      days:Array.isArray(r.days) ? r.days : [0,1,2,3,4,5,6],
+      active:r.active !== false,
+      time:r.time || '',
+      notes:r.notes || ''
+    }));
+  }
+  function applyJustinProfile(settings) {
+    settings = settings || defaultSettings();
+    if(!settings.focus || settings.focus === OLD_GENERIC_FOCUS) settings.focus = PERSONAL_FOCUS;
+    if(!settings.standards || settings.standards === OLD_GENERIC_STANDARDS) settings.standards = PERSONAL_STANDARDS;
+    if(!settings.why || settings.why === OLD_GENERIC_WHY) settings.why = PERSONAL_WHY;
+    settings.profileVersion = 2;
+    settings.routines = mergePersonalRoutines(settings.routines || []);
+    return settings;
+  }
+  function routinesForDate(date=state?.currentDate || todayIso()) {
+    const wd = weekdayIndex(date);
+    return (state.settings?.routines || [])
+      .filter(r => r.active && Array.isArray(r.days) && r.days.includes(wd))
+      .sort((a,b) => (a.time || '99:99').localeCompare(b.time || '99:99') || String(a.text || '').localeCompare(String(b.text || '')));
+  }
+
+  function dayBlueprint(date=state?.currentDate || todayIso()) {
+    const wd = weekdayIndex(date);
+    const friday = wd === 5;
+    if(wd === 2) return {
+      title:'Reset / admin day',
+      sub:'This day is for life maintenance, not drift.',
+      bullets:['Money + admin block','Home reset + supplies','Close loose ends early'],
+      wake:'Wake 7:00',
+      rule:'Do not let the off day disappear.'
+    };
+    if(wd === 3) return {
+      title:'Body / build day',
+      sub:'Rebuild the platform and move the future forward.',
+      bullets:['Movement block','Errands / shoes / supplies','One real build move'],
+      wake:'Wake 7:00',
+      rule:'Use the day, do not just consume it.'
+    };
+    if(wd === 0 || wd === 1) return {
+      title:'Long shift',
+      sub:'Fuel up, bring food, and stay ahead of the day.',
+      bullets:['Wake 6:15','Leave by 7:50','Bring food + water'],
+      wake:'Wake 6:15',
+      rule:'Do not enter a 13.5-hour day underfed.'
+    };
+    const base = {
+      title:'Standard workday',
+      sub:'Start with margin and run the shift cleanly.',
+      bullets:['Wake 6:15','Leave by 7:50','Food + water ready'],
+      wake:'Wake 6:15',
+      rule:'Do not start the day already behind.'
+    };
+    if(friday) base.bullets = ['Wake 6:15','Leave by 7:50','Friday money check after work'];
+    return base;
+  }
+
+  function dropLegacyPresetRoutinesFromState(target){
+    if(!target) return;
+    if(target.settings && Array.isArray(target.settings.routines)){
+      target.settings.routines = target.settings.routines.filter(r => !LEGACY_PRESET_ROUTINE_IDS.has(r.id));
+    }
+    if(Array.isArray(target.items)){
+      target.items = target.items.filter(item => !LEGACY_PRESET_ROUTINE_IDS.has(item.routineId));
+    }
+    Object.values(target.days || {}).forEach(day => {
+      if(Array.isArray(day.seededRoutineIds)) day.seededRoutineIds = day.seededRoutineIds.filter(id => !LEGACY_PRESET_ROUTINE_IDS.has(id));
+    });
+  }
+  const missedDays = (from, to) => Math.max(0, Math.round((toDate(to)-toDate(from))/86400000)-1);
+  const h = s => String(s ?? '').replace(/[&<>\"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+
+  const localIso = d => formatLocalIso(d);
+  function parseUserDate(value){
+    const raw = String(value || '').trim();
+    if(!raw) return '';
+    if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+      const d = toDate(raw);
+      return Number.isNaN(d.getTime()) ? '' : (iso(d) === raw ? raw : '');
+    }
+    const mdY = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+    if(mdY){
+      let mm = Number(mdY[1]), dd = Number(mdY[2]), yy = Number(mdY[3]);
+      if(yy < 100) yy += 2000;
+      const d = new Date(yy, mm - 1, dd);
+      return d.getFullYear() === yy && d.getMonth() === mm - 1 && d.getDate() === dd ? localIso(d) : '';
+    }
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? '' : localIso(parsed);
+  }
+  function bindDateControl({ textId, nativeId, buttonId, onCommit }){
+    const text = document.getElementById(textId);
+    const native = document.getElementById(nativeId);
+    const button = document.getElementById(buttonId);
+    if(!text || !native || !button) return;
+    const commit = (raw, opts={}) => {
+      const parsed = parseUserDate(raw);
+      if(parsed){
+        text.value = parsed;
+        native.value = parsed;
+        if(onCommit) onCommit(parsed);
+        return true;
+      }
+      if(opts.revert){
+        const fallback = native.value || opts.fallback || '';
+        text.value = fallback;
+        if(fallback) native.value = fallback;
+      }
+      return false;
+    };
+    button.onclick = () => {
+      if(typeof native.showPicker === 'function') native.showPicker();
+      else { native.focus(); native.click(); }
+    };
+    native.onchange = e => commit(e.target.value, { revert:true });
+    text.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        commit(text.value, { revert:true, fallback:native.value });
+      }
+    });
+    text.addEventListener('blur', () => {
+      if(text.value.trim()) commit(text.value, { revert:true, fallback:native.value });
+      else text.value = native.value || '';
+    });
+  }
+  function getDateControlValue(textId, nativeId, fallback=''){
+    const text = document.getElementById(textId);
+    const native = document.getElementById(nativeId);
+    const parsed = parseUserDate(text?.value || native?.value || '');
+    const value = parsed || fallback;
+    if(text) text.value = value;
+    if(native) native.value = value;
+    return value;
+  }
+
+  function parseUserTime(raw){
+    const s = String(raw || '').trim().toLowerCase();
+    if(!s) return '';
+    let m = s.match(/^(\d{1,2}):(\d{2})\s*(a|am|p|pm)?$/i);
+    if(!m){
+      m = s.match(/^(\d{1,2})\s*(a|am|p|pm)$/i);
+      if(!m) return '';
+    }
+    let hour = Number(m[1]);
+    let minute = m[2] ? Number(m[2]) : 0;
+    const meridiem = (m[3] || '').toLowerCase();
+    if(Number.isNaN(hour) || Number.isNaN(minute) || minute < 0 || minute > 59) return '';
+    if(meridiem){
+      if(hour < 1 || hour > 12) return '';
+      if(meridiem.startsWith('p') && hour !== 12) hour += 12;
+      if(meridiem.startsWith('a') && hour === 12) hour = 0;
+    }
+    if(!meridiem && (hour < 0 || hour > 23)) return '';
+    return `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+  }
+  function niceTime(value){
+    if(!value) return '';
+    const [hh, mm] = String(value).split(':');
+    if(hh == null || mm == null) return '';
+    const d = new Date();
+    d.setHours(Number(hh), Number(mm), 0, 0);
+    return d.toLocaleTimeString(undefined,{ hour:'numeric', minute:'2-digit' });
+  }
+  function previewText(value, max=140){
+    const flat = String(value || '').replace(/\s+/g, ' ').trim();
+    if(!flat) return '';
+    return flat.length > max ? flat.slice(0, max - 1) + '…' : flat;
+  }
+  function workReleaseTime(dateStr){
+    const wd = weekdayIndex(dateStr || state.currentDate || todayIso());
+    if(wd === 0 || wd === 1) return '22:15';
+    if(wd >= 4) return '15:00';
+    return '15:00';
+  }
+  function resolvePlannedDate(when, baseDate, chosenDate){
+    if(when === 'tomorrow') return addDays(baseDate, 1);
+    if(when === 'thisweek') return endOfWeek(baseDate);
+    if(when === 'nextweek') return addDays(endOfWeek(baseDate), 1);
+    if(when === 'date') return chosenDate || '';
+    if(when === 'someday') return '';
+    return chosenDate || '';
+  }
+  function quickTimeOptionsForDate(dateStr){
+    const wd = weekdayIndex(dateStr || state.currentDate || todayIso());
+    const afterLabel = (wd === 0 || wd === 1 || wd >= 4) ? 'After work' : 'Afternoon';
+    return [
+      ['notime','No time'],
+      ['morning','Morning'],
+      ['midday','Midday'],
+      ['after', afterLabel],
+      ['evening','Evening'],
+      ['time','Pick time']
+    ];
+  }
+  function quickTimeValueForMode(mode, dateStr){
+    if(mode === 'morning') return '09:00';
+    if(mode === 'midday') return '12:00';
+    if(mode === 'after') return workReleaseTime(dateStr);
+    if(mode === 'evening') return '18:30';
+    return '';
+  }
+  async function fileToDataUrl(file){
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    });
+  }
+  const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  const supportsDictation = () => !!SpeechRecognitionCtor;
+  const supportsAudioRecording = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+
+  function humanAudioFilename(){
+    const d = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    return `voice-${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.webm`;
+  }
+
+  function formatDuration(ms){
+    const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${String(s).padStart(2,'0')}`;
+  }
+
+  function appendSmart(base, next){
+    const a = String(base || '').trimEnd();
+    const b = String(next || '').trim();
+    if(!b) return a;
+    if(!a) return b;
+    const needsSpace = !/[\s\n]$/.test(a);
+    return `${a}${needsSpace ? ' ' : ''}${b}`;
+  }
+
+  function wireDictationButton({button, target, statusEl, multiline=false}){
+    if(!button || !target) return { stop:()=>{}, isLive:()=>false, currentValue:()=>'' };
+    let recognition = null;
+    let baseValue = '';
+    let finalText = '';
+    const setIdle = (msg='') => {
+      button.textContent = 'Dictate';
+      button.dataset.live = '0';
+      if(statusEl) statusEl.textContent = msg;
+    };
+    const setLive = () => {
+      button.textContent = 'Stop';
+      button.dataset.live = '1';
+      if(statusEl) statusEl.textContent = 'Listening… tap stop when you are done.';
+    };
+    const stop = () => {
+      if(recognition){
+        try{ recognition.stop(); }catch(_err){}
+      }
+    };
+    if(!supportsDictation()){
+      button.disabled = true;
+      button.title = 'Voice to text is not available here';
+      if(statusEl) statusEl.textContent = 'Voice to text is not available in this browser.';
+      return { stop, isLive:()=>false, currentValue:()=>String(target.value || '') };
+    }
+    button.onclick = () => {
+      if(recognition){
+        stop();
+        return;
+      }
+      baseValue = target.value || '';
+      finalText = '';
+      recognition = new SpeechRecognitionCtor();
+      recognition.lang = 'en-US';
+      recognition.interimResults = true;
+      recognition.continuous = false;
+      recognition.maxAlternatives = 1;
+      setLive();
+      recognition.onresult = (event) => {
+        let finalChunk = '';
+        let interimChunk = '';
+        for(let i = event.resultIndex; i < event.results.length; i += 1){
+          const chunk = event.results[i][0]?.transcript || '';
+          if(event.results[i].isFinal) finalChunk += chunk;
+          else interimChunk += chunk;
+        }
+        if(finalChunk) finalText = appendSmart(finalText, finalChunk);
+        target.value = appendSmart(baseValue, appendSmart(finalText, interimChunk));
+        target.dispatchEvent(new Event('input', { bubbles:true }));
+      };
+      recognition.onerror = (event) => {
+        const code = event?.error || 'error';
+        setIdle(code === 'not-allowed' ? 'Microphone permission blocked.' : code === 'no-speech' ? 'No speech heard.' : 'Could not use voice to text.');
+      };
+      recognition.onend = () => {
+        recognition = null;
+        target.value = appendSmart(baseValue, finalText) || target.value || '';
+        target.dispatchEvent(new Event('input', { bubbles:true }));
+        setIdle(finalText ? 'Added from voice.' : '');
+      };
+      try{ recognition.start(); }catch(err){
+        recognition = null;
+        console.error(err);
+        setIdle('Could not start voice to text.');
+      }
+    };
+    setIdle();
+    return { stop, isLive:()=>!!recognition, currentValue:()=>String(target.value || '') };
+  }
+
+  async function recordAudioAttachment(){
+    if(!supportsAudioRecording()) throw new Error('Audio recording not supported');
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    const preferredTypes = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'];
+    const mimeType = preferredTypes.find(type => { try{return MediaRecorder.isTypeSupported(type);}catch(_err){return false;} }) || '';
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks = [];
+    let finished = false;
+    let discard = false;
+    const startedAt = Date.now();
+    const stopTracks = () => { try{ stream.getTracks().forEach(track => track.stop()); }catch(_err){} };
+    recorder.ondataavailable = (event) => { if(event.data && event.data.size) chunks.push(event.data); };
+    recorder.start();
+    const buildAttachment = async () => {
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      stopTracks();
+      if(discard || !blob.size) return null;
+      const dataUrl = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onerror = () => rej(reader.error);
+        reader.onload = () => res(String(reader.result || ''));
+        reader.readAsDataURL(blob);
+      });
+      return normalizeAttachment({ id: uid(), name: humanAudioFilename(), type: blob.type || 'audio/webm', size: blob.size || 0, dataUrl });
+    };
+    return {
+      stop: async () => {
+        if(finished) return null;
+        finished = true;
+        return await new Promise((resolve) => {
+          recorder.onstop = async () => resolve(await buildAttachment());
+          try{ recorder.stop(); }catch(_err){ stopTracks(); resolve(null); }
+        });
+      },
+      discard: async () => {
+        discard = true;
+        if(finished){ stopTracks(); return; }
+        finished = true;
+        await new Promise((resolve) => {
+          recorder.onstop = () => { stopTracks(); resolve(null); };
+          try{ recorder.stop(); }catch(_err){ stopTracks(); resolve(null); }
+        });
+      },
+      state: () => recorder.state,
+      startedAt: () => startedAt
+    };
+  }
+
+  const fmtBytes = bytes => {
+    const n = Number(bytes || 0);
+    if(!n) return '';
+    if(n < 1024) return `${n} B`;
+    if(n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(n < 10485760 ? 1 : 0)} MB`;
+  };
+  const extensionOf = name => {
+    const raw = String(name || '');
+    const part = raw.includes('.') ? raw.split('.').pop() : '';
+    return part ? part.toUpperCase() : 'FILE';
+  };
+  function normalizeAttachment(att){
+    return {
+      id: att?.id || uid(),
+      name: att?.name || 'attachment',
+      type: att?.type || 'application/octet-stream',
+      size: Number(att?.size || 0),
+      dataUrl: att?.dataUrl || ''
+    };
+  }
+  async function fileToAttachment(file){
+    return normalizeAttachment({
+      id: uid(),
+      name: file?.name || 'attachment',
+      type: file?.type || 'application/octet-stream',
+      size: Number(file?.size || 0),
+      dataUrl: await fileToDataUrl(file)
+    });
+  }
+  function triggerDownload(dataUrl, filename='download'){
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  function dataUrlToBlob(dataUrl){
+    const parts = String(dataUrl || '').split(',');
+    const meta = parts[0] || '';
+    const mimeMatch = meta.match(/data:([^;]+);/i);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const bytes = atob(parts[1] || '');
+    const arr = new Uint8Array(bytes.length);
+    for(let i = 0; i < bytes.length; i += 1) arr[i] = bytes.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+  function openAttachmentExternal(att){
+    if(!att?.dataUrl) return;
+    try{
+      const blob = dataUrlToBlob(att.dataUrl);
+      const type = String(att?.type || blob?.type || 'application/octet-stream');
+      const assetUrl = URL.createObjectURL(blob);
+      let openUrl = assetUrl;
+
+      if(/^audio\//i.test(type)){
+        const shell = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${h(att?.name || 'Voice memo')}</title>
+<style>
+  :root{color-scheme:dark;}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0c1110;color:#f6fcf8;display:grid;place-items:center;min-height:100vh;padding:24px;}
+  .wrap{width:min(720px,100%);background:#141b18;border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:20px;box-sizing:border-box;box-shadow:0 20px 50px rgba(0,0,0,.35);}
+  .name{font-weight:700;font-size:18px;margin-bottom:6px;}
+  .meta{opacity:.72;font-size:13px;margin-bottom:16px;}
+  audio{width:100%;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="name">${h(att?.name || 'Voice memo')}</div>
+    <div class="meta">Voice memo</div>
+    <audio controls autoplay preload="metadata" src="${assetUrl}"></audio>
+  </div>
+</body>
+</html>`;
+        openUrl = URL.createObjectURL(new Blob([shell], { type: 'text/html' }));
+      }
+
+      const win = window.open(openUrl, '_blank', 'noopener');
+      if(!win){
+        const a = document.createElement('a');
+        a.href = openUrl;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+
+      setTimeout(() => {
+        try{ URL.revokeObjectURL(openUrl); }catch(_err){}
+        try{ URL.revokeObjectURL(assetUrl); }catch(_err){}
+      }, 120000);
+    }catch(err){
+      console.error(err);
+      try{ window.open(att.dataUrl, '_blank', 'noopener'); }catch(_err){}
+    }
+  }
+  function attachmentPreviewable(att){
+    const type = String(att?.type || '');
+    return /^application\/pdf$/i.test(type) || /^text\//i.test(type) || /^audio\//i.test(type);
+  }
+  const attachmentIsImage = att => String(att?.type || '').startsWith('image/');
+  function attachmentLabel(att){
+    const bits = [extensionOf(att?.name), fmtBytes(att?.size)].filter(Boolean);
+    return bits.join(' · ');
+  }
+  async function compressImageFile(file, maxEdge=1280, quality=0.82){
+    const raw = await fileToDataUrl(file);
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        const scale = Math.min(1, maxEdge / Math.max(width, height));
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = raw;
+    });
+  }
+  function bindTimeControl({ textId, nativeId, buttonId, onCommit }){
+    const text = document.getElementById(textId);
+    const native = document.getElementById(nativeId);
+    const button = document.getElementById(buttonId);
+    if(!text || !native || !button) return;
+    const commit = (value, opts={}) => {
+      const parsed = parseUserTime(value);
+      if(parsed){
+        text.value = parsed;
+        native.value = parsed;
+        if(onCommit) onCommit(parsed);
+        return true;
+      }
+      if(!String(value || '').trim()){
+        text.value = '';
+        native.value = '';
+        if(onCommit) onCommit('');
+        return true;
+      }
+      if(opts.revert){
+        const fallback = native.value || '';
+        text.value = fallback;
+      }
+      return false;
+    };
+    button.onclick = () => {
+      if(typeof native.showPicker === 'function') native.showPicker();
+      else { native.focus(); native.click(); }
+    };
+    native.onchange = e => commit(e.target.value, { revert:true });
+    text.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        commit(text.value, { revert:true });
+      }
+    });
+    text.addEventListener('blur', () => {
+      if(text.value.trim()) commit(text.value, { revert:true });
+      else { text.value = ''; native.value = ''; if(onCommit) onCommit(''); }
+    });
+  }
+  function getTimeControlValue(textId, nativeId, fallback=''){
+    const text = document.getElementById(textId);
+    const native = document.getElementById(nativeId);
+    const parsed = parseUserTime(text?.value || native?.value || '');
+    const value = parsed || fallback || '';
+    if(text) text.value = value;
+    if(native) native.value = value;
+    return value;
+  }
+
+  const taskItem = (text='', more={}) => ({
+    id: uid(),
+    text,
+    kind: more.kind || 'task',
+    lane: more.lane || 'admin',
+    status: more.status || 'inbox',
+    sourceDate: more.sourceDate || todayIso(),
+    targetDate: more.targetDate || '',
+    targetTime: more.targetTime || '',
+    linkedDate: more.linkedDate || '',
+    routineId: more.routineId || '',
+    createdAt: more.createdAt || now(),
+    updatedAt: more.updatedAt || now(),
+    doneAt: more.doneAt || 0,
+    archivedAt: more.archivedAt || 0,
+    pinned: !!more.pinned,
+    notes: more.notes || '',
+    imageData: more.imageData || '',
+    attachments: Array.isArray(more.attachments) ? more.attachments : []
+  });
+  const defaultDay = (date=todayIso()) => ({
+    date,
+    started:false,
+    closed:false,
+    top3:[],
+    care:{ water:false, food:false, vitamins:false, hygiene:false, movement:false, sleep:false },
+    launchNote:'',
+    closeWin:'',
+    closeCarry:'',
+    closeSeed:'',
+    closeNote:'',
+    seededRoutineIds:[],
+    snapshot:null,
+    updatedAt: now()
+  });
+  const defaultSettings = () => ({
+    focus:PERSONAL_FOCUS,
+    standards:PERSONAL_STANDARDS,
+    why:PERSONAL_WHY,
+    profileVersion: 2,
+    routines: []
+  });
+  const defaultWeek = (weekKey) => ({ weekKey, focus:'', protect:'', notes:'', updatedAt: now() });
+
+  const state = {
+    version: VERSION,
+    view: 'now',
+    currentDate: todayIso(),
+    quickText: '',
+    quickLane: 'admin',
+    quickKind: 'task',
+    inboxFilter: 'open',
+    laterFilter: 'planned',
+    planSpan: 'week',
+    search: '',
+    days: {},
+    weeks: {},
+    items: [],
+    settings: defaultSettings(),
+    lastSavedAt: '',
+    readinessOpen: true
+  };
+
+  function ensureDay(raw, date){
+    const base = defaultDay(date);
+    const out = {...base, ...(raw || {}), date:(raw && raw.date) || date};
+    out.care = {...base.care, ...((raw && raw.care) || {})};
+    out.top3 = Array.isArray(out.top3) ? out.top3.filter(Boolean) : [];
+    out.seededRoutineIds = Array.isArray(out.seededRoutineIds) ? out.seededRoutineIds : [];
+    out.snapshot = out.snapshot || null;
+    return out;
+  }
+  function ensureWeek(raw, key){ return {...defaultWeek(key), ...(raw || {}), weekKey:(raw && raw.weekKey) || key}; }
+  function ensureItem(raw){
+    const item = taskItem(raw?.text || '', raw || {});
+    let attachments = (Array.isArray(raw?.attachments) ? raw.attachments : []).map(normalizeAttachment);
+    if(raw?.imageData && !attachments.some(att => att.dataUrl === raw.imageData)){
+      attachments = [normalizeAttachment({
+        id: uid(),
+        name: `${(previewText(raw?.text || 'photo', 24) || 'photo').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase() || 'photo'}.jpg`,
+        type: 'image/jpeg',
+        size: 0,
+        dataUrl: raw.imageData
+      }), ...attachments];
+    }
+    item.attachments = attachments;
+    item.imageData = '';
+    return item;
+  }
+  function syncFocus(date=state.currentDate){
+    const day = ensureDay(state.days[date], date);
+    day.top3 = day.top3.filter(id => {
+      const item = state.items.find(x => x.id === id);
+      return item && item.status === 'today';
+    });
+    state.days[date] = day;
+    return day;
+  }
+  function activeDay(){
+    if(!state.days[state.currentDate]) state.days[state.currentDate] = defaultDay(state.currentDate);
+    return syncFocus(state.currentDate);
+  }
+  function activeWeek(){
+    const key = startOfWeek(state.currentDate);
+    if(!state.weeks[key]) state.weeks[key] = defaultWeek(key);
+    return ensureWeek(state.weeks[key], key);
+  }
+  function save(){
+    const day = activeDay();
+    day.updatedAt = now();
+    state.days[state.currentDate] = day;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: VERSION,
+      days: state.days,
+      weeks: state.weeks,
+      items: state.items,
+      settings: state.settings
+    }));
+    state.lastSavedAt = new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+  }
+  function migrateV2(parsed){
+    const out = { version: VERSION, days:{}, weeks:{}, items:[], settings:defaultSettings() };
+    const profile = parsed.profile || {};
+    out.settings.focus = profile.seasonFocus || out.settings.focus;
+    out.settings.standards = profile.standards || out.settings.standards;
+    out.settings.why = profile.why || out.settings.why;
+    out.settings.routines = Array.isArray(parsed.recurring) && parsed.recurring.length ? parsed.recurring.map(r => ({
+      id:r.id || uid(), text:r.text || '', lane:(r.bucket === 'personalHealth' ? 'health' : r.bucket === 'homeErrands' ? 'home' : r.bucket === 'relationships' ? 'people' : r.bucket === 'buildFuture' ? 'build' : r.bucket === 'workAdmin' ? 'work' : 'admin'),
+      seed:(r.bucket === 'followUps' || r.bucket === 'parkingLot') ? 'later' : 'today',
+      days:Array.isArray(r.days) ? r.days : [0,1,2,3,4,5,6],
+      active:r.active !== false
+    })) : out.settings.routines;
+    const laneMap = { workAdmin:'work', personalHealth:'health', homeErrands:'home', relationships:'people', buildFuture:'build', followUps:'admin', parkingLot:'admin' };
+    const sourceDays = parsed.days || {};
+    for(const [date, raw] of Object.entries(sourceDays)){
+      const day = defaultDay(date);
+      day.started = !!raw.launched;
+      day.closed = !!raw.closed;
+      day.launchNote = raw.launch || '';
+      day.care = {...day.care, ...(raw.care || {})};
+      day.closeWin = raw.evening?.done || '';
+      day.closeCarry = raw.evening?.carry || '';
+      day.closeSeed = raw.evening?.seed || '';
+      day.closeNote = raw.evening?.note || '';
+      out.days[date] = day;
+      const addLegacyTasks = (arr, lane, statusIfOpen) => {
+        (Array.isArray(arr) ? arr : []).forEach(it => {
+          if(!(it?.text || '').trim()) return;
+          out.items.push(taskItem(it.text, {
+            id: it.id || uid(),
+            kind:'task',
+            lane,
+            status: it.done ? 'done' : statusIfOpen,
+            sourceDate: date,
+            targetDate: statusIfOpen === 'today' ? date : '',
+            linkedDate: date,
+            createdAt: it.createdAt || now(),
+            updatedAt: it.updatedAt || now(),
+            doneAt: it.done ? (it.updatedAt || now()) : 0
+          }));
+        });
+      };
+      addLegacyTasks(raw.top3 || raw.critical3 || [], 'admin', date === todayIso() ? 'today' : 'later');
+      for(const [key, lane] of Object.entries(laneMap)) addLegacyTasks(raw[key] || [], lane, key === 'followUps' ? 'waiting' : key === 'parkingLot' ? 'later' : (date === todayIso() ? 'today' : 'later'));
+      if(Array.isArray(raw.capture)) raw.capture.forEach(n => { if((n.text||'').trim()) out.items.push(taskItem(n.text,{ id:n.id||uid(), kind:'note', lane:'admin', status:'inbox', sourceDate:date, linkedDate:date, createdAt:n.ts||now(), updatedAt:n.ts||now() })); });
+      if(day.closeCarry.trim()) out.items.push(taskItem(day.closeCarry,{ kind:'note', lane:'admin', status:'inbox', sourceDate:date, linkedDate:date, createdAt:now(), updatedAt:now(), notes:'carry' }));
+    }
+    (parsed.inbox || []).forEach(it => {
+      if(!(it.text || '').trim()) return;
+      out.items.push(taskItem(it.text, {
+        id: it.id || uid(),
+        kind: it.kind || 'note',
+        lane: it.bucket || 'admin',
+        status: it.status === 'archived' ? 'archived' : it.status === 'linked' ? 'today' : it.status === 'done' ? 'done' : 'inbox',
+        sourceDate: it.sourceDate || todayIso(),
+        linkedDate: it.linkedDate || '',
+        createdAt: it.createdAt || now(),
+        updatedAt: it.updatedAt || now(),
+        archivedAt: it.status === 'archived' ? (it.updatedAt || now()) : 0,
+        doneAt: it.status === 'done' ? (it.updatedAt || now()) : 0
+      }));
+    });
+    for(const [k,w] of Object.entries(parsed.weeks || {})) out.weeks[k] = ensureWeek(w, k);
+    return out;
+  }
+  function load(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw){
+      state.days[state.currentDate] = defaultDay(state.currentDate);
+      state.weeks[startOfWeek(state.currentDate)] = defaultWeek(startOfWeek(state.currentDate));
+      state.items = [];
+      state.settings = defaultSettings();
+      dropLegacyPresetRoutinesFromState(state);
+      save();
+      render();
+      return;
+    }
+    try{
+      const parsed = JSON.parse(raw);
+      const looksCurrent = parsed && typeof parsed === 'object' && parsed.days && parsed.items && parsed.settings;
+      const data = parsed.version === VERSION ? parsed : (looksCurrent ? { ...parsed, version: VERSION } : migrateV2(parsed));
+      state.days = {};
+      for(const [date, day] of Object.entries(data.days || {})) state.days[date] = ensureDay(day, date);
+      state.weeks = {};
+      for(const [key, week] of Object.entries(data.weeks || {})) state.weeks[key] = ensureWeek(week, key);
+      state.items = Array.isArray(data.items) ? data.items.map(ensureItem) : [];
+      state.settings = applyJustinProfile({ ...defaultSettings(), ...(data.settings || {}) });
+      state.settings.routines = Array.isArray(data.settings?.routines)
+        ? applyJustinProfile({ ...state.settings, routines: data.settings.routines.map(r => ({ id:r.id || uid(), text:r.text || '', lane:r.lane || 'admin', seed:r.seed || 'today', days:Array.isArray(r.days) ? r.days : [0,1,2,3,4,5,6], active:r.active !== false, time:r.time || '', notes:r.notes || '' })) }).routines
+        : mergePersonalRoutines(defaultSettings().routines);
+      if(!state.days[state.currentDate]) state.days[state.currentDate] = defaultDay(state.currentDate);
+      const wk = startOfWeek(state.currentDate);
+      if(!state.weeks[wk]) state.weeks[wk] = defaultWeek(wk);
+      save();
+    }catch(err){
+      console.error(err);
+      localStorage.removeItem(STORAGE_KEY);
+      state.days = { [state.currentDate]: defaultDay(state.currentDate) };
+      state.weeks = { [startOfWeek(state.currentDate)]: defaultWeek(startOfWeek(state.currentDate)) };
+      state.items = [];
+      state.settings = defaultSettings();
+      save();
+    }
+    render();
+  }
+
+  function itemsByStatus(status){ return state.items.filter(item => item.status === status); }
+  function openItems(){ return state.items.filter(item => ['inbox','today','later','waiting'].includes(item.status)); }
+  function itemsForToday(){
+    return state.items.filter(item => {
+      if(item.status === 'today'){
+        const itemDay = item.targetDate || item.sourceDate || '';
+        return !itemDay || itemDay === state.currentDate;
+      }
+      return item.status === 'later' && !!item.targetDate && item.targetDate === state.currentDate;
+    });
+  }
+  function overdueItems(){
+    return state.items.filter(item => ['today','later','waiting'].includes(item.status) && item.targetDate && item.targetDate < state.currentDate && !item.doneAt);
+  }
+  function carrySuggestions(){
+    const prev = addDays(state.currentDate,-1);
+    const prevDay = ensureDay(state.days[prev], prev);
+    const suggestions = [];
+    if(prevDay.closeSeed?.trim()) suggestions.push({ type:'seed', text: prevDay.closeSeed.trim() });
+    parseLines(prevDay.closeCarry).forEach(line => suggestions.push({ type:'carry', text: line }));
+    return suggestions;
+  }
+  function pendingRoutineCount(date=state.currentDate){
+    const day = ensureDay(state.days[date], date);
+    const wd = weekdayIndex(date);
+    return state.settings.routines.filter(r => r.active && r.days.includes(wd) && !day.seededRoutineIds.includes(r.id)).length;
+  }
+
+  function countOpenByLane(){
+    const map = Object.fromEntries(LANES.map(l => [l.key,0]));
+    openItems().forEach(item => { if(map[item.lane] !== undefined) map[item.lane] += 1; });
+    return map;
+  }
+  function normalizedText(s){ return String(s || '').trim().toLowerCase().replace(/\s+/g,' '); }
+  function repeatedOpenTexts(){
+    const counts = {};
+    openItems().forEach(item => { const key = normalizedText(item.text); if(key) counts[key] = (counts[key] || 0) + 1; });
+    return Object.entries(counts).filter(([,count]) => count > 1).sort((a,b)=>b[1]-a[1]);
+  }
+  function recentSnapshots(daysBack=7){
+    const rows = [];
+    for(let i=0;i<daysBack;i++){
+      const date = addDays(state.currentDate, -i);
+      const day = ensureDay(state.days[date], date);
+      rows.push({
+        date,
+        floor: Object.values(day.care).filter(Boolean).length,
+        top3: day.top3.map(id => state.items.find(item => item.id === id)?.text || '').filter(Boolean),
+        win: day.closeWin || '',
+        seed: day.closeSeed || '',
+        note: day.closeNote || '',
+        closed: !!day.closed
+      });
+    }
+    return rows;
+  }
+  function searchEverything(query){
+    const q = normalizedText(query);
+    if(!q) return [];
+    const results = [];
+    state.items.forEach(item => {
+      const blob = [item.text, item.notes, item.lane, STATUS_LABEL[item.status] || item.status].join(' | ');
+      if(normalizedText(blob).includes(q)) results.push({ type:'item', item, date:item.sourceDate || '' });
+    });
+    for(const [date, raw] of Object.entries(state.days)){
+      const day = ensureDay(raw, date);
+      const blob = [day.launchNote, day.closeWin, day.closeCarry, day.closeSeed, day.closeNote].join(' | ');
+      if(normalizedText(blob).includes(q)) results.push({ type:'day', date, day });
+    }
+    return results.sort((a,b)=>{
+      const aa = a.item?.updatedAt || a.day?.updatedAt || 0;
+      const bb = b.item?.updatedAt || b.day?.updatedAt || 0;
+      return bb - aa;
+    });
+  }
+  function parseLines(text){ return String(text || '').split(/\n+/).map(s => s.trim()).filter(Boolean); }
+
+  function snapshotDay(date){
+    const day = activeDay();
+    day.snapshot = {
+      floor:Object.values(day.care).filter(Boolean).length,
+      top3: day.top3.map(id => state.items.find(item => item.id === id)?.text || '').filter(Boolean),
+      win: day.closeWin || '',
+      carry: day.closeCarry || '',
+      seed: day.closeSeed || '',
+      note: day.closeNote || '',
+      closed: !!day.closed,
+      updatedAt: now()
+    };
+    state.days[date] = day;
+  }
+
+  function toggleCare(key){ const day = activeDay(); day.care[key] = !day.care[key]; const complete = Object.values(day.care).every(Boolean); state.readinessOpen = complete ? false : true; state.days[state.currentDate] = day; save(); render(); }
+  function setDayField(key, value){ const day = activeDay(); day[key] = value; state.days[state.currentDate] = day; save(); }
+  function setWeekField(key, value){ const week = activeWeek(); week[key] = value; week.updatedAt = now(); state.weeks[week.weekKey] = week; save(); }
+  function updateItem(id, patch, opts={}){
+    if(opts.undoLabel) queueUndo(opts.undoLabel);
+    const idx = state.items.findIndex(item => item.id === id); if(idx === -1) return;
+    const next = { ...state.items[idx], ...patch, updatedAt: now() };
+    if(patch.status === 'done') next.doneAt = now();
+    if(patch.status === 'archived') next.archivedAt = now();
+    if(patch.status && patch.status !== 'done') next.doneAt = patch.doneAt || 0;
+    if(patch.status && patch.status !== 'archived') next.archivedAt = patch.archivedAt || 0;
+    state.items[idx] = next;
+    if(patch.status && patch.status !== 'today'){
+      const day = activeDay();
+      day.top3 = day.top3.filter(x => x !== id);
+      state.days[state.currentDate] = day;
+    }
+    save();
+    render();
+  }
+  function removeItem(id, opts={}){ if(opts.undoLabel) queueUndo(opts.undoLabel); state.items = state.items.filter(item => item.id !== id); Object.values(state.days).forEach(day => day.top3 = day.top3.filter(x => x !== id)); save(); render(); }
+
+function createItem(text, opts={}){
+  if(!String(text||'').trim()) return null;
+  if(opts.undoLabel) queueUndo(opts.undoLabel);
+  const item = taskItem(String(text).trim(), {
+    kind: opts.kind || state.quickKind,
+    lane: opts.lane || state.quickLane,
+    status: opts.status || 'inbox',
+    sourceDate: opts.sourceDate || state.currentDate,
+    linkedDate: opts.linkedDate || state.currentDate,
+    targetDate: opts.targetDate || '',
+    targetTime: opts.targetTime || '',
+    routineId: opts.routineId || '',
+    notes: opts.notes || '',
+    imageData: opts.imageData || '',
+    attachments: Array.isArray(opts.attachments) ? opts.attachments.map(normalizeAttachment) : []
+  });
+  if(opts.prepend === false) state.items.push(item); else state.items.unshift(item);
+  save();
+  if(!opts.noRender) render();
+  return item;
+}
+
+
+function addQuick(statusOverride){
+  const text = state.quickText.trim();
+  if(!text) return;
+  const lane = state.quickLane;
+  const kind = state.quickKind;
+  state.quickText = '';
+  createItem(text, { status: statusOverride || 'inbox', lane, kind, noRender:true });
+  save();
+  render();
+  if(day.seededRoutineIds.length) showToast('Day started');
+}
+
+
+  function markDone(id){
+    const item = state.items.find(x => x.id === id);
+    if(!item) return;
+    if(item.status === 'done') return updateItem(id, { status:'today', targetDate: state.currentDate }, { undoLabel:'Reopened task' });
+    updateItem(id, { status:'done' }, { undoLabel:'Completed task' });
+  }
+  function sendToTop3(id){
+    const day = activeDay();
+    day.top3 = day.top3.filter(x => x !== id);
+    day.top3.push(id);
+    state.days[state.currentDate] = day;
+    const item = state.items.find(x => x.id === id);
+    if(item && item.status !== 'done'){
+      updateItem(id, { status:'today', targetDate: state.currentDate });
+      return;
+    }
+    save();
+    render();
+  }
+  function removeFromTop3(id){ const day = activeDay(); day.top3 = day.top3.filter(x => x !== id); state.days[state.currentDate] = day; save(); render(); }
+
+function startDay(){
+  const day = activeDay();
+  const wd = weekdayIndex(state.currentDate);
+  state.settings.routines
+    .filter(r => r.active && r.days.includes(wd) && !day.seededRoutineIds.includes(r.id))
+    .forEach(r => {
+      const status = r.seed === 'today' ? 'today' : 'later';
+      const exists = state.items.some(item => item.routineId === r.id && item.sourceDate === state.currentDate && !['done','archived'].includes(item.status));
+      if(!exists){
+        createItem(r.text, { kind:'task', lane:r.lane, status, targetDate: status === 'today' ? state.currentDate : '', targetTime: r.time || '', routineId:r.id, notes:(r.notes || ''), noRender:true });
+      }
+      day.seededRoutineIds.push(r.id);
+    });
+  day.started = true;
+  state.days[state.currentDate] = day;
+  save();
+  render();
+}
+
+  function restartDay(){
+    const keep = confirm('Restart this day view? Current care, top 3, and closeout notes for today will reset. Items stay in the system.');
+    if(!keep) return;
+    state.days[state.currentDate] = defaultDay(state.currentDate);
+    save();
+    render();
+  }
+
+function closeDay(data){
+  const day = activeDay();
+  day.closed = true;
+  day.closeWin = data.win || '';
+  day.closeCarry = data.carry || '';
+  day.closeSeed = data.seed || '';
+  day.closeNote = data.note || '';
+  state.days[state.currentDate] = day;
+  snapshotDay(state.currentDate);
+  const nextDate = addDays(state.currentDate, 1);
+  parseLines(day.closeCarry).forEach(text => {
+    if(!state.items.some(item => !['done','archived'].includes(item.status) && normalizedText(item.text) === normalizedText(text))) {
+      createItem(text, { kind:'task', lane:'admin', status:'later', targetDate:nextDate, notes:'carry-forward', noRender:true });
+    }
+  });
+  closeSheet();
+  save();
+  render();
+}
+
+  function useYesterdaySeed(){
+    const prev = addDays(state.currentDate,-1);
+    const prevDay = ensureDay(state.days[prev], prev);
+    if(!prevDay.closeSeed.trim()) return;
+    const day = activeDay();
+    day.launchNote = prevDay.closeSeed.trim();
+    state.days[state.currentDate] = day;
+    save();
+    render();
+  }
+  function exportBackup(){
+    const payload = JSON.stringify({ version: VERSION, days: state.days, weeks: state.weeks, items: state.items, settings: state.settings }, null, 2);
+    downloadFile(`justin-system-backup-${state.currentDate}.json`, payload, 'application/json');
+  }
+
+function exportContext(){
+  const day = activeDay();
+  const week = activeWeek();
+  const top3 = day.top3.map(id => state.items.find(i => i.id === id)).filter(Boolean);
+  const todayItems = itemsForToday().filter(i => i.status !== 'done').slice(0,15);
+  const laterItems = state.items.filter(i => ['later','waiting'].includes(i.status)).slice(0,20);
+  const inbox = state.items.filter(i => i.status === 'inbox').slice(0,20);
+  const recentNotes = state.items.filter(i => i.kind === 'note' && i.status !== 'archived').slice(0,12);
+  const snaps = recentSnapshots(7);
+  const laneCounts = countOpenByLane();
+  const text = [
+    'HOLDFAST CONTEXT PACKET',
+    '',
+    `Date: ${state.currentDate}`,
+    `Focus: ${state.settings.focus || '-'}`,
+    `Standards: ${state.settings.standards || '-'}`,
+    `Why: ${state.settings.why || '-'}`,
+    '',
+    'WEEK',
+    `Focus: ${week.focus || '-'}`,
+    `Protect: ${week.protect || '-'}`,
+    `Notes: ${week.notes || '-'}`,
+    '',
+    'TODAY',
+    `Launch note: ${day.launchNote || '-'}`,
+    `Care: ${CARE.map(([k,label]) => `${label}:${day.care[k] ? 'yes' : 'no'}`).join(' | ')}`,
+    'Focus:',
+    ...(top3.length ? top3.map(i => `- ${i.text}`) : ['- none set']),
+    '',
+    'TODAY ITEMS',
+    ...(todayItems.length ? todayItems.flatMap(i => [`- [${i.lane}] ${i.text}`, ...(i.notes ? [`  details: ${previewText(i.notes, 160)}`] : [])]) : ['- none']),
+    '',
+    'INBOX',
+    ...(inbox.length ? inbox.flatMap(i => [`- [${i.kind}/${i.lane}] ${i.text}`, ...(i.notes ? [`  details: ${previewText(i.notes, 160)}`] : [])]) : ['- empty']),
+    '',
+    'OPEN NOTES',
+    ...(recentNotes.length ? recentNotes.flatMap(i => [`- [${i.lane}] ${i.text}`, ...(i.notes ? [`  details: ${previewText(i.notes, 160)}`] : [])]) : ['- none']),
+    '',
+    'LATER / WAITING',
+    ...(laterItems.length ? laterItems.flatMap(i => [`- [${i.status}/${i.lane}] ${i.text}`, ...(i.targetDate || i.targetTime ? [`  when: ${[i.targetDate ? niceDate(i.targetDate) : '', i.targetTime ? niceTime(i.targetTime) : ''].filter(Boolean).join(' at ')}`] : []), ...(i.notes ? [`  details: ${previewText(i.notes, 160)}`] : [])]) : ['- none']),
+    '',
+    'OPEN COUNTS BY LANE',
+    ...LANES.map(l => `- ${l.label}: ${laneCounts[l.key] || 0}`),
+    '',
+    'RECENT 7 DAYS',
+    ...snaps.map(s => `- ${s.date}: basics ${s.floor}/6 | focus ${s.top3.join(' ; ') || '-'} | win ${s.win || '-'} | carry ${ensureDay(state.days[s.date], s.date).closeCarry || '-'} | seed ${s.seed || '-'}`),
+    '',
+    'REPEATED OPEN LOOPS',
+    ...(repeatedOpenTexts().length ? repeatedOpenTexts().slice(0,10).map(([text,count]) => `- ${text} (${count})`) : ['- none'])
+  ].join('\n');
+  downloadFile(`holdfast-context-${state.currentDate}.txt`, text, 'text/plain');
+}
+
+  function importBackup(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const parsed = JSON.parse(String(reader.result || '{}'));
+        const data = parsed.version === VERSION ? parsed : migrateV2(parsed);
+        state.days = {}; for(const [d, day] of Object.entries(data.days || {})) state.days[d] = ensureDay(day, d);
+        state.weeks = {}; for(const [k, week] of Object.entries(data.weeks || {})) state.weeks[k] = ensureWeek(week, k);
+        state.items = Array.isArray(data.items) ? data.items.map(ensureItem) : [];
+        state.settings = {...defaultSettings(), ...(data.settings || {})};
+        state.settings.routines = Array.isArray(data.settings?.routines) ? data.settings.routines.map(r => ({ id:r.id || uid(), text:r.text || '', lane:r.lane || 'admin', seed:r.seed || 'today', days:Array.isArray(r.days) ? r.days : [0,1,2,3,4,5,6], active:r.active !== false, time:r.time || '', notes:r.notes || '' })) : defaultSettings().routines;
+        save(); render();
+      }catch(err){ alert('Import failed.'); console.error(err); }
+    };
+    reader.readAsText(file);
+  }
+  function downloadFile(name, text, type){
+    const blob = new Blob([text], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function openSheet(html, options={}){
+    if(Object.prototype.hasOwnProperty.call(options, 'beforeClose')) sheetBeforeClose = options.beforeClose || null;
+    if(Object.prototype.hasOwnProperty.call(options, 'cleanup')) sheetCleanup = options.cleanup || null;
+    $sheetIn.innerHTML = html;
+    $sheet.classList.add('open');
+    $sheetBack.classList.add('open');
+  }
+  function closeSheet(force=false){
+    if(!force && sheetBeforeClose && sheetBeforeClose() === false) return;
+    const cleanup = sheetCleanup;
+    sheetBeforeClose = null;
+    sheetCleanup = null;
+    if(cleanup){ try{ cleanup(); }catch(err){ console.error(err); } }
+    $sheet.classList.remove('open');
+    $sheetBack.classList.remove('open');
+    $sheetIn.innerHTML='';
+  }
+  $sheetBack.addEventListener('click', () => closeSheet());
+
+  let undoSnapshot = null;
+  let toastTimer = 0;
+  function snapshotState(){
+    return JSON.parse(JSON.stringify({
+      version: state.version, view: state.view, currentDate: state.currentDate, quickText: state.quickText, quickLane: state.quickLane, quickKind: state.quickKind,
+      inboxFilter: state.inboxFilter, laterFilter: state.laterFilter, planSpan: state.planSpan, search: state.search,
+      days: state.days, weeks: state.weeks, items: state.items, settings: state.settings, lastSavedAt: state.lastSavedAt
+    }));
+  }
+  function restoreSnapshot(snapshot){
+    for(const key of Object.keys(snapshot)) state[key] = snapshot[key];
+    save();
+    render();
+  }
+  function showToast(message, actionLabel='', actionFn=null){
+    if(!$toast) return;
+    clearTimeout(toastTimer);
+    $toast.innerHTML = `<div class="msg">${h(message)}</div>${actionLabel ? `<button class="btn slim primary" id="toastActionBtn">${h(actionLabel)}</button>` : ''}`;
+    $toast.classList.add('show');
+    const act = document.getElementById('toastActionBtn');
+    if(act && actionFn) act.onclick = actionFn;
+    toastTimer = setTimeout(() => { $toast.classList.remove('show'); }, actionLabel ? 5200 : 2200);
+  }
+  function queueUndo(message){
+    undoSnapshot = snapshotState();
+    showToast(message, 'Undo', () => {
+      if(!undoSnapshot) return;
+      const snap = undoSnapshot;
+      undoSnapshot = null;
+      restoreSnapshot(snap);
+      showToast('Undone');
+    });
+  }
+
+function jumpToDate(nextDate){
+  state.currentDate = nextDate;
+  if(!state.days[state.currentDate]) state.days[state.currentDate] = defaultDay(state.currentDate);
+  const wk = startOfWeek(state.currentDate);
+  if(!state.weeks[wk]) state.weeks[wk] = defaultWeek(wk);
+  save();
+  render();
+}
+
+function renderTopbar(){
+  const day = activeDay();
+  const openCount = openItems().length;
+  const today = todayIso();
+  const delta = Math.round((toDate(state.currentDate)-toDate(today))/86400000);
+  const dateState = delta === 0 ? 'Today' : delta > 0 ? `${delta} day${delta===1?'':'s'} ahead` : `${Math.abs(delta)} day${Math.abs(delta)===1?'':'s'} back`;
+  $topbar.innerHTML = `
+    <div class="row space">
+      <div>
+        <div class="tiny">Holdfast</div>
+        <div style="font-size:18px;font-weight:700;letter-spacing:-.03em;margin-top:2px">${h(niceDate(state.currentDate))}</div>
+        <div class="sub" style="margin-top:2px">${dateState} · ${openCount} open</div>
+      </div>
+      <div class="datebar">
+        <button class="btn slim" id="prevDayBtn" aria-label="Previous day">←</button>
+        <button class="btn slim ${state.currentDate===today?'primary':''}" id="goTodayBtn">Today</button>
+        <button class="btn slim" id="nextDayBtn" aria-label="Next day">→</button>
+        <div class="datepick" style="max-width:260px"><input class="field" type="text" id="datePickText" inputmode="numeric" placeholder="YYYY-MM-DD" value="${h(state.currentDate)}" /><button class="btn slim" type="button" id="datePickBtn" aria-label="Choose date">📅</button><input type="date" id="datePickNative" class="native-date-proxy" value="${h(state.currentDate)}" tabindex="-1" aria-hidden="true" /></div>
+        <button class="btn slim primary" id="openQuickAddBtn" aria-label="Add item">＋ Add</button>
+        <button class="btn slim" id="openSettingsBtn" aria-label="Setup">⚙</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('prevDayBtn').onclick = () => jumpToDate(addDays(state.currentDate,-1));
+  document.getElementById('nextDayBtn').onclick = () => jumpToDate(addDays(state.currentDate,1));
+  document.getElementById('goTodayBtn').onclick = () => jumpToDate(today);
+  bindDateControl({ textId:'datePickText', nativeId:'datePickNative', buttonId:'datePickBtn', onCommit: jumpToDate });
+  document.getElementById('openQuickAddBtn').onclick = () => openQuickSheet('inbox');
+  document.getElementById('openSettingsBtn').onclick = () => { state.view = 'settings'; render(); };
+}
+
+  function renderNav(){
+    $nav.innerHTML = NAV.map(tab => `<button class="${state.view===tab.id?'active':''}" data-view="${tab.id}"><div class="icon">${tab.icon}</div><div class="navlabel">${tab.label}</div></button>`).join('');
+    [...$nav.querySelectorAll('button')].forEach(btn => btn.onclick = () => { state.view = btn.dataset.view; render(); });
+  }
+
+
+function itemMeta(item){
+  const lane = LANES.find(l => l.key === item.lane)?.label || 'Admin';
+  const statusLabel = item.status === 'later'
+    ? (item.targetDate ? 'Planned' : 'Queued')
+    : (STATUS_LABEL[item.status] || item.status);
+  const parts = [lane, statusLabel, niceDate(item.sourceDate || state.currentDate)];
+  if(item.targetDate){
+    if(item.status === 'later' && item.targetDate < state.currentDate) parts.push('overdue');
+    else if(item.status === 'later' && item.targetDate === state.currentDate) parts.push('due today');
+    else parts.push('on ' + niceDate(item.targetDate));
+  }
+  if(item.targetTime) parts.push(niceTime(item.targetTime));
+  if(item.notes) parts.push(item.kind === 'note' ? 'details' : 'instructions');
+  const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+  const imageCount = attachments.filter(attachmentIsImage).length;
+  const fileCount = attachments.length - imageCount;
+  if(imageCount) parts.push(imageCount === 1 ? '1 photo' : `${imageCount} photos`);
+  if(fileCount) parts.push(fileCount === 1 ? '1 file' : `${fileCount} files`);
+  return parts;
+}
+
+function actionLabel(item, act){
+  const isNote = item?.kind === 'note';
+  return ({
+    today: isNote ? 'Pin to Today' : 'Move to Today',
+    removeToday: isNote ? 'Unpin' : 'Take out of Today',
+    schedule:'Set date & time',
+    details: isNote ? 'Notes & files' : 'Instructions & files',
+    top3:'Add to Focus',
+    untop3:'Remove Focus',
+    taskify:'Make task',
+    noteify:'Make note',
+    inbox:'Back to Inbox',
+    later:'Send to Queue',
+    waiting:'Mark waiting on',
+    archive:'Archive',
+    restore:'Restore',
+    reopenToday:'Reopen in Today',
+    delete:'Delete'
+  })[act] || act;
+}
+
+function primaryActionLabels(item, isFocused){
+  if(item.status === 'archived') return [];
+  if(item.kind === 'task' && item.status === 'done') return ['reopenToday'];
+  if(item.kind === 'task'){
+    if(item.status === 'today') return [isFocused ? 'untop3' : 'top3'];
+    return ['today'];
+  }
+  if(item.kind === 'note'){
+    return [item.status === 'today' ? 'removeToday' : 'today'];
+  }
+  return [];
+}
+function renderItem(item, options={}){
+  const isFocused = activeDay().top3.includes(item.id);
+  const searchMode = !!options.searchMode;
+  const isArchived = item.status === 'archived';
+  const isDone = item.status === 'done';
+  const detailPreview = previewText(item.notes, item.kind === 'note' ? 220 : 120);
+  const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+  const imageAttachments = attachments.filter(attachmentIsImage);
+  const otherAttachments = attachments.filter(att => !attachmentIsImage(att));
+  const check = item.kind === 'task'
+    ? (isArchived
+        ? `<div class="check">·</div>`
+        : `<button class="check ${isDone?'on':''}" data-act="done" aria-label="${isDone?'Reopen task':'Complete task'}">${isDone?'✓':''}</button>`)
+    : `<div class="check note">✦</div>`;
+  const primaryActs = primaryActionLabels(item, isFocused);
+  const primaryButtons = primaryActs.map(act => `<button class="btn slim ${['top3','taskify','reopenToday'].includes(act)?'primary':''} ${act==='untop3'?'warn':''}" data-act="${act}">${actionLabel(item, act)}</button>`).join('');
+  const metaHtml = itemMeta(item).map(x => `<span>${h(x)}</span>`).join('') + ` ${item.routineId ? '<span>routine</span>' : ''} ${isFocused ? '<span class="badge focus">Focus</span>' : ''}`;
+
+  if(item.kind === 'note'){
+    const imageStrip = imageAttachments.length ? `
+      <div class="note-attachments">
+        ${imageAttachments.slice(0,3).map(att => `<img src="${att.dataUrl}" alt="" class="note-thumb" />`).join('')}
+        ${imageAttachments.length > 3 ? `<div class="note-chip">+${imageAttachments.length - 3} more</div>` : ''}
+        ${otherAttachments.length ? `<div class="note-chip">${otherAttachments.length === 1 ? '1 file' : `${otherAttachments.length} files`}</div>` : ''}
+      </div>
+    ` : (otherAttachments.length ? `<div class="note-attachments"><div class="note-chip">${otherAttachments.length === 1 ? '1 file attached' : `${otherAttachments.length} files attached`}</div></div>` : '');
+    return `
+      <div class="item kind-note state-${item.status} ${isFocused?'focused':''}" data-item="${item.id}">
+        <div class="itemtop">
+          ${check}
+          <div class="itembody">
+            ${item.status==='today' && !searchMode ? `<div class="note-eyebrow">For today</div>` : ''}
+            <input class="itemtext ${item.status==='done'?'done':''}" value="${h(item.text)}" data-role="text" />
+            ${detailPreview ? `<div class="note-preview">${h(detailPreview)}</div>` : ''}
+            ${imageStrip}
+            <div class="meta note">${metaHtml}</div>
+          </div>
+        </div>
+        <div class="actions primary">
+          ${primaryButtons}
+          <button class="btn slim" data-act="more">More…</button>
+        </div>
+        ${searchMode ? `<div class="meta"><span>${h(niceStamp(item.updatedAt || item.createdAt))}</span></div>` : ''}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="item kind-task state-${item.status} ${isFocused?'focused':''}" data-item="${item.id}">
+      <div class="itemtop">
+        ${check}
+        <div class="itembody">
+          <input class="itemtext ${item.status==='done'?'done':''}" value="${h(item.text)}" data-role="text" />
+          <div class="meta">${metaHtml}</div>
+          ${detailPreview ? `<div class="task-preview">${h(detailPreview)}</div>` : ''}
+        </div>
+      </div>
+      <div class="actions primary">
+        ${primaryButtons}
+        <button class="btn slim" data-act="more">More…</button>
+      </div>
+      ${searchMode ? `<div class="meta"><span>${h(niceStamp(item.updatedAt || item.createdAt))}</span></div>` : ''}
+    </div>
+  `;
+}
+
+
+function itemStatusAfterTaskify(id){
+  const item = state.items.find(x => x.id === id);
+  if(!item) return 'inbox';
+  if(['today','later','waiting','done'].includes(item.status)) return item.status;
+  return 'inbox';
+}
+
+function bindItemRows(root){
+  [...root.querySelectorAll('[data-item]')].forEach(row => {
+    const id = row.dataset.item;
+    const input = row.querySelector('[data-role="text"]');
+    if(input) input.onchange = e => updateItem(id, { text:e.target.value });
+    [...row.querySelectorAll('[data-act]')].forEach(btn => btn.onclick = () => {
+      const act = btn.dataset.act;
+      if(act === 'done') return markDone(id);
+      if(act === 'reopenToday') return updateItem(id, { status:'today', targetDate: state.currentDate }, { undoLabel:'Reopened task' });
+      if(act === 'today') return updateItem(id, { status:'today', targetDate: state.currentDate }, { undoLabel:'Moved to Today' });
+      if(act === 'removeToday') { const current = state.items.find(x => x.id === id); return updateItem(id, { status: current?.kind === 'note' ? 'inbox' : 'later', targetDate:'' }, { undoLabel:'Removed from Today' }); }
+      if(act === 'later') return updateItem(id, { status:'later', targetDate:'' }, { undoLabel:'Sent to Queue' });
+      if(act === 'schedule') return openScheduleSheet(id);
+      if(act === 'waiting') return updateItem(id, { status:'waiting', targetDate:'' }, { undoLabel:'Moved to Waiting' });
+      if(act === 'inbox') return updateItem(id, { status:'inbox', targetDate:'' }, { undoLabel:'Sent to Inbox' });
+      if(act === 'archive') return updateItem(id, { status:'archived' }, { undoLabel:'Archived item' });
+      if(act === 'restore') return updateItem(id, { status:'inbox', archivedAt:0 }, { undoLabel:'Restored item' });
+      if(act === 'top3') return sendToTop3(id);
+      if(act === 'untop3') return removeFromTop3(id);
+      if(act === 'taskify') return updateItem(id, { kind:'task', status:itemStatusAfterTaskify(id) }, { undoLabel:'Converted to task' });
+      if(act === 'noteify') {
+        const current = state.items.find(x => x.id === id);
+        const nextStatus = current?.status === 'done' ? 'inbox' : (current?.status || 'inbox');
+        return updateItem(id, { kind:'note', status:nextStatus, targetDate: nextStatus === 'done' ? '' : (current?.targetDate || '') }, { undoLabel:'Converted to note' });
+      }
+      if(act === 'more') return openItemMoreSheet(id);
+      if(act === 'delete') { if(confirm('Delete this item?')) removeItem(id, { undoLabel:'Deleted item' }); }
+    });
+  });
+}
+
+function openItemMoreSheet(id){
+  const item = state.items.find(x => x.id === id); if(!item) return;
+  const isFocused = activeDay().top3.includes(id);
+  const actions = [];
+  if(item.status === 'archived') actions.push('details','restore','delete');
+  else if(item.kind === 'task' && item.status === 'done') actions.push('reopenToday','schedule','details','noteify','archive','delete');
+  else if(item.kind === 'task') {
+    if(item.status !== 'today') actions.push('today');
+    if(item.status === 'today') actions.push('removeToday');
+    actions.push('schedule','details', isFocused ? 'untop3' : 'top3', 'inbox','later','waiting','noteify','archive','delete');
+  }
+  else {
+    actions.push(item.status === 'today' ? 'removeToday' : 'today', 'details','taskify','inbox','later','archive','delete');
+  }
+  const uniqueActions = actions.filter((act, idx) => actions.indexOf(act) === idx);
+  openSheet(`
+    <div class="stack">
+      <div><div class="h2">${item.kind === 'note' ? 'Note' : 'Task'} options</div><div class="sub">${h(item.text)}</div></div>
+      <div class="chips">${isFocused ? '<span class="badge focus">Focus</span>' : ''}<span class="badge ${item.status==='today'?'today':item.status==='waiting'?'waiting':item.status==='done'?'done':'later'}">${h(STATUS_LABEL[item.status] || item.status)}</span>${item.notes ? '<span class="badge">notes</span>' : ''}${(Array.isArray(item.attachments) ? item.attachments.filter(attachmentIsImage).length : 0) ? `<span class="badge">${item.attachments.filter(attachmentIsImage).length === 1 ? 'photo' : 'photos'}</span>` : ''}${(Array.isArray(item.attachments) ? item.attachments.filter(att => !attachmentIsImage(att)).length : 0) ? `<span class="badge">${item.attachments.filter(att => !attachmentIsImage(att)).length === 1 ? 'file' : 'files'}</span>` : ''}</div>
+      <div class="stack">${uniqueActions.map(act => `<button class="btn full ${['delete'].includes(act)?'danger':''} ${['restore','top3','taskify','reopenToday','details'].includes(act)?'primary':''} ${act==='untop3'?'warn':''}" data-sheet-act="${act}">${actionLabel(item, act)}</button>`).join('')}</div>
+    </div>
+  `);
+  [...document.querySelectorAll('[data-sheet-act]')].forEach(btn => btn.onclick = () => {
+    const act = btn.dataset.sheetAct;
+    closeSheet();
+    if(act === 'details') return openItemDetailsSheet(id);
+    if(act === 'reopenToday') return updateItem(id, { status:'today', targetDate: state.currentDate }, { undoLabel:'Reopened task' });
+    if(act === 'today') return updateItem(id, { status:'today', targetDate: state.currentDate }, { undoLabel:'Moved to Today' });
+    if(act === 'removeToday') {
+      const current = state.items.find(x => x.id === id);
+      return updateItem(id, { status: current?.kind === 'note' ? 'inbox' : 'later', targetDate:'' }, { undoLabel:'Removed from Today' });
+    }
+    if(act === 'schedule') return openScheduleSheet(id);
+    if(act === 'top3') return sendToTop3(id);
+    if(act === 'untop3') return removeFromTop3(id);
+    if(act === 'later') return updateItem(id, { status:'later', targetDate:'' }, { undoLabel:'Sent to Queue' });
+    if(act === 'waiting') return updateItem(id, { status:'waiting', targetDate:'' }, { undoLabel:'Moved to Waiting' });
+    if(act === 'inbox') return updateItem(id, { status:'inbox', targetDate:'' }, { undoLabel:'Sent to Inbox' });
+    if(act === 'archive') return updateItem(id, { status:'archived' }, { undoLabel:'Archived item' });
+    if(act === 'restore') return updateItem(id, { status:'inbox', archivedAt:0 }, { undoLabel:'Restored item' });
+    if(act === 'noteify') {
+      const current = state.items.find(x => x.id === id);
+      const nextStatus = current?.status === 'done' ? 'inbox' : (current?.status || 'inbox');
+      return updateItem(id, { kind:'note', status:nextStatus, targetDate: nextStatus === 'done' ? '' : (current?.targetDate || '') }, { undoLabel:'Converted to note' });
+    }
+    if(act === 'taskify') return updateItem(id, { kind:'task', status:itemStatusAfterTaskify(id) }, { undoLabel:'Converted to task' });
+    if(act === 'delete') { if(confirm('Delete this item?')) removeItem(id, { undoLabel:'Deleted item' }); }
+  });
+}
+
+function openItemDetailsSheet(id){
+  const item = state.items.find(x => x.id === id); if(!item) return;
+  let draftNotes = item.notes || '';
+  let draftAttachments = Array.isArray(item.attachments) ? item.attachments.map(normalizeAttachment) : [];
+
+  const imageAttachments = () => draftAttachments.filter(attachmentIsImage);
+  const fileAttachments = () => draftAttachments.filter(att => !attachmentIsImage(att));
+  const imageFilename = (att) => att?.name || `${String(item.text || 'photo').trim().replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase() || 'photo'}.jpg`;
+  const renameAttachment = (attachmentId) => {
+    const current = draftAttachments.find(att => att.id === attachmentId);
+    if(!current) return;
+    const nextName = prompt('Name this attachment', current.name || 'attachment');
+    if(nextName === null) return;
+    const trimmed = String(nextName).trim();
+    if(!trimmed) return;
+    draftAttachments = draftAttachments.map(att => att.id === attachmentId ? { ...att, name: trimmed } : att);
+  };
+
+  const renderAttachmentCard = (att, label) => {
+    const isImage = attachmentIsImage(att);
+    return `
+      <div class="card" style="padding:12px; display:flex; gap:12px; align-items:flex-start">
+        ${isImage ? `<img src="${att.dataUrl}" alt="" style="width:64px; height:64px; border-radius:14px; border:1px solid var(--line); object-fit:cover; flex:0 0 auto" />` : `<div style="width:64px; height:64px; border-radius:14px; border:1px solid var(--line); display:grid; place-items:center; background:rgba(255,255,255,.05); font-size:11px; letter-spacing:.12em; color:rgba(246,252,248,.78); flex:0 0 auto">${h(extensionOf(att.name))}</div>`}
+        <div style="min-width:0; width:100%">
+          <div style="font-weight:600; color:rgba(246,252,248,.96); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${h(att.name)}</div>
+          <div class="subtle" style="margin-top:2px">${h(label)} · ${h(attachmentLabel(att))}</div>
+          <div class="row" style="margin-top:8px">
+            <button class="btn slim primary" data-attachment-view="${att.id}">${isImage ? 'View photo' : (/^audio\//i.test(String(att.type||'')) ? 'Play memo' : (attachmentPreviewable(att) ? 'View file' : 'Open file'))}</button>
+            <button class="btn slim" data-attachment-rename="${att.id}">Rename</button>
+            <button class="btn slim" data-attachment-download="${att.id}">Download</button>
+            <button class="btn slim danger" data-attachment-remove="${att.id}">Remove</button>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const openAttachmentViewer = (attachmentId) => {
+    const attachment = draftAttachments.find(att => att.id === attachmentId);
+    if(!attachment) return renderDetails();
+
+    if(!attachmentIsImage(attachment)){
+      const type = String(attachment?.type || '');
+      const isAudio = /^audio\//i.test(type);
+      const previewable = attachmentPreviewable(attachment);
+      if(!previewable){
+        openAttachmentExternal(attachment);
+        return;
+      }
+      openSheet(`
+        <div class="stack">
+          <div class="row space"><div><div class="h2">${isAudio ? 'Voice memo' : 'File preview'}</div><div class="sub">${h(attachment.name)}</div></div><button class="btn slim" id="backToDetailsBtn">Back</button></div>
+          <div class="subtle">${h(attachmentLabel(attachment))}</div>
+          ${isAudio
+            ? `<div class="card" style="padding:16px"><audio controls preload="metadata" src="${attachment.dataUrl}" style="width:100%"></audio></div>`
+            : `<div class="card" style="padding:10px; height:min(58vh,520px)"><iframe src="${attachment.dataUrl}" title="${h(attachment.name)}" style="width:100%; height:100%; border:none; border-radius:16px; background:#fff"></iframe></div>`}
+          <div class="row">
+            ${isAudio ? '' : '<button class="btn" id="openAttachmentBtn">Open in browser</button>'}
+            <button class="btn" id="renameAttachmentBtn">Rename</button>
+            <button class="btn" id="downloadAttachmentBtn">Download</button>
+            <button class="btn danger" id="removeAttachmentBtn">Remove</button>
+          </div>
+        </div>
+      `);
+      document.getElementById('backToDetailsBtn').onclick = renderDetails;
+      const openAttachmentBtn = document.getElementById('openAttachmentBtn');
+      if(openAttachmentBtn) openAttachmentBtn.onclick = () => openAttachmentExternal(attachment);
+      document.getElementById('renameAttachmentBtn').onclick = () => {
+        renameAttachment(attachmentId);
+        openAttachmentViewer(attachmentId);
+      };
+      document.getElementById('downloadAttachmentBtn').onclick = () => {
+        const updated = draftAttachments.find(att => att.id === attachmentId) || attachment;
+        triggerDownload(updated.dataUrl, updated.name || 'attachment');
+      };
+      document.getElementById('removeAttachmentBtn').onclick = () => {
+        draftAttachments = draftAttachments.filter(att => att.id !== attachmentId);
+        renderDetails();
+      };
+      return;
+    }
+
+    let current = draftAttachments.filter(attachmentIsImage).findIndex(att => att.id === attachmentId);
+    let zoom = 1;
+
+    const renderPhotoViewer = () => {
+      const photos = draftAttachments.filter(attachmentIsImage);
+      const photo = photos[current];
+      if(!photo) return renderDetails();
+      openSheet(`
+        <div class="stack">
+          <div class="row space"><div><div class="h2">Photo viewer</div><div class="sub">${current + 1} of ${photos.length} · ${h(photo.name)}</div></div><button class="btn slim" id="backToDetailsBtn">Back</button></div>
+          <div class="card" style="padding:10px; overflow:auto; min-height:42vh; max-height:62vh; display:grid; place-items:center; background:rgba(0,0,0,.24)">
+            <img id="viewerImage" src="${photo.dataUrl}" alt="" style="max-width:100%; max-height:56vh; transform:scale(${zoom}); transform-origin:center center; transition:transform .16s ease; border-radius:18px; border:1px solid var(--line)" />
+          </div>
+          <div class="row" style="justify-content:center">
+            <button class="btn slim" id="prevPhotoBtn" ${current === 0 ? 'disabled' : ''}>← Previous</button>
+            <button class="btn slim" id="zoomOutBtn">－</button>
+            <button class="btn slim" id="zoomResetBtn">Reset</button>
+            <button class="btn slim" id="zoomInBtn">＋</button>
+            <button class="btn slim" id="nextPhotoBtn" ${current === photos.length - 1 ? 'disabled' : ''}>Next →</button>
+          </div>
+          <div class="row">
+            <button class="btn" id="openPhotoBtn">Open in browser</button>
+            <button class="btn" id="renamePhotoBtn">Rename</button>
+            <button class="btn" id="downloadPhotoBtn">Download</button>
+            <button class="btn danger" id="removePhotoBtn">Remove</button>
+          </div>
+        </div>
+      `);
+      document.getElementById('backToDetailsBtn').onclick = renderDetails;
+      const updateZoom = () => {
+        const img = document.getElementById('viewerImage');
+        if(img) img.style.transform = `scale(${zoom})`;
+      };
+      const prev = document.getElementById('prevPhotoBtn');
+      if(prev) prev.onclick = () => { current = Math.max(0, current - 1); zoom = 1; renderPhotoViewer(); };
+      const next = document.getElementById('nextPhotoBtn');
+      if(next) next.onclick = () => { current = Math.min(photos.length - 1, current + 1); zoom = 1; renderPhotoViewer(); };
+      document.getElementById('zoomOutBtn').onclick = () => { zoom = Math.max(0.5, Number((zoom - 0.25).toFixed(2))); updateZoom(); };
+      document.getElementById('zoomInBtn').onclick = () => { zoom = Math.min(4, Number((zoom + 0.25).toFixed(2))); updateZoom(); };
+      document.getElementById('zoomResetBtn').onclick = () => { zoom = 1; updateZoom(); };
+      document.getElementById('openPhotoBtn').onclick = () => openAttachmentExternal(photo);
+      document.getElementById('renamePhotoBtn').onclick = () => {
+        renameAttachment(photo.id);
+        renderPhotoViewer();
+      };
+      document.getElementById('downloadPhotoBtn').onclick = () => {
+        const updated = draftAttachments.find(att => att.id === photo.id) || photo;
+        triggerDownload(updated.dataUrl, imageFilename(updated));
+      };
+      document.getElementById('removePhotoBtn').onclick = () => {
+        draftAttachments = draftAttachments.filter(att => att.id !== photo.id);
+        const remainingPhotos = draftAttachments.filter(attachmentIsImage);
+        if(!remainingPhotos.length) return renderDetails();
+        current = Math.min(current, remainingPhotos.length - 1);
+        renderPhotoViewer();
+      };
+    };
+
+    renderPhotoViewer();
+  };
+
+  const renderDetails = () => {
+    const photos = imageAttachments();
+    const files = fileAttachments();
+    openSheet(`
+      <div class="stack">
+        <div><div class="h2">Notes & files</div><div class="sub">${h(item.text)}</div></div>
+        <label class="stack" style="gap:6px">
+          <span class="label">Notes & context</span>
+          <textarea id="detailNotes" rows="6" placeholder="Anything useful that should stay with this item.">${h(draftNotes)}</textarea>
+          <div class="row">
+            <button class="btn slim" type="button" id="detailDictateBtn">Dictate notes</button>
+          </div>
+          <div class="helper" id="detailDictateStatus"></div>
+        </label>
+        <div class="stack" style="gap:8px">
+          <span class="label">Photos</span>
+          ${photos.length ? `<div class="stack" style="gap:10px">${photos.map(att => renderAttachmentCard(att, 'Photo')).join('')}</div>` : `<div class="helper">Add reference photos that you may want to look back at later.</div>`}
+          <div class="row">
+            <label class="btn slim"><input type="file" id="detailPhotosInput" accept="image/*" multiple style="display:none" />Add photos</label>
+          </div>
+        </div>
+        <div class="stack" style="gap:8px">
+          <span class="label">Files & documents</span>
+          ${files.length ? `<div class="stack" style="gap:10px">${files.map(att => renderAttachmentCard(att, 'File')).join('')}</div>` : `<div class="helper">Attach files or documents so they stay with this item.</div>`}
+          <div class="row">
+            <label class="btn slim"><input type="file" id="detailFilesInput" multiple style="display:none" />Attach files</label>
+          </div>
+        </div>
+        <div class="stack" style="gap:8px">
+          <span class="label">Voice memos</span>
+          <div class="row">
+            <button class="btn slim" type="button" id="recordAudioBtn">Record voice memo</button>
+          </div>
+          <div class="helper" id="recordAudioStatus">Record one or more voice memos and keep them with this item.</div>
+        </div>
+        <div class="row"><button class="btn primary full" id="saveDetailsBtn">Save notes & files</button></div>
+      </div>
+    `);
+    const notesEl = document.getElementById('detailNotes');
+    notesEl.oninput = e => { draftNotes = e.target.value; };
+    const detailDictation = wireDictationButton({ button:document.getElementById('detailDictateBtn'), target:notesEl, statusEl:document.getElementById('detailDictateStatus'), multiline:true });
+    let activeAudioCapture = null;
+    const photosEl = document.getElementById('detailPhotosInput');
+    if(photosEl) photosEl.onchange = async e => {
+      const files = [...(e.target.files || [])];
+      if(!files.length) return;
+      try{
+        const next = [];
+        for(const file of files){
+          const dataUrl = await compressImageFile(file);
+          next.push(normalizeAttachment({
+            id: uid(),
+            name: file?.name || imageFilename(),
+            type: file?.type || 'image/jpeg',
+            size: Number(file?.size || 0),
+            dataUrl
+          }));
+        }
+        draftAttachments = [...draftAttachments, ...next];
+        renderDetails();
+      }catch(err){
+        console.error(err);
+        alert('Could not add those photos.');
+      }
+    };
+    const filesEl = document.getElementById('detailFilesInput');
+    if(filesEl) filesEl.onchange = async e => {
+      const files = [...(e.target.files || [])];
+      if(!files.length) return;
+      try{
+        const next = [];
+        for(const file of files) next.push(await fileToAttachment(file));
+        syncDetailsDraft();
+        draftAttachments = [...draftAttachments, ...next];
+        renderDetails();
+      }catch(err){
+        console.error(err);
+        alert('Could not add those files.');
+      }
+    };
+    const syncDetailsDraft = () => { draftNotes = detailDictation.currentValue() || notesEl.value || draftNotes; detailDictation.stop(); };
+    [...document.querySelectorAll('[data-attachment-view]')].forEach(btn => btn.onclick = () => { syncDetailsDraft(); openAttachmentViewer(btn.dataset.attachmentView); });
+    [...document.querySelectorAll('[data-attachment-rename]')].forEach(btn => btn.onclick = () => {
+      syncDetailsDraft();
+      renameAttachment(btn.dataset.attachmentRename);
+      renderDetails();
+    });
+    [...document.querySelectorAll('[data-attachment-download]')].forEach(btn => btn.onclick = () => {
+      const att = draftAttachments.find(x => x.id === btn.dataset.attachmentDownload); if(!att) return;
+      triggerDownload(att.dataUrl, att.name || 'attachment');
+    });
+    [...document.querySelectorAll('[data-attachment-remove]')].forEach(btn => btn.onclick = () => {
+      syncDetailsDraft();
+      draftAttachments = draftAttachments.filter(att => att.id !== btn.dataset.attachmentRemove);
+      renderDetails();
+    });
+    const recordBtn = document.getElementById('recordAudioBtn');
+    const recordStatus = document.getElementById('recordAudioStatus');
+    const saveDetailsBtn = document.getElementById('saveDetailsBtn');
+    let detailTimer = null;
+    const stopDetailTimer = () => { if(detailTimer){ clearInterval(detailTimer); detailTimer = null; } };
+    const startDetailTimer = () => {
+      stopDetailTimer();
+      detailTimer = setInterval(() => {
+        if(activeAudioCapture && recordStatus) recordStatus.textContent = `Recording… ${formatDuration(Date.now() - activeAudioCapture.startedAt())} — tap stop when you are done.`;
+      }, 500);
+    };
+    if(recordBtn){
+      if(!supportsAudioRecording()){
+        recordBtn.disabled = true;
+        recordStatus.textContent = 'Voice recording is not available in this browser.';
+      }else{
+        recordBtn.onclick = async () => {
+          try{
+            if(activeAudioCapture){
+              recordBtn.disabled = true;
+              if(saveDetailsBtn) saveDetailsBtn.disabled = true;
+              recordStatus.textContent = 'Saving voice memo…';
+              const attachment = await activeAudioCapture.stop();
+              activeAudioCapture = null;
+              stopDetailTimer();
+              if(attachment){
+                const chosenName = prompt('Name this voice memo', attachment.name || 'voice-memo.webm');
+                if(chosenName !== null && String(chosenName).trim()) attachment.name = String(chosenName).trim();
+                draftAttachments = [...draftAttachments, attachment];
+                renderDetails();
+              }else{
+                recordBtn.disabled = false;
+                if(saveDetailsBtn) saveDetailsBtn.disabled = false;
+                recordBtn.textContent = 'Record voice memo';
+                recordStatus.textContent = 'Could not save that voice memo.';
+              }
+              return;
+            }
+            activeAudioCapture = await recordAudioAttachment();
+            recordBtn.textContent = 'Stop recording';
+            if(saveDetailsBtn) saveDetailsBtn.disabled = true;
+            recordStatus.textContent = 'Recording… 0:00 — tap stop when you are done.';
+            startDetailTimer();
+          }catch(err){
+            console.error(err);
+            recordStatus.textContent = 'Could not start voice recording.';
+          }
+        };
+      }
+    }
+    if(saveDetailsBtn) saveDetailsBtn.disabled = !!activeAudioCapture;
+    saveDetailsBtn.onclick = () => {
+      draftNotes = notesEl.value || draftNotes || '';
+      updateItem(id, { notes: draftNotes.trim(), imageData: '', attachments: draftAttachments.map(normalizeAttachment) }, { undoLabel:'Saved notes & files' });
+      closeSheet(true);
+    };
+    sheetBeforeClose = () => activeAudioCapture ? confirm('Discard the recording in progress?') : true;
+    sheetCleanup = () => {
+      draftNotes = detailDictation.currentValue() || notesEl.value || draftNotes;
+      detailDictation.stop();
+      stopDetailTimer();
+      if(activeAudioCapture){ const capture = activeAudioCapture; activeAudioCapture = null; capture.discard?.(); }
+    };
+  };
+
+  renderDetails();
+}
+
+
+function renderNow(){
+  const day = activeDay();
+  const todayItems = itemsForToday().filter(item => item.status !== 'done');
+  const focusItems = day.top3.map(id => state.items.find(item => item.id === id)).filter(Boolean);
+  const queueItems = todayItems.filter(item => !day.top3.includes(item.id));
+  const todayNotes = queueItems.filter(item => item.kind === 'note');
+  const todayTasks = queueItems.filter(item => item.kind !== 'note');
+  const readinessCount = Object.values(day.care).filter(Boolean).length;
+  const readinessComplete = readinessCount === CARE.length;
+  const showReadiness = !readinessComplete || state.readinessOpen;
+  const carry = carrySuggestions();
+  const overdue = overdueItems().filter(item => item.status !== 'done');
+  const nextUp = nextScheduledItems(4);
+  const pendingRoutines = pendingRoutineCount();
+  const startLabel = !day.started ? 'Start day' : pendingRoutines ? `Seed ${pendingRoutines} routine${pendingRoutines===1?'':'s'}` : 'Routines seeded';
+  const startDisabled = day.started && pendingRoutines === 0;
+  return `
+    <div class="stack">
+      <section class="card stack">
+        <div class="row space">
+          <div>
+            <div class="h1">Today</div>
+            <div class="sub">Keep the day clean. Handle what matters. Do not drift.</div>
+          </div>
+          <div class="row">
+            <button class="btn primary ${startDisabled ? 'warn' : ''}" id="startDayBtn" ${startDisabled ? 'disabled' : ''}>${startLabel}</button>
+            <button class="btn" id="closeDayBtn">End day</button>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="stat"><div class="tiny">Focus</div><div class="value">${focusItems.length}</div><div class="sub">What deserves extra attention today</div></div>
+          <div class="stat"><div class="tiny">In play</div><div class="value">${todayItems.length}</div><div class="sub">Open items on this day</div></div>
+        </div>
+        ${carry.length ? `<div class="stack"><div class="label">From yesterday</div><div class="chips">${carry.map(c => `<span class="chip ${c.type==='seed'?'active':''}">${h(c.text)}</span>`).join('')} ${carry.some(c => c.type==='seed') ? '<button class="btn slim primary" id="useSeedBtn">Use seed</button>' : ''}</div></div>` : ''}
+        ${readinessComplete && !showReadiness ? `<div class="row space"><div class="chips"><span class="chip active">Morning check done</span></div><button class="btn slim" id="showReadinessBtn">View morning check</button></div>` : ''}
+      </section>
+
+      ${showReadiness ? `<section class="card stack">
+        <div class="row space"><div><div class="h2">Readiness</div><div class="sub">Morning check. Handle the platform, then move on.</div></div>${readinessComplete ? '<button class="btn slim" id="hideReadinessBtn">Hide for now</button>' : ''}</div>
+        <div class="grid2">${CARE.map(([key,label]) => `<button class="toggle ${day.care[key]?'on':''}" data-care="${key}"><span>${h(label)}</span><span class="check ${day.care[key]?'on':''}">${day.care[key]?'✓':''}</span></button>`).join('')}</div>
+      </section>` : ''}
+
+      <section class="card stack">
+        <div><div class="h2">Focus</div><div class="sub">Anything in Today that deserves extra attention.</div></div>
+        ${focusItems.length ? `<div class="list">${focusItems.map(renderItem).join('')}</div>` : `<div class="empty">Nothing in focus yet.</div>`}
+      </section>
+
+      <section class="card stack">
+        <div><div class="h2">Today</div><div class="sub">Everything active on this date.</div></div>
+        ${todayNotes.length ? `<div class="stack"><div class="label">For today</div><div class="list">${todayNotes.map(renderItem).join('')}</div></div>` : ''}
+        ${todayTasks.length ? `<div class="list">${todayTasks.map(renderItem).join('')}</div>` : (todayNotes.length ? '' : `<div class="empty">Nothing else in today yet.</div>`)}
+      </section>
+
+      ${overdue.length ? `<section class="card stack">
+        <div><div class="h2">Overdue</div><div class="sub">Still open from before this date.</div></div>
+        <div class="list">${overdue.map(renderItem).join('')}</div>
+      </section>` : ''}
+
+      <section class="card stack">
+        <div><div class="h2">Next up</div><div class="sub">Scheduled after this date, without flooding today.</div></div>
+        ${nextUp.length ? `<div class="list">${nextUp.map(renderItem).join('')}</div>` : `<div class="empty">Nothing scheduled after this date right now.</div>`}
+      </section>
+    </div>
+  `;
+}
+
+
+function renderInbox(){
+  const filtered = state.inboxFilter === 'archived'
+    ? state.items.filter(item => item.status === 'archived')
+    : state.inboxFilter === 'all'
+      ? state.items.filter(item => ['inbox','today','later','waiting'].includes(item.status))
+      : state.items.filter(item => item.status === 'inbox');
+  return `
+    <div class="stack">
+      <section class="card stack">
+        <div><div class="h2">Inbox</div><div class="sub">Use Add to catch it fast. Sort it when you need to.</div></div>
+        <div class="chips">
+          <button class="chip ${state.inboxFilter==='open'?'active':''}" data-inbox-filter="open">Unsorted</button>
+          <button class="chip ${state.inboxFilter==='all'?'active':''}" data-inbox-filter="all">All open</button>
+          <button class="chip ${state.inboxFilter==='archived'?'active':''}" data-inbox-filter="archived">Archived</button>
+        </div>
+        ${filtered.length ? `<div class="list">${filtered.map(renderItem).join('')}</div>` : `<div class="empty">Nothing here.</div>`}
+      </section>
+    </div>
+  `;
+}
+
+
+function scheduledItemsInView(){
+  return state.items
+    .filter(item => item.status === 'later' && item.targetDate && inWindow(item.targetDate, state.currentDate, state.planSpan))
+    .sort((a,b) => (a.targetDate || '').localeCompare(b.targetDate || '') || (a.targetTime || '').localeCompare(b.targetTime || '') || (a.updatedAt - b.updatedAt));
+}
+function unscheduledLaterItems(){
+  return state.items.filter(item => item.status === 'later' && !item.targetDate);
+}
+function nextScheduledItems(limit=4){
+  return state.items
+    .filter(item => item.status === 'later' && item.targetDate && item.targetDate > state.currentDate)
+    .sort((a,b) => (a.targetDate || '').localeCompare(b.targetDate || '') || (a.targetTime || '').localeCompare(b.targetTime || '') || (a.updatedAt - b.updatedAt))
+    .slice(0, limit);
+}
+function groupedScheduledMarkup(items){
+  if(!items.length) return `<div class="empty">Nothing planned for this view.</div>`;
+  const groups = {};
+  items.forEach(item => { (groups[item.targetDate] ||= []).push(item); });
+  return Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([date, list]) => `
+    <div class="stack" style="gap:10px">
+      <div class="label">${h(niceDate(date))}</div>
+      <div class="list">${list.map(renderItem).join('')}</div>
+    </div>
+  `).join('');
+}
+
+function renderLater(){
+  if(state.laterFilter === 'scheduled' || state.laterFilter === 'done') state.laterFilter = 'planned';
+  if(state.laterFilter === 'anytime') state.laterFilter = 'queue';
+  const planned = scheduledItemsInView();
+  const queue = unscheduledLaterItems();
+  const waiting = state.items.filter(item => item.status === 'waiting');
+  const counts = {
+    planned: planned.length,
+    queue: queue.length,
+    waiting: waiting.length
+  };
+  let body = '';
+  if(state.laterFilter === 'planned') body = groupedScheduledMarkup(planned).replace('Nothing planned for this view.','Nothing planned for this view.');
+  if(state.laterFilter === 'queue') body = queue.length ? `<div class="list">${queue.map(renderItem).join('')}</div>` : `<div class="empty">Nothing parked in the queue right now.</div>`;
+  if(state.laterFilter === 'waiting') body = waiting.length ? `<div class="list">${waiting.map(renderItem).join('')}</div>` : `<div class="empty">Nothing is blocked or waiting right now.</div>`;
+  return `
+    <div class="stack">
+      <section class="card stack">
+        <div class="row space" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+          <div><div class="h2">Upcoming</div><div class="sub">What is planned, queued, or waiting on someone else.</div></div>
+          ${state.laterFilter === 'planned' ? `<div class="chips"><button class="chip ${state.planSpan==='day'?'active':''}" data-plan-span="day">Day</button><button class="chip ${state.planSpan==='week'?'active':''}" data-plan-span="week">Week</button><button class="chip ${state.planSpan==='month'?'active':''}" data-plan-span="month">Month</button></div>` : ''}
+        </div>
+        <div class="chips">
+          <button class="chip ${state.laterFilter==='planned'?'active':''}" data-later-filter="planned">Planned <span class="badge later">${counts.planned}</span></button>
+          <button class="chip ${state.laterFilter==='queue'?'active':''}" data-later-filter="queue">Queue <span class="badge later">${counts.queue}</span></button>
+          <button class="chip ${state.laterFilter==='waiting'?'active':''}" data-later-filter="waiting">Waiting on <span class="badge later">${counts.waiting}</span></button>
+        </div>
+        ${body}
+      </section>
+    </div>
+  `;
+}
+
+function renderReview(){
+  const snaps = recentSnapshots(7);
+  const results = searchEverything(state.search);
+  const repeats = repeatedOpenTexts();
+  const overdue = overdueItems();
+  return `
+    <div class="stack">
+      <section class="card stack">
+        <div class="row space"><div><div class="h2">Review</div><div class="sub">Find things again, catch repeats, and decide what needs action.</div></div><div class="row">${state.search.trim() ? '<button class=\"btn slim\" id=\"clearSearchBtn\">Clear search</button>' : ''}<button class="btn slim" id="exportContextBtn">Export context</button><button class="btn slim" id="exportBackupBtn">Export backup</button></div></div>
+        <input class="field" id="searchInput" type="text" value="${h(state.search)}" placeholder="Search items, notes, closeouts, seeds…" />
+        ${state.search.trim() ? (results.length ? `<div class="list">${results.map(r => r.type==='item' ? renderItem(r.item,{searchMode:true}) : `<div class="item"><div class="tiny">${h(niceDate(r.date))}</div><div class="sub">${h([r.day.launchNote, r.day.closeWin, r.day.closeCarry, r.day.closeSeed, r.day.closeNote].filter(Boolean).join(' · ') || 'day entry')}</div></div>`).join('')}</div>` : `<div class="empty">No matches.</div>`) : `<div class="empty">Search items, notes, closeouts, or seeds.</div>`}
+      </section>
+      <section class="card stack">
+        <div><div class="h2">Needs attention</div><div class="sub">The shortest path to what may deserve action next.</div></div>
+        <div class="grid3">
+          <div class="stat"><div class="tiny">Overdue</div><div class="value">${overdue.length}</div><div class="sub">Items dated before today</div></div>
+          <div class="stat"><div class="tiny">Repeating</div><div class="value">${repeats.length}</div><div class="sub">Open loops showing up more than once</div></div>
+          <div class="stat"><div class="tiny">This week</div><div class="value">${scheduledItemsInView().length}</div><div class="sub">Scheduled in the current view</div></div>
+        </div>
+      </section>
+      <section class="card stack">
+        <div><div class="h2">Open by lane</div><div class="sub">Where the weight is gathering across your open life.</div></div>
+        <div class="grid2">${LANES.map(l => `<div class="stat"><div class="tiny">${h(l.label)}</div><div class="value">${state.items.filter(item => ['today','later','waiting','inbox'].includes(item.status) && item.lane===l.key).length}</div></div>`).join('')}</div>
+      </section>
+      <section class="card stack">
+        <div><div class="h2">Recent days</div><div class="sub">A short read on how the last week actually went.</div></div>
+        <div class="grid2">${snaps.map(s => `<div class="item"><div class="tiny">${h(niceDate(s.date))}</div><div class="sub">Basics ${s.floor}/6</div><div class="meta"><span>Focus · ${h(s.top3.join(' • ') || '—')}</span></div><div class="meta"><span>Win · ${h(s.win || '—')}</span></div><div class="meta"><span>Seed · ${h(s.seed || '—')}</span></div><div class="meta"><span>Closeout · ${s.closed ? 'yes' : 'no'}</span></div></div>`).join('')}</div>
+      </section>
+      <section class="card stack">
+        <div><div class="h2">Repeating</div><div class="sub">Things that keep staying open and should probably become structure.</div></div>
+        ${repeats.length ? `<div class="list">${repeats.slice(0,12).map(([text,count]) => `<div class="item"><div class="row space"><div class="sub">${h(text)}</div><span class="badge later">${count}</span></div><div class="actions"><button class="btn slim" data-promote="${h(text)}">Make routine</button></div></div>`).join('')}</div>` : `<div class="empty">No repeated open loops right now.</div>`}
+      </section>
+      <section class="card stack">
+        <div><div class="h2">Overdue</div><div class="sub">Anything with a due date before today.</div></div>
+        ${overdue.length ? `<div class="list">${overdue.map(renderItem).join('')}</div>` : `<div class="empty">Nothing overdue.</div>`}
+      </section>
+    </div>
+  `;
+}
+
+  function renderSettings(){
+    const week = activeWeek();
+    return `
+      <div class="stack">
+        <section class="card stack">
+          <div><div class="h2">Setup</div><div class="sub">This is your OS. Keep it specific and true.</div></div>
+          <div class="grid2">
+            <div><div class="label">12-month direction</div><textarea id="focusField">${h(state.settings.focus)}</textarea></div>
+            <div><div class="label">Non-negotiables</div><textarea id="standardsField">${h(state.settings.standards)}</textarea></div>
+          </div>
+          <div><div class="label">Why this matters</div><textarea id="whyField">${h(state.settings.why)}</textarea></div>
+        </section>
+        <section class="card stack">
+          <div><div class="h2">Operating rhythm</div><div class="sub">Define your own recurring standards over time. Keep them strict, few, and actually useful.</div></div>
+          <div class="footerhelp">No preset wake, leave, or life script is enforced here anymore. Add only the recurring things you want this system to help hold.</div>
+        </section>
+        <section class="card stack">
+          <div><div class="h2">Weekly</div><div class="sub">One place for the week, not ten.</div></div>
+          <div class="grid2">
+            <div><div class="label">Week focus</div><textarea id="weekFocus">${h(week.focus || '')}</textarea></div>
+            <div><div class="label">Protect</div><textarea id="weekProtect">${h(week.protect || '')}</textarea></div>
+          </div>
+          <div><div class="label">Notes</div><textarea id="weekNotes">${h(week.notes || '')}</textarea></div>
+        </section>
+        <section class="card stack">
+          <div class="row space"><div><div class="h2">Custom routines</div><div class="sub">Recurring things you want Holdfast to seed into the day or upcoming. Define them yourself over time.</div></div><button class="btn slim" id="addRoutineBtn">Add routine</button></div>
+          ${state.settings.routines.length ? `<div class="list">${state.settings.routines.map(r => `
+            <div class="item" data-routine="${r.id}">
+              <div class="itemtop">
+                <input class="itemtext" data-rfield="text" value="${h(r.text)}" placeholder="What exactly should happen?" />
+              </div>
+              <div class="row">
+                <select data-rfield="lane" style="max-width:150px">${LANES.map(l => `<option value="${l.key}" ${r.lane===l.key?'selected':''}>${l.label}</option>`).join('')}</select>
+                <select data-rfield="seed" style="max-width:130px"><option value="today" ${r.seed==='today'?'selected':''}>Today</option><option value="later" ${r.seed==='later'?'selected':''}>Upcoming</option></select>
+                <input class="field" data-rfield="time" value="${h(r.time || '')}" placeholder="6:15am / 18:00" style="max-width:150px" />
+                <button class="btn slim ${r.active?'primary':''}" data-ract="toggle">${r.active?'Active':'Off'}</button>
+                <button class="btn slim danger" data-ract="delete">Delete</button>
+              </div>
+              <div class="chips">${['S','M','T','W','T','F','S'].map((label,idx)=>`<button class="chip ${r.days.includes(idx)?'active':''}" data-rday="${idx}">${label}</button>`).join('')}</div>
+              <div class="label" style="margin-top:2px">What exactly</div>
+              <textarea data-rfield="notes" rows="3" placeholder="Exact instruction: what this means, what good looks like, what not to skip.">${h(r.notes || '')}</textarea>
+            </div>`).join('')}</div>` : `<div class="empty">No custom routines yet. Add them only when something truly repeats and deserves structure.</div>`}
+          <div class="footerhelp">Routine items appear in Today or Upcoming when you start the day, based on the rules you set here.</div>
+          <div class="row"><button class="btn slim" id="settingsExportContext">Export context</button><button class="btn slim" id="settingsExportBackup">Export backup</button><label class="btn slim"><input type="file" id="importFile" style="display:none" />Import backup</label></div>
+        </section>
+      </div>
+    `;
+  }
+
+  function render(){
+    renderTopbar();
+    renderNav();
+    if(state.view === 'now') $app.innerHTML = renderNow();
+    if(state.view === 'inbox') $app.innerHTML = renderInbox();
+    if(state.view === 'later') $app.innerHTML = renderLater();
+    if(state.view === 'review') $app.innerHTML = renderReview();
+    if(state.view === 'settings') $app.innerHTML = renderSettings();
+
+    bindItemRows($app);
+    bindViewControls();
+  }
+
+  function bindViewControls(){
+    const day = activeDay();
+    if(state.view === 'now'){
+      const startBtn = document.getElementById('startDayBtn');
+      if(startBtn && !startBtn.disabled) startBtn.onclick = startDay;
+      document.getElementById('closeDayBtn').onclick = openCloseSheet;
+      if(document.getElementById('restartDayBtn')) document.getElementById('restartDayBtn').onclick = restartDay;
+      if(document.getElementById('useSeedBtn')) document.getElementById('useSeedBtn').onclick = useYesterdaySeed;
+      if(document.getElementById('showReadinessBtn')) document.getElementById('showReadinessBtn').onclick = () => { state.readinessOpen = true; render(); };
+      if(document.getElementById('hideReadinessBtn')) document.getElementById('hideReadinessBtn').onclick = () => { state.readinessOpen = false; render(); };
+      if(document.getElementById('openInboxForTop3')) document.getElementById('openInboxForTop3').onclick = () => { state.view='inbox'; render(); };
+      [...$app.querySelectorAll('[data-care]')].forEach(btn => btn.onclick = () => toggleCare(btn.dataset.care));
+    }
+    if(state.view === 'inbox'){
+      [...$app.querySelectorAll('[data-inbox-filter]')].forEach(btn => btn.onclick = () => { state.inboxFilter = btn.dataset.inboxFilter; render(); });
+    }
+    if(state.view === 'later') {
+      [...$app.querySelectorAll('[data-later-filter]')].forEach(btn => btn.onclick = () => { state.laterFilter = btn.dataset.laterFilter; render(); });
+      [...$app.querySelectorAll('[data-plan-span]')].forEach(btn => btn.onclick = () => { state.planSpan = btn.dataset.planSpan; render(); });
+    }
+    if(state.view === 'review'){
+      const s = document.getElementById('searchInput');
+      s.oninput = e => { state.search = e.target.value; renderReviewLive(); };
+      if(document.getElementById('clearSearchBtn')) document.getElementById('clearSearchBtn').onclick = () => { state.search = ''; render(); };
+      document.getElementById('exportContextBtn').onclick = exportContext;
+      document.getElementById('exportBackupBtn').onclick = exportBackup;
+      [...$app.querySelectorAll('[data-promote]')].forEach(btn => btn.onclick = () => openRoutineFromText(btn.dataset.promote));
+    }
+    if(state.view === 'settings'){
+      document.getElementById('focusField').onchange = e => { state.settings.focus = e.target.value; save(); };
+      document.getElementById('standardsField').onchange = e => { state.settings.standards = e.target.value; save(); };
+      document.getElementById('whyField').onchange = e => { state.settings.why = e.target.value; save(); };
+      document.getElementById('weekFocus').onchange = e => setWeekField('focus', e.target.value);
+      document.getElementById('weekProtect').onchange = e => setWeekField('protect', e.target.value);
+      document.getElementById('weekNotes').onchange = e => setWeekField('notes', e.target.value);
+      document.getElementById('addRoutineBtn').onclick = () => {
+        state.settings.routines.unshift({ id:uid(), text:'', lane:'admin', seed:'today', days:[], active:true, time:'', notes:'' });
+        save(); render();
+      };
+      document.getElementById('settingsExportContext').onclick = exportContext;
+      document.getElementById('settingsExportBackup').onclick = exportBackup;
+      document.getElementById('importFile').onchange = e => { if(e.target.files[0]) importBackup(e.target.files[0]); e.target.value=''; };
+      [...$app.querySelectorAll('[data-routine]')].forEach(box => {
+        const rid = box.dataset.routine;
+        const routine = state.settings.routines.find(r => r.id === rid); if(!routine) return;
+        box.querySelector('[data-rfield="text"]').onchange = e => { routine.text = e.target.value; save(); };
+        box.querySelector('[data-rfield="lane"]').onchange = e => { routine.lane = e.target.value; save(); };
+        box.querySelector('[data-rfield="seed"]').onchange = e => { routine.seed = e.target.value; save(); };
+        const timeField = box.querySelector('[data-rfield="time"]'); if(timeField) {
+          timeField.onchange = e => { routine.time = parseUserTime(e.target.value) || ''; e.target.value = routine.time; save(); };
+          timeField.onblur = e => { routine.time = parseUserTime(e.target.value) || ''; e.target.value = routine.time; save(); };
+        }
+        const notesField = box.querySelector('[data-rfield="notes"]'); if(notesField) notesField.onchange = e => { routine.notes = e.target.value; save(); };
+        box.querySelector('[data-ract="toggle"]').onclick = () => { routine.active = !routine.active; save(); render(); };
+        box.querySelector('[data-ract="delete"]').onclick = () => { if(confirm('Delete this routine?')) { state.settings.routines = state.settings.routines.filter(r => r.id !== rid); save(); render(); } };
+        [...box.querySelectorAll('[data-rday]')].forEach(btn => btn.onclick = () => {
+          const idx = Number(btn.dataset.rday);
+          routine.days = routine.days.includes(idx) ? routine.days.filter(d => d !== idx) : [...routine.days, idx].sort((a,b)=>a-b);
+          save(); render();
+        });
+      });
+    }
+  }
+
+  function renderReviewLive(){
+    if(state.view !== 'review') return;
+    const active = document.activeElement;
+    const hadFocus = active && active.id === 'searchInput';
+    const selStart = hadFocus && typeof active.selectionStart === 'number' ? active.selectionStart : null;
+    const selEnd = hadFocus && typeof active.selectionEnd === 'number' ? active.selectionEnd : null;
+    $app.innerHTML = renderReview();
+    bindItemRows($app);
+    bindViewControls();
+    if(hadFocus){
+      const next = document.getElementById('searchInput');
+      if(next){
+        next.focus({ preventScroll:true });
+        try {
+          if(selStart !== null && selEnd !== null) next.setSelectionRange(selStart, selEnd);
+          else {
+            const end = next.value.length;
+            next.setSelectionRange(end, end);
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+
+function openQuickSheet(defaultStatus='inbox'){
+  let kind = state.quickKind || 'task';
+  let lane = state.quickLane || 'admin';
+  let status = defaultStatus;
+  let timing = 'tomorrow';
+  let chosenDate = addDays(state.currentDate, 1);
+  let chosenTime = '';
+  let draftText = '';
+
+  const submitLabel = () => status === 'today' ? 'Add to Today' : status === 'later' ? 'Add to Upcoming' : 'Add to Inbox';
+  const quickOptions = [
+    ['tomorrow','Tomorrow'],
+    ['thisweek','This week'],
+    ['nextweek','Next week'],
+    ['date','Pick date'],
+    ['someday','No date']
+  ];
+  let timeMode = 'notime';
+
+  const renderForm = () => {
+    const isUpcoming = status === 'later';
+    const needsDate = isUpcoming && timing === 'date';
+    const previewDate = status === 'today' ? state.currentDate : (resolvePlannedDate(timing, state.currentDate, chosenDate) || state.currentDate);
+    const timeOptions = quickTimeOptionsForDate(previewDate);
+    const canHaveTime = status === 'today' || (isUpcoming && timing !== 'someday');
+    const showTime = canHaveTime && timeMode === 'time';
+    openSheet(`
+      <div class="stack">
+        <div><div class="h2">Add</div><div class="sub">${kind==='task' ? 'Something you need to do.' : 'Something you want to keep.'}</div></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button class="btn slim" type="button" id="openQuickVoiceMemoBtn">Quick voice memo</button>
+        </div>
+        <div class="stack" style="gap:8px">
+          <div class="row" style="gap:8px; align-items:flex-start">
+            <input class="field" id="sheetText" type="text" placeholder="What needs a place?" value="${h(draftText)}" style="flex:1 1 auto" />
+            <button class="btn slim" type="button" id="dictateAddBtn">Dictate</button>
+          </div>
+          <div class="helper" id="dictateAddStatus"></div>
+        </div>
+        <div class="sheet-grid two">
+          <label class="stack" style="gap:6px">
+            <span class="label">Type</span>
+            <div class="seg" id="sheetKindSwitch">
+              <button class="chip ${kind==='task'?'active':''}" type="button" data-kind="task">Task</button>
+              <button class="chip ${kind==='note'?'active':''}" type="button" data-kind="note">Note</button>
+            </div>
+          </label>
+          <label class="stack" style="gap:6px">
+            <span class="label">Area</span>
+            <select id="sheetLane">${LANES.map(l => `<option value="${l.key}" ${lane===l.key?'selected':''}>${l.label}</option>`).join('')}</select>
+          </label>
+        </div>
+        <label class="stack" style="gap:6px">
+          <span class="label">Place</span>
+          <div class="seg" id="sheetDestSwitch">
+            <button class="chip ${status==='inbox'?'active':''}" type="button" data-status="inbox">Inbox</button>
+            <button class="chip ${status==='today'?'active':''}" type="button" data-status="today">Today</button>
+            <button class="chip ${status==='later'?'active':''}" type="button" data-status="later">Upcoming</button>
+          </div>
+        </label>
+        ${isUpcoming ? `
+          <label class="stack" style="gap:6px">
+            <span class="label">When</span>
+            <div class="seg" id="sheetWhenSwitch">
+              ${quickOptions.map(([key,label]) => `<button class="chip ${timing===key?'active':''}" type="button" data-when="${key}">${label}</button>`).join('')}
+            </div>
+          </label>
+          ${needsDate ? `
+            <label class="stack" style="gap:6px">
+              <span class="label">Date</span>
+              <div class="datepick">
+                <input class="field" id="sheetDateText" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" value="${h(chosenDate)}" />
+                <button class="btn slim" type="button" id="sheetDateBtn" aria-label="Choose date">📅</button>
+                <input class="native-date-proxy" id="sheetDateNative" type="date" value="${h(chosenDate)}" tabindex="-1" aria-hidden="true" />
+              </div>
+            </label>
+          ` : `<div class="helper">${timing==='someday' ? 'This will stay in Upcoming without a date.' : 'You can still fine-tune the date later.'}</div>`}
+        ` : `<div class="helper">${kind==='task' ? 'Use Inbox to catch it fast. Use Today only when it already matters now.' : 'Keep notes in Inbox unless they need to stay in front of you today.'}</div>`}
+        ${canHaveTime ? `
+          <label class="stack" style="gap:6px">
+            <span class="label">Time</span>
+            <div class="seg" id="sheetTimeSwitch">
+              ${timeOptions.map(([key,label]) => `<button class="chip ${timeMode===key?'active':''}" type="button" data-time-mode="${key}">${label}</button>`).join('')}
+            </div>
+          </label>
+          ${showTime ? `<div class="timepick"><input class="field" id="sheetTimeText" type="text" inputmode="numeric" placeholder="HH:MM or 9am" value="${h(chosenTime)}" /><button class="btn slim" type="button" id="sheetTimeBtn" aria-label="Choose time">🕘</button><input class="native-time-proxy" id="sheetTimeNative" type="time" value="${h(chosenTime)}" tabindex="-1" aria-hidden="true" /></div>` : `<div class="helper">${timeMode==='notime' ? 'Add a time only when it actually matters.' : 'This will show on the item and in Upcoming.'}</div>`}
+        ` : ''}
+        <button class="btn primary" id="sheetSubmitBtn">${submitLabel()}</button>
+      </div>
+    `);
+
+    const textEl = document.getElementById('sheetText');
+    textEl.focus();
+    textEl.setSelectionRange(draftText.length, draftText.length);
+    textEl.oninput = e => { draftText = e.target.value; };
+    textEl.onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); submit(); } };
+    const addDictation = wireDictationButton({ button:document.getElementById('dictateAddBtn'), target:textEl, statusEl:document.getElementById('dictateAddStatus') });
+    const syncAddDraft = () => { draftText = addDictation.currentValue() || textEl.value || draftText; addDictation.stop(); };
+    sheetBeforeClose = () => true;
+    sheetCleanup = () => { syncAddDraft(); };
+    document.getElementById('openQuickVoiceMemoBtn').onclick = () => { syncAddDraft(); openVoiceMemoSheet(status); };
+    document.getElementById('sheetLane').onchange = e => { lane = e.target.value; state.quickLane = lane; save(); };
+    [...document.querySelectorAll('#sheetKindSwitch [data-kind]')].forEach(btn => btn.onclick = () => { syncAddDraft(); kind = btn.dataset.kind; state.quickKind = kind; save(); renderForm(); });
+    [...document.querySelectorAll('#sheetDestSwitch [data-status]')].forEach(btn => btn.onclick = () => { syncAddDraft(); status = btn.dataset.status; if(status !== 'later') timing = 'tomorrow'; renderForm(); });
+    [...document.querySelectorAll('#sheetWhenSwitch [data-when]')].forEach(btn => btn.onclick = () => { syncAddDraft(); timing = btn.dataset.when; renderForm(); });
+    [...document.querySelectorAll('#sheetTimeSwitch [data-time-mode]')].forEach(btn => btn.onclick = () => { syncAddDraft(); const mode = btn.dataset.timeMode; timeMode = mode; if(mode === 'notime') chosenTime = ''; else if(mode !== 'time') chosenTime = quickTimeValueForMode(mode, previewDate); renderForm(); });
+    if(needsDate && document.getElementById('sheetDateText')) bindDateControl({ textId:'sheetDateText', nativeId:'sheetDateNative', buttonId:'sheetDateBtn', onCommit: v => { chosenDate = v; } });
+    if(showTime && document.getElementById('sheetTimeText')) bindTimeControl({ textId:'sheetTimeText', nativeId:'sheetTimeNative', buttonId:'sheetTimeBtn', onCommit: v => { chosenTime = v; } });
+    document.getElementById('sheetSubmitBtn').onclick = submit;
+  };
+
+  const submit = () => {
+    const text = (document.getElementById('sheetText')?.value || draftText || '').trim();
+    if(!text) return;
+    state.quickKind = kind;
+    state.quickLane = lane;
+    let targetDate = '';
+    let targetTime = '';
+    if(status === 'today') targetDate = state.currentDate;
+    else if(status === 'later'){
+      if(timing === 'tomorrow') targetDate = addDays(state.currentDate, 1);
+      if(timing === 'thisweek') targetDate = endOfWeek(state.currentDate);
+      if(timing === 'nextweek') targetDate = addDays(endOfWeek(state.currentDate), 1);
+      if(timing === 'date') targetDate = getDateControlValue('sheetDateText', 'sheetDateNative', chosenDate) || chosenDate;
+      if(timing === 'someday') targetDate = '';
+    }
+    if(status !== 'inbox' && timeMode !== 'notime'){
+      if(timeMode === 'time') targetTime = getTimeControlValue('sheetTimeText', 'sheetTimeNative', chosenTime) || chosenTime;
+      else targetTime = chosenTime;
+    }
+    createItem(text, { kind, lane, status, targetDate, targetTime });
+    closeSheet();
+    showToast(status === 'today' ? 'Added to Today' : status === 'later' ? 'Added to Upcoming' : 'Added to Inbox');
+  };
+
+  renderForm();
+}
+
+function openVoiceMemoSheet(defaultStatus='inbox'){
+  let lane = state.quickLane || 'admin';
+  let status = defaultStatus;
+  let timing = 'tomorrow';
+  let chosenDate = addDays(state.currentDate, 1);
+  let chosenTime = '';
+  let timeMode = 'notime';
+  let title = '';
+  let memoAttachments = [];
+  let recorderControl = null;
+  let isRecording = false;
+  let voiceTimer = null;
+  const stopVoiceTimer = () => { if(voiceTimer){ clearInterval(voiceTimer); voiceTimer = null; } };
+  const startVoiceTimer = () => {
+    stopVoiceTimer();
+    voiceTimer = setInterval(() => {
+      const statusEl = document.getElementById('voiceMemoStatus');
+      if(isRecording && recorderControl && statusEl) statusEl.textContent = `Recording… ${formatDuration(Date.now() - recorderControl.startedAt())} — tap stop when you are done.`;
+    }, 500);
+  };
+  const preserveName = (nextName, oldName='voice-memo.webm') => {
+    const raw = String(nextName || '').trim();
+    if(!raw) return oldName;
+    const ext = String(oldName || '').includes('.') ? String(oldName).slice(String(oldName).lastIndexOf('.')) : '';
+    return /\.[A-Za-z0-9]+$/.test(raw) ? raw : `${raw}${ext}`;
+  };
+  const defaultMemoTitle = () => {
+    const d = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    return `Voice memo ${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const previewVoiceMemo = (attachmentId) => {
+    const att = memoAttachments.find(a => a.id === attachmentId);
+    if(!att) return renderVoice();
+    openSheet(`
+      <div class="stack">
+        <div class="row space"><div><div class="h2">Voice memo</div><div class="sub">${h(att.name)}</div></div><button class="btn slim" id="backToVoiceMemoBtn">Back</button></div>
+        <div class="card" style="padding:16px"><audio controls preload="metadata" src="${att.dataUrl}" style="width:100%"></audio></div>
+        <div class="row">
+          <button class="btn" id="downloadVoiceMemoBtn">Download</button>
+          <button class="btn" id="renameVoiceMemoBtn">Rename</button>
+          <button class="btn danger" id="removeVoiceMemoBtn">Remove</button>
+        </div>
+      </div>
+    `);
+    document.getElementById('backToVoiceMemoBtn').onclick = renderVoice;
+    document.getElementById('downloadVoiceMemoBtn').onclick = () => triggerDownload(att.dataUrl, att.name || 'voice-memo.webm');
+    document.getElementById('renameVoiceMemoBtn').onclick = () => {
+      const next = prompt('Rename attachment', att.name || 'voice-memo.webm');
+      if(next !== null) att.name = preserveName(next, att.name || 'voice-memo.webm');
+      previewVoiceMemo(attachmentId);
+    };
+    document.getElementById('removeVoiceMemoBtn').onclick = () => {
+      memoAttachments = memoAttachments.filter(a => a.id !== attachmentId);
+      renderVoice();
+    };
+  };
+  const quickOptions = [
+    ['tomorrow','Tomorrow'],
+    ['thisweek','This week'],
+    ['nextweek','Next week'],
+    ['date','Pick date'],
+    ['someday','No date']
+  ];
+
+  const submitLabel = () => status === 'today' ? 'Save to Today' : status === 'later' ? 'Save to Upcoming' : 'Save to Inbox';
+
+  const renderVoice = () => {
+    const isUpcoming = status === 'later';
+    const needsDate = isUpcoming && timing === 'date';
+    const previewDate = status === 'today' ? state.currentDate : (resolvePlannedDate(timing, state.currentDate, chosenDate) || state.currentDate);
+    const timeOptions = quickTimeOptionsForDate(previewDate);
+    const canHaveTime = status === 'today' || (isUpcoming && timing !== 'someday');
+    const showTime = canHaveTime && timeMode === 'time';
+    openSheet(`
+      <div class="stack">
+        <div><div class="h2">Quick voice memo</div><div class="sub">Capture it fast, then sort it later if you need to.</div></div>
+        <label class="stack" style="gap:6px">
+          <span class="label">Title</span>
+          <input class="field" id="voiceMemoTitle" type="text" placeholder="Voice memo" value="${h(title)}" />
+        </label>
+        <div class="sheet-grid two">
+          <label class="stack" style="gap:6px">
+            <span class="label">Area</span>
+            <select id="voiceMemoLane">${LANES.map(l => `<option value="${l.key}" ${lane===l.key?'selected':''}>${l.label}</option>`).join('')}</select>
+          </label>
+          <label class="stack" style="gap:6px">
+            <span class="label">Place</span>
+            <div class="seg" id="voiceMemoStatusSwitch">
+              <button class="chip ${status==='inbox'?'active':''}" type="button" data-status="inbox">Inbox</button>
+              <button class="chip ${status==='today'?'active':''}" type="button" data-status="today">Today</button>
+              <button class="chip ${status==='later'?'active':''}" type="button" data-status="later">Upcoming</button>
+            </div>
+          </label>
+        </div>
+        ${isUpcoming ? `
+          <label class="stack" style="gap:6px">
+            <span class="label">When</span>
+            <div class="seg" id="voiceMemoWhenSwitch">
+              ${quickOptions.map(([key,label]) => `<button class="chip ${timing===key?'active':''}" type="button" data-when="${key}">${label}</button>`).join('')}
+            </div>
+          </label>
+          ${needsDate ? `
+            <label class="stack" style="gap:6px">
+              <span class="label">Date</span>
+              <div class="datepick">
+                <input class="field" id="voiceMemoDateText" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" value="${h(chosenDate)}" />
+                <button class="btn slim" type="button" id="voiceMemoDateBtn" aria-label="Choose date">📅</button>
+                <input class="native-date-proxy" id="voiceMemoDateNative" type="date" value="${h(chosenDate)}" tabindex="-1" aria-hidden="true" />
+              </div>
+            </label>
+          ` : `<div class="helper">${timing==='someday' ? 'This will stay in Upcoming without a date.' : 'You can fine-tune the date later.'}</div>`}
+        ` : `<div class="helper">Save it fast. You can sort or rename it later if you need to.</div>`}
+        ${canHaveTime ? `
+          <label class="stack" style="gap:6px">
+            <span class="label">Time</span>
+            <div class="seg" id="voiceMemoTimeSwitch">
+              ${timeOptions.map(([key,label]) => `<button class="chip ${timeMode===key?'active':''}" type="button" data-time-mode="${key}">${label}</button>`).join('')}
+            </div>
+          </label>
+          ${showTime ? `<div class="timepick"><input class="field" id="voiceMemoTimeText" type="text" inputmode="numeric" placeholder="HH:MM or 9am" value="${h(chosenTime)}" /><button class="btn slim" type="button" id="voiceMemoTimeBtn" aria-label="Choose time">🕘</button><input class="native-time-proxy" id="voiceMemoTimeNative" type="time" value="${h(chosenTime)}" tabindex="-1" aria-hidden="true" /></div>` : `<div class="helper">${timeMode==='notime' ? 'Add a time only if it helps later.' : 'This will show on the memo and in Upcoming.'}</div>`}
+        ` : ''}
+        <div class="card stack" style="gap:10px">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+            <div>
+              <div class="label">Recording</div>
+              <div class="sub" id="voiceMemoStatus">${isRecording ? 'Recording… tap stop when you are done.' : (memoAttachments.length ? `${memoAttachments.length} memo${memoAttachments.length===1?'':'s'} ready.` : 'Tap record when you want to capture a memo.')}</div>
+            </div>
+            <button class="btn primary" type="button" id="voiceMemoRecordBtn">${isRecording ? 'Stop' : (memoAttachments.length ? 'Record another' : 'Record')}</button>
+          </div>
+          ${memoAttachments.length ? `<div class="stack" style="gap:8px">${memoAttachments.map(att => `<div class="attach-row"><div><div class="attach-name">${h(att.name)}</div><div class="attach-meta">${fmtBytes(att.size)}</div></div><div class="row" style="gap:6px"><button class="btn slim" type="button" data-voice-play="${att.id}">Play</button><button class="btn slim" type="button" data-voice-rename="${att.id}">Rename</button><button class="btn slim danger" type="button" data-voice-remove="${att.id}">Remove</button></div></div>`).join('')}</div>` : ''}
+        </div>
+        <button class="btn primary" id="voiceMemoSaveBtn" ${(memoAttachments.length && !isRecording)?'':'disabled'}>${isRecording ? 'Stop recording first' : submitLabel()}</button>
+      </div>
+    `);
+
+    const titleEl = document.getElementById('voiceMemoTitle');
+    titleEl.focus();
+    titleEl.setSelectionRange(title.length, title.length);
+    titleEl.oninput = e => { title = e.target.value; };
+    document.getElementById('voiceMemoLane').onchange = e => { lane = e.target.value; state.quickLane = lane; save(); };
+    [...document.querySelectorAll('#voiceMemoStatusSwitch [data-status]')].forEach(btn => btn.onclick = () => { status = btn.dataset.status; if(status !== 'later') timing = 'tomorrow'; renderVoice(); });
+    [...document.querySelectorAll('#voiceMemoWhenSwitch [data-when]')].forEach(btn => btn.onclick = () => { timing = btn.dataset.when; renderVoice(); });
+    [...document.querySelectorAll('#voiceMemoTimeSwitch [data-time-mode]')].forEach(btn => btn.onclick = () => { const mode = btn.dataset.timeMode; timeMode = mode; if(mode === 'notime') chosenTime = ''; else if(mode !== 'time') chosenTime = quickTimeValueForMode(mode, previewDate); renderVoice(); });
+    if(needsDate && document.getElementById('voiceMemoDateText')) bindDateControl({ textId:'voiceMemoDateText', nativeId:'voiceMemoDateNative', buttonId:'voiceMemoDateBtn', onCommit: v => { chosenDate = v; } });
+    if(showTime && document.getElementById('voiceMemoTimeText')) bindTimeControl({ textId:'voiceMemoTimeText', nativeId:'voiceMemoTimeNative', buttonId:'voiceMemoTimeBtn', onCommit: v => { chosenTime = v; } });
+
+    const recordBtn = document.getElementById('voiceMemoRecordBtn');
+    const recordStatus = document.getElementById('voiceMemoStatus');
+    const saveVoiceBtn = document.getElementById('voiceMemoSaveBtn');
+    if(recordBtn){
+      recordBtn.onclick = async () => {
+        if(isRecording && recorderControl){
+          recordBtn.disabled = true;
+          if(saveVoiceBtn) saveVoiceBtn.disabled = true;
+          recordStatus.textContent = 'Saving voice memo…';
+          const attachment = await recorderControl.stop();
+          recorderControl = null;
+          isRecording = false;
+          stopVoiceTimer();
+          if(attachment){
+            const currentTitle = (document.getElementById('voiceMemoTitle')?.value || title || '').trim();
+            const defaultName = currentTitle ? preserveName(currentTitle, attachment.name || 'voice-memo.webm') : (attachment.name || 'voice-memo.webm');
+            const chosenName = prompt('Name this voice memo', defaultName);
+            if(chosenName !== null){
+              attachment.name = preserveName(chosenName, attachment.name || defaultName || 'voice-memo.webm');
+            }
+            memoAttachments = [...memoAttachments, attachment];
+          }
+          renderVoice();
+          return;
+        }
+        try{
+          recorderControl = await recordAudioAttachment();
+          isRecording = true;
+          renderVoice();
+          startVoiceTimer();
+        }catch(err){
+          console.error(err);
+          if(recordStatus) recordStatus.textContent = 'Could not start voice recording.';
+        }
+      };
+    }
+
+    [...document.querySelectorAll('[data-voice-remove]')].forEach(btn => btn.onclick = () => { memoAttachments = memoAttachments.filter(att => att.id !== btn.dataset.voiceRemove); renderVoice(); });
+    [...document.querySelectorAll('[data-voice-rename]')].forEach(btn => btn.onclick = () => {
+      const att = memoAttachments.find(a => a.id === btn.dataset.voiceRename); if(!att) return;
+      const next = prompt('Rename attachment', att.name || 'voice-memo.webm');
+      if(next === null) return;
+      att.name = preserveName(next, att.name || 'voice-memo.webm');
+      renderVoice();
+    });
+    [...document.querySelectorAll('[data-voice-play]')].forEach(btn => btn.onclick = () => previewVoiceMemo(btn.dataset.voicePlay));
+    document.getElementById('voiceMemoSaveBtn').onclick = () => {
+      if(!memoAttachments.length || isRecording) return;
+      const text = (document.getElementById('voiceMemoTitle')?.value || title || '').trim() || defaultMemoTitle();
+      let targetDate = '';
+      let targetTime = '';
+      if(status === 'today') targetDate = state.currentDate;
+      else if(status === 'later'){
+        if(timing === 'tomorrow') targetDate = addDays(state.currentDate, 1);
+        if(timing === 'thisweek') targetDate = endOfWeek(state.currentDate);
+        if(timing === 'nextweek') targetDate = addDays(endOfWeek(state.currentDate), 1);
+        if(timing === 'date') targetDate = getDateControlValue('voiceMemoDateText', 'voiceMemoDateNative', chosenDate) || chosenDate;
+        if(timing === 'someday') targetDate = '';
+      }
+      if(status !== 'inbox' && timeMode !== 'notime'){
+        if(timeMode === 'time') targetTime = getTimeControlValue('voiceMemoTimeText', 'voiceMemoTimeNative', chosenTime) || chosenTime;
+        else targetTime = chosenTime;
+      }
+      createItem(text, { kind:'note', lane, status, targetDate, targetTime, attachments:memoAttachments.slice() });
+      closeSheet(true);
+      showToast(status === 'today' ? 'Voice memo saved to Today' : status === 'later' ? 'Voice memo saved to Upcoming' : 'Voice memo saved to Inbox');
+    };
+    sheetBeforeClose = () => {
+      const hasDraft = memoAttachments.length || (document.getElementById('voiceMemoTitle')?.value || title || '').trim();
+      if(isRecording) return confirm('Discard the recording in progress?');
+      if(hasDraft) return confirm('Discard this voice memo draft?');
+      return true;
+    };
+    sheetCleanup = () => {
+      stopVoiceTimer();
+      if(recorderControl){ const control = recorderControl; recorderControl = null; isRecording = false; control.discard?.(); }
+    };
+  };
+
+  renderVoice();
+}
+
+function openScheduleSheet(id){
+  const item = state.items.find(x => x.id === id); if(!item) return;
+  let when = item.targetDate ? 'date' : 'tomorrow';
+  let chosenDate = item.targetDate || addDays(state.currentDate, 1);
+  let chosenTime = item.targetTime || '';
+  let timeMode = item.targetTime ? 'time' : 'notime';
+  const quickOptions = [
+    ['tomorrow','Tomorrow'],
+    ['thisweek','This week'],
+    ['nextweek','Next week'],
+    ['date','Pick date'],
+    ['someday','No date']
+  ];
+  const renderSchedule = () => {
+    const previewDate = resolvePlannedDate(when, state.currentDate, chosenDate) || state.currentDate;
+    const timeOptions = quickTimeOptionsForDate(previewDate);
+    const showDate = when === 'date';
+    const canHaveTime = when !== 'someday';
+    const showTime = canHaveTime && timeMode === 'time';
+    openSheet(`
+      <div class="stack">
+        <div><div class="h2">Set date/time</div><div class="sub">Choose when this should come back into view.</div></div>
+        <div class="sub">${h(item.text)}</div>
+        <label class="stack" style="gap:6px">
+          <span class="label">When</span>
+          <div class="seg" id="planWhenSwitch">${quickOptions.map(([key,label]) => `<button class="chip ${when===key?'active':''}" type="button" data-when="${key}">${label}</button>`).join('')}</div>
+        </label>
+        ${showDate ? `<div class="datepick"><input class="field" id="planDateText" type="text" inputmode="numeric" placeholder="YYYY-MM-DD" value="${h(chosenDate)}" /><button class="btn slim" type="button" id="planDateBtn" aria-label="Choose date">📅</button><input class="native-date-proxy" id="planDateNative" type="date" value="${h(chosenDate)}" tabindex="-1" aria-hidden="true" /></div>` : `<div class="helper">${when==='someday' ? 'This will stay in Upcoming without a date.' : 'You can always fine-tune the date later.'}</div>`}
+        ${canHaveTime ? `<label class="stack" style="gap:6px"><span class="label">Time</span><div class="seg" id="planTimeSwitch">${timeOptions.map(([key,label]) => `<button class="chip ${timeMode===key?'active':''}" type="button" data-time-mode="${key}">${label}</button>`).join('')}</div></label>${showTime ? `<div class="timepick"><input class="field" id="planTimeText" type="text" inputmode="numeric" placeholder="HH:MM or 9am" value="${h(chosenTime)}" /><button class="btn slim" type="button" id="planTimeBtn" aria-label="Choose time">🕘</button><input class="native-time-proxy" id="planTimeNative" type="time" value="${h(chosenTime)}" tabindex="-1" aria-hidden="true" /></div>` : `<div class="helper">${timeMode==='notime' ? 'Leave it undated by time unless the hour actually matters.' : 'This will show on the item and in Upcoming.'}</div>`}` : ''}
+        <div class="row"><button class="btn primary full" id="savePlanDateBtn">Save</button></div>
+      </div>
+    `);
+    [...document.querySelectorAll('#planWhenSwitch [data-when]')].forEach(btn => btn.onclick = () => { when = btn.dataset.when; renderSchedule(); });
+    [...document.querySelectorAll('#planTimeSwitch [data-time-mode]')].forEach(btn => btn.onclick = () => { const mode = btn.dataset.timeMode; timeMode = mode; if(mode === 'notime') chosenTime = ''; else if(mode !== 'time') chosenTime = quickTimeValueForMode(mode, previewDate); renderSchedule(); });
+    if(showDate) bindDateControl({ textId:'planDateText', nativeId:'planDateNative', buttonId:'planDateBtn', onCommit: v => { chosenDate = v; } });
+    if(showTime) bindTimeControl({ textId:'planTimeText', nativeId:'planTimeNative', buttonId:'planTimeBtn', onCommit: v => { chosenTime = v; } });
+    document.getElementById('savePlanDateBtn').onclick = () => {
+      let targetDate = '';
+      let targetTime = '';
+      if(when === 'tomorrow') targetDate = addDays(state.currentDate, 1);
+      if(when === 'thisweek') targetDate = endOfWeek(state.currentDate);
+      if(when === 'nextweek') targetDate = addDays(endOfWeek(state.currentDate), 1);
+      if(when === 'date') targetDate = getDateControlValue('planDateText', 'planDateNative', chosenDate) || chosenDate;
+      if(when === 'someday') targetDate = '';
+      if(when !== 'someday' && timeMode !== 'notime') targetTime = timeMode === 'time' ? (getTimeControlValue('planTimeText', 'planTimeNative', chosenTime) || chosenTime) : chosenTime;
+      updateItem(id, { status:'later', targetDate, targetTime }, { undoLabel:'Changed date/time' });
+      closeSheet();
+    };
+  };
+  renderSchedule();
+}
+
+function openCloseSheet(){
+    const day = activeDay();
+    openSheet(`
+      <div class="stack">
+        <div><div class="h2">End day</div><div class="sub">Leave tomorrow a clean starting point.</div></div>
+        <div><div class="label">What landed</div><textarea id="closeWin">${h(day.closeWin)}</textarea></div>
+        <div><div class="label">What still matters</div><textarea id="closeCarry">${h(day.closeCarry)}</textarea></div>
+        <div><div class="label">Tomorrow seed</div><textarea id="closeSeed">${h(day.closeSeed)}</textarea></div>
+        <div><div class="label">Note</div><textarea id="closeNote">${h(day.closeNote)}</textarea></div>
+        <div class="row"><button class="btn primary full" id="saveCloseBtn">Save closeout</button><button class="btn full" id="cancelCloseBtn">Cancel</button></div>
+      </div>
+    `);
+    document.getElementById('saveCloseBtn').onclick = () => closeDay({
+      win: document.getElementById('closeWin').value,
+      carry: document.getElementById('closeCarry').value,
+      seed: document.getElementById('closeSeed').value,
+      note: document.getElementById('closeNote').value
+    });
+    document.getElementById('cancelCloseBtn').onclick = closeSheet;
+  }
+  function openRoutineFromText(text){
+    openSheet(`
+      <div class="stack">
+        <div><div class="h2">Make routine</div><div class="sub">Turn a repeated open loop into structure.</div></div>
+        <input class="field" id="routineText" value="${h(text)}" />
+        <div class="grid2">
+          <select id="routineLane">${LANES.map(l => `<option value="${l.key}">${l.label}</option>`).join('')}</select>
+          <select id="routineSeed"><option value="today">Seed into Today</option><option value="later">Seed into Upcoming</option></select>
+        </div>
+        <div class="timepick">
+          <input class="field" id="routineTimeText" type="text" placeholder="6:15am / 18:00" />
+          <button class="btn slim" id="routineTimeBtn">Time</button>
+          <input class="native-time-proxy" id="routineTimeNative" type="time" />
+        </div>
+        <textarea id="routineNotes" rows="3" placeholder="What exactly should happen?"></textarea>
+        <div class="label">Days</div>
+        <div class="chips" id="routineDays">${['S','M','T','W','T','F','S'].map((label,idx)=>`<button class="chip active" data-day="${idx}">${label}</button>`).join('')}</div>
+        <button class="btn primary full" id="saveRoutineBtn">Save routine</button>
+      </div>
+    `);
+    const days = new Set([0,1,2,3,4,5,6]);
+    [...document.querySelectorAll('[data-day]')].forEach(btn => btn.onclick = () => {
+      const idx = Number(btn.dataset.day);
+      if(days.has(idx)) days.delete(idx); else days.add(idx);
+      btn.classList.toggle('active', days.has(idx));
+    });
+    document.getElementById('saveRoutineBtn').onclick = () => {
+      state.settings.routines.unshift({ id:uid(), text:document.getElementById('routineText').value.trim(), lane:document.getElementById('routineLane').value, seed:document.getElementById('routineSeed').value, days:[...days].sort((a,b)=>a-b), active:true, time:getTimeControlValue('routineTimeText', 'routineTimeNative', ''), notes:document.getElementById('routineNotes').value.trim() });
+      save(); closeSheet(); render();
+    };
+  }
+
+  if($fab) $fab.onclick = openQuickSheet;
+  load();
+})();
+</script>
+</body>
+</html>
