@@ -2,73 +2,173 @@
 
 ## Goal
 
-Holdfast should feel like a modern app with automatic continuity across devices, while still letting a new user begin immediately.
+Auth should make Holdfast feel like a real modern app:
 
-That means:
+- getting in is easy
+- staying signed in is natural
+- devices can sync later without weirdness
+- offline work remains safe
+- account management stays out of the way
 
-- signed-in sync is the normal long-term experience
-- first-run capture should not be blocked behind account creation
-- offline behavior should stay natural
-- upgrading into a real account should not feel like data migration
+## Chosen V1 Direction
 
-## Chosen Account Model
+Holdfast uses Supabase Auth.
 
-Holdfast uses a three-step account progression:
+The first public auth path is:
 
 1. `device-guest`
-2. `anonymous-user`
-3. `member`
+2. `member`
 
-`device-guest` is the local bootstrap state. `anonymous-user` is the first authenticated cloud-backed session. `member` is the durable identity a user can return to across devices.
+Google OAuth is the primary sign-in path.
+Email magic link is the fallback.
+Password auth is not the first-path product.
 
-## Session Direction
+The schema still reserves `anonymous-user`, but that is not the V1 product path and should not be implied in UI or deployment decisions.
 
-The preferred implementation path is:
+## Entry And Session Behavior
 
-1. Open the app instantly into the local workspace.
-2. If Supabase is configured and the device is online, create or resume an anonymous authenticated session.
-3. Start background sync quietly.
-4. Let the user upgrade the existing workspace by linking email or OAuth.
+### First run
 
-If the first launch happens offline, the device should still work. Once connectivity returns, the app should attach that workspace to the anonymous-account path and continue from there.
+When Supabase auth is configured and the device does not already hold meaningful local work, the user sees a short signed-out landing:
 
-## Supabase Decisions
+- Holdfast identity
+- one-line product promise
+- `Continue with Google`
+- `Email me a sign-in link`
+- one calm trust line
 
-Preferred auth behavior:
+This is the front door.
+It is not a feature tour and not an onboarding wizard.
 
-- Supabase anonymous sign-in enabled
-- Supabase manual identity linking enabled
-- anonymous guest upgraded into email/password or OAuth instead of creating a second workspace
+### Existing local workspace
 
-This keeps the product fast to enter while preserving the signed-in sync-first model the control docs require.
+If the device already holds meaningful local work, Holdfast should open that workspace quickly and let the user attach it to an account from inside the app.
 
-## Security And Abuse Controls
+User-facing promise:
 
-Anonymous auth is useful, but it cannot be left open carelessly.
+- keep what is already here
+- sync it to the account after sign-in
+- do not make sign-in feel like a threat to existing data
 
-Required controls:
+### Callback and restore
 
-- Turnstile or equivalent captcha on anonymous sign-in
-- row-level security that can distinguish anonymous users from durable members
-- cleanup policy for stale anonymous users
-- explicit merge policy when an anonymous guest links into an existing member account
+Auth returns through `/auth/callback`.
 
-## Merge Direction
+The callback surface should:
 
-When a guest upgrades into an existing account, Holdfast should prefer preservation over silent overwrite.
+- restore the session
+- return the user to the right app state
+- avoid blank or broken-feeling transitions
 
-Current direction:
+After that, session restore should be quiet.
+If the user is already signed in, the app should reopen local state quickly and let sync catch up in the background.
 
-- items merge by id when the same workspace is being upgraded
-- attachments stay tied to the upgraded workspace owner
-- conflicts should be surfaced only when automatic resolution would risk data loss
+## Account Surface
+
+The account surface lives inside Settings.
+
+It should stay small:
+
+- signed-in email
+- display name if available
+- provider
+- light sync status
+- sign out
+
+Not here yet:
+
+- delete account
+- remove local data from this device
+- storage or queue mechanics
+- provider internals
+
+## Session Recovery
+
+If the device still holds member-owned local data but the session is gone, Holdfast should preserve the local workspace and ask the user to sign in again.
+
+Good recovery language:
+
+- `Sign in again`
+- `Local work is still here.`
+
+Bad recovery language:
+
+- session expired
+- token invalid
+- auth mismatch
+
+## Sign-out Behavior
+
+Sign-out should:
+
+- confirm before proceeding
+- stop account access and future sync on this device
+- keep local data in place
+- avoid implying deletion
+
+Sign-out is not delete.
+
+`Remove data from this device` should be a separate later action.
+
+## Local-To-Account Attachment
+
+When a device-guest workspace signs in:
+
+- keep the local records
+- attach the workspace to the signed-in account
+- avoid merge/database language in normal UI
+
+Default user-facing line:
+
+- `We'll keep what's already here and sync it to your account.`
+
+## Ownership Direction
+
+Before remote sync is safe, every remote table must be scoped to the authenticated user through Supabase RLS.
+
+Local foundation for that direction:
+
+- `authState` tracks whether this device currently has an active backend session
+- `identityState` tracks whether the device is still a local guest workspace or a member-owned workspace
+- `remoteUserId` keeps the last known signed-in owner on the device
+
+That local marker is not a full replacement for per-record remote ownership.
+Per-record `user_id` scoping still belongs in the remote schema before real sync ships.
+
+## Redirect And Provider Setup
+
+Required callback route:
+
+- `/auth/callback`
+
+Required allow-list targets:
+
+- `http://localhost:4173/auth/callback`
+- `https://holdfast.xylent.studio/auth/callback`
+- preview callback URLs for hosted previews before public testing
+
+Required Google OAuth basics:
+
+- Google OAuth client
+- authorized JavaScript origins
+- authorized redirect URIs
+- app name and support email
+- privacy policy URL before public use
 
 ## Current Repo State
 
-The repo now reflects this model in the local sync state shape:
+The repo now includes:
 
-- `authState` tracks session presence
-- `identityState` tracks `device-guest`, `anonymous-user`, or `member`
-- `remoteUserId` is reserved for the authenticated backend owner
+- a single Supabase browser client boundary
+- auth/session state wiring in the app shell
+- a signed-out landing
+- a callback handoff route
+- a small account surface in Settings
+- session recovery prompts that preserve local work
 
-The UI flow itself is not wired yet. This file defines the intended path before implementation begins.
+What is still not done:
+
+- remote sync worker
+- RLS-backed remote tables
+- cross-device merge logic
+- delete-account and remove-device-data flows

@@ -1,7 +1,16 @@
+import { AuthAccessActions } from '@/app/auth/AuthAccessActions';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { LANES } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import { currentWeekLabel } from '@/domain/logic/selectors';
-import { createRoutine, deleteRoutine, updateRoutine, updateSettings, updateWeeklyRecord } from '@/storage/local/api';
+import {
+  createRoutine,
+  deleteRoutine,
+  updateRoutine,
+  updateSettings,
+  updateWeeklyRecord,
+} from '@/storage/local/api';
 import type { HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Panel } from '@/shared/ui/Panel';
@@ -11,12 +20,102 @@ interface SettingsViewProps {
   snapshot: HoldfastSnapshot;
 }
 
+function syncStatusLabel(
+  configured: boolean,
+  signedIn: boolean,
+  syncMode: HoldfastSnapshot['syncState']['mode'],
+  identityState: HoldfastSnapshot['syncState']['identityState'],
+): string {
+  if (!configured) {
+    return 'Account setup is off in this build.';
+  }
+
+  if (signedIn) {
+    return syncMode === 'ready' ? 'Up to date' : 'Saved offline';
+  }
+
+  return identityState === 'member'
+    ? 'Signed out on this device'
+    : 'Not signed in';
+}
+
 export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
+  const auth = useAuth();
+  const localDataExists = hasMeaningfulLocalState(snapshot);
+
   return (
     <div className="stack">
       <Panel>
         <div className="panel-header">
-          <h1>Settings</h1>
+          <h1>Account</h1>
+          <p>
+            {auth.session
+              ? 'Stay signed in quietly and let Holdfast catch up in the background.'
+              : snapshot.syncState.identityState === 'member'
+                ? 'Sign in again to keep this device in sync.'
+                : 'Sign in once and pick back up anywhere.'}
+          </p>
+        </div>
+        <div className="account-stack">
+          <div className="account-row">
+            <span>Status</span>
+            <strong>
+              {syncStatusLabel(
+                auth.configured,
+                Boolean(auth.session),
+                snapshot.syncState.mode,
+                snapshot.syncState.identityState,
+              )}
+            </strong>
+          </div>
+          {auth.session ? (
+            <>
+              <div className="account-row">
+                <span>Email</span>
+                <strong>{auth.email ?? 'Signed in'}</strong>
+              </div>
+              {auth.displayName ? (
+                <div className="account-row">
+                  <span>Name</span>
+                  <strong>{auth.displayName}</strong>
+                </div>
+              ) : null}
+              {auth.providerLabel ? (
+                <div className="account-row">
+                  <span>Provider</span>
+                  <strong>{auth.providerLabel}</strong>
+                </div>
+              ) : null}
+              <div className="dialog-actions">
+                <button
+                  className="button ghost"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        'Sign out on this device?\n\nLocal work will stay here.',
+                      )
+                    ) {
+                      void auth.signOut();
+                    }
+                  }}
+                  type="button"
+                >
+                  Sign out
+                </button>
+              </div>
+            </>
+          ) : (
+            <AuthAccessActions
+              hasLocalData={localDataExists}
+              nextPath="/settings"
+            />
+          )}
+        </div>
+      </Panel>
+
+      <Panel>
+        <div className="panel-header">
+          <h2>Settings</h2>
           <p>Keep this light. Set only what helps.</p>
         </div>
         <div className="grid two">
@@ -25,7 +124,9 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
             <textarea
               defaultValue={snapshot.settings.direction}
               key={`direction-${snapshot.settings.updatedAt}`}
-              onBlur={(event) => void updateSettings({ direction: event.target.value })}
+              onBlur={(event) =>
+                void updateSettings({ direction: event.target.value })
+              }
               rows={4}
             />
           </label>
@@ -34,7 +135,9 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
             <textarea
               defaultValue={snapshot.settings.standards}
               key={`standards-${snapshot.settings.updatedAt}`}
-              onBlur={(event) => void updateSettings({ standards: event.target.value })}
+              onBlur={(event) =>
+                void updateSettings({ standards: event.target.value })
+              }
               rows={4}
             />
           </label>
@@ -61,7 +164,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
             <textarea
               defaultValue={snapshot.weeklyRecord.focus}
               key={`week-focus-${snapshot.weeklyRecord.updatedAt}`}
-              onBlur={(event) => void updateWeeklyRecord(currentDate, { focus: event.target.value })}
+              onBlur={(event) =>
+                void updateWeeklyRecord(currentDate, {
+                  focus: event.target.value,
+                })
+              }
               rows={4}
             />
           </label>
@@ -70,7 +177,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
             <textarea
               defaultValue={snapshot.weeklyRecord.protect}
               key={`week-protect-${snapshot.weeklyRecord.updatedAt}`}
-              onBlur={(event) => void updateWeeklyRecord(currentDate, { protect: event.target.value })}
+              onBlur={(event) =>
+                void updateWeeklyRecord(currentDate, {
+                  protect: event.target.value,
+                })
+              }
               rows={4}
             />
           </label>
@@ -80,7 +191,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
           <textarea
             defaultValue={snapshot.weeklyRecord.notes}
             key={`week-notes-${snapshot.weeklyRecord.updatedAt}`}
-            onBlur={(event) => void updateWeeklyRecord(currentDate, { notes: event.target.value })}
+            onBlur={(event) =>
+              void updateWeeklyRecord(currentDate, {
+                notes: event.target.value,
+              })
+            }
             rows={4}
           />
         </label>
@@ -92,7 +207,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
             <h2>Custom routines</h2>
             <p>Recurring things Holdfast should bring into Now or Upcoming.</p>
           </div>
-          <button className="button accent" onClick={() => void createRoutine()} type="button">
+          <button
+            className="button accent"
+            onClick={() => void createRoutine()}
+            type="button"
+          >
             Add routine
           </button>
         </div>
@@ -103,7 +222,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                 <label className="field-stack">
                   <span>Title</span>
                   <input
-                    onBlur={(event) => void updateRoutine(routine.id, { title: event.target.value })}
+                    onBlur={(event) =>
+                      void updateRoutine(routine.id, {
+                        title: event.target.value,
+                      })
+                    }
                     defaultValue={routine.title}
                     type="text"
                   />
@@ -112,7 +235,12 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                   <label className="field-stack">
                     <span>Area</span>
                     <select
-                      onChange={(event) => void updateRoutine(routine.id, { lane: event.target.value as (typeof LANES)[number]['key'] })}
+                      onChange={(event) =>
+                        void updateRoutine(routine.id, {
+                          lane: event.target
+                            .value as (typeof LANES)[number]['key'],
+                        })
+                      }
                       value={routine.lane}
                     >
                       {LANES.map((lane) => (
@@ -125,7 +253,13 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                   <label className="field-stack">
                     <span>Destination</span>
                     <select
-                      onChange={(event) => void updateRoutine(routine.id, { destination: event.target.value as 'today' | 'upcoming' })}
+                      onChange={(event) =>
+                        void updateRoutine(routine.id, {
+                          destination: event.target.value as
+                            | 'today'
+                            | 'upcoming',
+                        })
+                      }
                       value={routine.destination}
                     >
                       <option value="today">Now</option>
@@ -137,7 +271,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                   <label className="field-stack">
                     <span>Time</span>
                     <input
-                      onBlur={(event) => void updateRoutine(routine.id, { scheduledTime: event.target.value || null })}
+                      onBlur={(event) =>
+                        void updateRoutine(routine.id, {
+                          scheduledTime: event.target.value || null,
+                        })
+                      }
                       defaultValue={routine.scheduledTime ?? ''}
                       type="time"
                     />
@@ -145,7 +283,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                   <label className="field-stack">
                     <span>Status</span>
                     <select
-                      onChange={(event) => void updateRoutine(routine.id, { active: event.target.value === 'active' })}
+                      onChange={(event) =>
+                        void updateRoutine(routine.id, {
+                          active: event.target.value === 'active',
+                        })
+                      }
                       value={routine.active ? 'active' : 'off'}
                     >
                       <option value="active">Active</option>
@@ -163,8 +305,12 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                         onClick={() =>
                           void updateRoutine(routine.id, {
                             weekdays: routine.weekdays.includes(index)
-                              ? routine.weekdays.filter((entry) => entry !== index)
-                              : [...routine.weekdays, index].sort((left, right) => left - right),
+                              ? routine.weekdays.filter(
+                                  (entry) => entry !== index,
+                                )
+                              : [...routine.weekdays, index].sort(
+                                  (left, right) => left - right,
+                                ),
                           })
                         }
                         type="button"
@@ -177,13 +323,21 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                 <label className="field-stack">
                   <span>Notes</span>
                   <textarea
-                    onBlur={(event) => void updateRoutine(routine.id, { notes: event.target.value })}
+                    onBlur={(event) =>
+                      void updateRoutine(routine.id, {
+                        notes: event.target.value,
+                      })
+                    }
                     defaultValue={routine.notes}
                     rows={3}
                   />
                 </label>
                 <div className="dialog-actions">
-                  <button className="button danger" onClick={() => void deleteRoutine(routine.id)} type="button">
+                  <button
+                    className="button danger"
+                    onClick={() => void deleteRoutine(routine.id)}
+                    type="button"
+                  >
                     Delete
                   </button>
                 </div>

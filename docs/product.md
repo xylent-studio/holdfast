@@ -104,8 +104,9 @@ Holdfast is not:
 - routines support the day without becoming a habit engine
 - review stays decision-relevant, not analytical theater
 - the normal long-term experience is signed-in and synced
-- a user can start immediately in a guest workspace without signup friction
-- creating an account should upgrade that workspace, not fork the product into a separate mode
+- first-time sign-in should be one tap or a magic link, not a form wall
+- if local work already exists, the app should open it quickly and let that workspace attach to an account without loss
+- signing out should stop account access without deleting local work
 - offline behavior is resilient and quiet
 - attachments and voice memos are real product data, not extras
 - preserved saved things remain retrievable without being forced into fake task semantics
@@ -115,6 +116,6 @@ Holdfast is not:
 Holdfast should behave like a modern app that just works:
 
 - the normal expectation is cross-device continuity through an account-backed session
-- a first-time user can still begin immediately without a form wall
-- guest use should upgrade cleanly into an account-backed workspace
+- the signed-out front door should stay short, calm, and low-ceremony
+- local guest use should attach cleanly into an account-backed workspace
 - the user should not feel forced into manual export, import, or mode switching

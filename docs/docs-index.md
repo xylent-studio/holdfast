@@ -21,7 +21,7 @@ This is the entry point for understanding the repo.
 - [docs/product.md](/C:/dev/GitHub/Holdfast/docs/product.md): implementation-friendly product summary
 - [docs/core-flows.md](/C:/dev/GitHub/Holdfast/docs/core-flows.md): action-level product behavior
 - [docs/architecture.md](/C:/dev/GitHub/Holdfast/docs/architecture.md): app, storage, and sync shape
-- [docs/auth-and-accounts.md](/C:/dev/GitHub/Holdfast/docs/auth-and-accounts.md): guest, anonymous, and member account model
+- [docs/auth-and-accounts.md](/C:/dev/GitHub/Holdfast/docs/auth-and-accounts.md): device-guest to member auth model, Google first, magic link fallback
 - [docs/data-model.md](/C:/dev/GitHub/Holdfast/docs/data-model.md): current entities, state model, and mapping
 - [docs/deployment.md](/C:/dev/GitHub/Holdfast/docs/deployment.md): Cloudflare Pages release posture and setup sequence
 - [docs/roadmap.md](/C:/dev/GitHub/Holdfast/docs/roadmap.md): near-term delivery order

@@ -25,11 +25,11 @@ Status: mostly complete
 ## Phase 3: Auth And Sync
 
 - create the Supabase project
-- enable anonymous sign-ins and manual identity linking
-- add auth flow
-- add Cloudflare Turnstile or equivalent captcha protection
+- add Google OAuth
+- add email magic link fallback
+- finish auth flow and callback handoff
 - add remote tables and row-level security
-- define guest-to-member upgrade behavior and merge rules
+- define local-to-account attach behavior and merge rules
 - implement mutation upload worker
 - implement pull reconciliation
 - add attachment upload pipeline

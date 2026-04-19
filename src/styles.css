@@ -30,7 +30,11 @@ body,
   min-height: 100%;
   background:
     radial-gradient(circle at top, rgba(103, 225, 173, 0.16), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(103, 225, 173, 0.08), transparent 24%),
+    radial-gradient(
+      circle at bottom right,
+      rgba(103, 225, 173, 0.08),
+      transparent 24%
+    ),
     linear-gradient(180deg, var(--bg), var(--bg-2));
   color: var(--text);
 }
@@ -84,7 +88,11 @@ textarea {
   pointer-events: none;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.08), transparent 24%),
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.02), transparent 56%);
+    radial-gradient(
+      circle at center,
+      rgba(255, 255, 255, 0.02),
+      transparent 56%
+    );
 }
 
 .app-frame {
@@ -111,7 +119,11 @@ textarea {
 .topbar,
 .panel {
   border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.04)
+  );
   box-shadow: var(--shadow);
 }
 
@@ -279,6 +291,51 @@ p {
   gap: 0.7rem;
 }
 
+.auth-shell {
+  display: grid;
+  min-height: 100vh;
+  padding: 1rem;
+  place-items: center;
+}
+
+.auth-card {
+  gap: 1.25rem;
+  margin: 0 auto;
+  max-width: 560px;
+  width: 100%;
+}
+
+.auth-copy,
+.auth-stack,
+.account-stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.auth-email-box {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+}
+
+.auth-trust-line,
+.auth-feedback {
+  font-size: 0.95rem;
+}
+
+.auth-feedback.danger {
+  color: var(--danger);
+}
+
 .grid {
   display: grid;
   gap: 0.85rem;
@@ -435,6 +492,21 @@ p {
   text-align: left;
 }
 
+.account-row {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+}
+
+.account-row span {
+  color: var(--muted);
+}
+
 .day-result {
   gap: 0.6rem;
 }
@@ -448,7 +520,11 @@ p {
 }
 
 .modal-sheet {
-  background: linear-gradient(180deg, rgba(22, 34, 29, 0.98), rgba(12, 18, 16, 0.98));
+  background: linear-gradient(
+    180deg,
+    rgba(22, 34, 29, 0.98),
+    rgba(12, 18, 16, 0.98)
+  );
   border: 1px solid var(--line-strong);
   border-radius: 28px;
   box-shadow: var(--shadow);
@@ -582,6 +658,8 @@ p {
   }
 
   .attachment-row,
+  .account-row,
+  .auth-actions,
   .dialog-header,
   .panel-header.split {
     flex-direction: column;

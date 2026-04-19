@@ -91,6 +91,23 @@ export interface CreateListItemInput {
   sourceItemId?: string | null;
 }
 
+export interface UpdateListInput {
+  title?: string;
+  kind?: ListKind;
+  lane?: ListRecord['lane'];
+  pinned?: boolean;
+  archivedAt?: string | null;
+}
+
+export interface UpdateListItemInput {
+  title?: string;
+  body?: string;
+  status?: ListItemRecord['status'];
+  position?: number;
+  sourceItemId?: string | null;
+  promotedItemId?: string | null;
+}
+
 export interface ItemDraftPatch {
   title: string;
   kind: ItemKind;
@@ -223,7 +240,10 @@ function createListRecord(input: CreateListInput): ListRecord {
   });
 }
 
-function createListItemRecord(input: CreateListItemInput): ListItemRecord {
+function createListItemRecord(
+  input: CreateListItemInput,
+  position: number,
+): ListItemRecord {
   const timestamp = nowIso();
   return ListItemRecordSchema.parse({
     id: crypto.randomUUID(),
@@ -232,7 +252,7 @@ function createListItemRecord(input: CreateListItemInput): ListItemRecord {
     title: input.title.trim(),
     body: input.body ?? '',
     status: 'open',
-    position: input.position ?? 0,
+    position,
     sourceItemId: input.sourceItemId ?? null,
     promotedItemId: null,
     completedAt: null,
@@ -262,6 +282,8 @@ async function ensureSettingsAndSync(): Promise<{
   if (!settings) {
     settings = defaultSettings();
     await db.settings.put(settings);
+  } else {
+    settings = SettingsRecordSchema.parse(settings);
   }
 
   let syncState = await db.syncState.get(SYNC_STATE_ROW_ID);
@@ -284,7 +306,7 @@ async function ensureSettingsAndSync(): Promise<{
 async function ensureDailyRecord(date: string): Promise<DailyRecord> {
   const existing = await db.dailyRecords.get(date);
   if (existing) {
-    return existing;
+    return DailyRecordSchema.parse(existing);
   }
 
   const created = defaultDailyRecord(date);
@@ -295,7 +317,7 @@ async function ensureDailyRecord(date: string): Promise<DailyRecord> {
 async function ensureWeeklyRecord(weekStart: string): Promise<WeeklyRecord> {
   const existing = await db.weeklyRecords.get(weekStart);
   if (existing) {
-    return existing;
+    return WeeklyRecordSchema.parse(existing);
   }
 
   const created = defaultWeeklyRecord(weekStart);
@@ -331,6 +353,34 @@ export async function bootstrapHoldfast(): Promise<void> {
   });
 }
 
+export async function getCurrentSyncState(): Promise<SyncStateRecord> {
+  const { syncState } = await ensureSettingsAndSync();
+  return syncState;
+}
+
+export async function updateSyncState(
+  patch: Partial<
+    Pick<
+      SyncStateRecord,
+      'mode' | 'lastSyncedAt' | 'authState' | 'identityState' | 'remoteUserId'
+    >
+  >,
+): Promise<SyncStateRecord> {
+  return db.transaction('rw', db.syncState, async () => {
+    const current =
+      (await db.syncState.get(SYNC_STATE_ROW_ID)) ??
+      createDefaultSyncState(getSupabaseSyncStatus());
+    const updated = SyncStateRecordSchema.parse({
+      ...current,
+      ...patch,
+      updatedAt: nowIso(),
+    });
+
+    await db.syncState.put(updated);
+    return updated;
+  });
+}
+
 export async function getHoldfastSnapshot(
   currentDate: DateKey,
 ): Promise<HoldfastSnapshot> {
@@ -352,9 +402,19 @@ export async function getHoldfastSnapshot(
     db.items
       .toArray()
       .then((rows) => rows.map((item) => ItemRecordSchema.parse(item))),
-    db.attachments.toArray(),
-    db.dailyRecords.toArray(),
-    db.routines.toArray(),
+    db.attachments
+      .toArray()
+      .then((rows) =>
+        rows.map((attachment) => AttachmentRecordSchema.parse(attachment)),
+      ),
+    db.dailyRecords
+      .toArray()
+      .then((rows) => rows.map((record) => DailyRecordSchema.parse(record))),
+    db.routines
+      .toArray()
+      .then((rows) =>
+        rows.map((routine) => RoutineRecordSchema.parse(routine)),
+      ),
     db.lists
       .toArray()
       .then((rows) => rows.map((list) => ListRecordSchema.parse(list))),
@@ -378,6 +438,9 @@ export async function getHoldfastSnapshot(
       ...item,
       attachments: attachmentMap.get(item.id) ?? [],
     }));
+  const activeListIds = new Set(
+    lists.filter((list) => !list.deletedAt).map((list) => list.id),
+  );
 
   return {
     currentDate,
@@ -385,7 +448,9 @@ export async function getHoldfastSnapshot(
     dailyRecords,
     items: enrichedItems,
     lists: lists.filter((list) => !list.deletedAt),
-    listItems: listItems.filter((listItem) => !listItem.deletedAt),
+    listItems: listItems.filter(
+      (listItem) => !listItem.deletedAt && activeListIds.has(listItem.listId),
+    ),
     routines: routines.filter((routine) => !routine.deletedAt),
     settings,
     syncState,
@@ -886,13 +951,183 @@ export async function createList(input: CreateListInput): Promise<void> {
 export async function createListItem(
   input: CreateListItemInput,
 ): Promise<void> {
-  const record = createListItemRecord(input);
+  await db.transaction(
+    'rw',
+    db.lists,
+    db.listItems,
+    db.mutationQueue,
+    async () => {
+      const list = await db.lists.get(input.listId);
+      if (!list || list.deletedAt) {
+        return;
+      }
 
-  await db.transaction('rw', db.listItems, db.mutationQueue, async () => {
-    await db.listItems.add(record);
+      const existingItems = await db.listItems
+        .where('listId')
+        .equals(input.listId)
+        .toArray();
+      const position =
+        input.position ??
+        existingItems
+          .filter((item) => !item.deletedAt)
+          .reduce((max, item) => Math.max(max, item.position), -1) + 1;
+      const record = createListItemRecord(input, position);
+
+      await db.listItems.add(record);
+      await queueMutation(
+        createMutationRecord('listItem', record.id, 'list-item.created', {
+          listItem: record,
+        }),
+      );
+    },
+  );
+}
+
+export async function updateList(
+  listId: string,
+  patch: UpdateListInput,
+): Promise<void> {
+  await db.transaction('rw', db.lists, db.mutationQueue, async () => {
+    const current = await db.lists.get(listId);
+    if (!current || current.deletedAt) {
+      return;
+    }
+
+    const updated = ListRecordSchema.parse({
+      ...current,
+      title: patch.title === undefined ? current.title : patch.title.trim(),
+      kind: patch.kind ?? current.kind,
+      lane: patch.lane ?? current.lane,
+      pinned: patch.pinned ?? current.pinned,
+      archivedAt:
+        patch.archivedAt === undefined ? current.archivedAt : patch.archivedAt,
+      updatedAt: nowIso(),
+      syncState: 'pending',
+    });
+
+    await db.lists.put(updated);
     await queueMutation(
-      createMutationRecord('listItem', record.id, 'list-item.created', {
-        listItem: record,
+      createMutationRecord('list', listId, 'list.updated', { list: updated }),
+    );
+  });
+}
+
+export async function deleteList(listId: string): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.lists,
+    db.listItems,
+    db.mutationQueue,
+    async () => {
+      const current = await db.lists.get(listId);
+      if (!current || current.deletedAt) {
+        return;
+      }
+
+      const timestamp = nowIso();
+      const updatedList = ListRecordSchema.parse({
+        ...current,
+        deletedAt: timestamp,
+        updatedAt: timestamp,
+        syncState: 'pending',
+      });
+      const currentListItems = await db.listItems
+        .where('listId')
+        .equals(listId)
+        .toArray();
+      const deletedListItems = currentListItems
+        .filter((listItem) => !listItem.deletedAt)
+        .map((listItem) =>
+          ListItemRecordSchema.parse({
+            ...listItem,
+            deletedAt: timestamp,
+            updatedAt: timestamp,
+            syncState: 'pending',
+          }),
+        );
+
+      await db.lists.put(updatedList);
+      if (deletedListItems.length) {
+        await db.listItems.bulkPut(deletedListItems);
+      }
+      await queueMutation(
+        createMutationRecord('list', listId, 'list.deleted', { listId }),
+      );
+      for (const listItem of deletedListItems) {
+        await queueMutation(
+          createMutationRecord('listItem', listItem.id, 'list-item.deleted', {
+            listItemId: listItem.id,
+            listId,
+          }),
+        );
+      }
+    },
+  );
+}
+
+export async function updateListItem(
+  listItemId: string,
+  patch: UpdateListItemInput,
+): Promise<void> {
+  await db.transaction('rw', db.listItems, db.mutationQueue, async () => {
+    const current = await db.listItems.get(listItemId);
+    if (!current || current.deletedAt) {
+      return;
+    }
+
+    const timestamp = nowIso();
+    const nextStatus = patch.status ?? current.status;
+    const updated = ListItemRecordSchema.parse({
+      ...current,
+      title: patch.title === undefined ? current.title : patch.title.trim(),
+      body: patch.body ?? current.body,
+      status: nextStatus,
+      position: patch.position ?? current.position,
+      sourceItemId:
+        patch.sourceItemId === undefined
+          ? current.sourceItemId
+          : patch.sourceItemId,
+      promotedItemId:
+        patch.promotedItemId === undefined
+          ? current.promotedItemId
+          : patch.promotedItemId,
+      completedAt:
+        nextStatus === 'done' ? (current.completedAt ?? timestamp) : null,
+      archivedAt:
+        nextStatus === 'archived' ? (current.archivedAt ?? timestamp) : null,
+      updatedAt: timestamp,
+      syncState: 'pending',
+    });
+
+    await db.listItems.put(updated);
+    await queueMutation(
+      createMutationRecord('listItem', listItemId, 'list-item.updated', {
+        listItem: updated,
+      }),
+    );
+  });
+}
+
+export async function deleteListItem(listItemId: string): Promise<void> {
+  await db.transaction('rw', db.listItems, db.mutationQueue, async () => {
+    const current = await db.listItems.get(listItemId);
+    if (!current || current.deletedAt) {
+      return;
+    }
+
+    const timestamp = nowIso();
+    const updated = ListItemRecordSchema.parse({
+      ...current,
+      deletedAt: timestamp,
+      updatedAt: timestamp,
+      syncState: 'pending',
+    });
+
+    await db.listItems.put(updated);
+    await queueMutation(
+      createMutationRecord('listItem', listItemId, 'list-item.deleted', {
+        listItemId,
+        listId: current.listId,
       }),
     );
   });

@@ -6,7 +6,7 @@ Holdfast is not ready for public deployment yet.
 
 The repo is prepared for the eventual Cloudflare release, but the public Pages project should not be created until:
 
-- the guest-to-account flow is working
+- the signed-out landing and account-attach flow are working
 - auth feels at least as trustworthy as the prototype
 - sync is safe enough that using the hosted app will not erode trust
 
@@ -55,15 +55,27 @@ This does not create a public deployment by itself.
 
 - set `VITE_SUPABASE_URL`
 - set `VITE_SUPABASE_ANON_KEY`
-- enable anonymous auth
-- enable manual identity linking
-- configure captcha support for anonymous sign-in
+- enable Google auth
+- configure email magic link or OTP fallback
+- add redirect allow-list entries for:
+  - `http://localhost:4173/auth/callback`
+  - `https://holdfast.xylent.studio/auth/callback`
+  - preview callback URLs before public preview testing
 - define RLS and storage policies
+
+### Google OAuth
+
+- create the Google OAuth client
+- add authorized JavaScript origins for localhost, preview, and production
+- add authorized redirect URIs for the callback route
+- set app name, support email, and branding basics
+- publish a privacy policy URL before public rollout
 
 ### Product Gates
 
-- guest capture works immediately
-- anonymous bootstrap is quiet and reliable
+- signed-out landing is calm and low-ceremony
+- local-to-account attach preserves existing device work
+- session recovery preserves local work
 - account upgrade preserves data
 - cross-device sync works on at least two devices
 - offline edits replay cleanly after reconnection
@@ -75,9 +87,10 @@ This does not create a public deployment by itself.
 3. Set build command `npm run build`.
 4. Set build output directory `dist`.
 5. Add production environment variables.
-6. Attach `holdfast.xylent.studio`.
-7. Decide whether to keep or redirect the `*.pages.dev` hostname.
-8. Run hosted smoke tests across desktop, mobile, online, and offline states.
+6. Configure Supabase Site URL and redirect allow-list entries for dev, preview, and production.
+7. Attach `holdfast.xylent.studio`.
+8. Decide whether to keep or redirect the `*.pages.dev` hostname.
+9. Run hosted smoke tests across desktop, mobile, online, and offline states.
 
 ## Current Blocker
 

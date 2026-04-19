@@ -14,6 +14,8 @@ import type {
   WeeklyRecord,
 } from '@/domain/schemas/records';
 
+export const HOLDFAST_DB_NAME = 'holdfast';
+
 export class HoldfastDatabase extends Dexie {
   items!: Table<ItemRecord, string>;
   lists!: Table<ListRecord, string>;
@@ -27,8 +29,8 @@ export class HoldfastDatabase extends Dexie {
   mutationQueue!: Table<MutationRecord, string>;
   syncState!: Table<SyncStateRecord, string>;
 
-  constructor() {
-    super('holdfast');
+  constructor(name = HOLDFAST_DB_NAME) {
+    super(name);
 
     this.version(1).stores({
       items: 'id, status, lane, scheduledDate, updatedAt, routineId, deletedAt',

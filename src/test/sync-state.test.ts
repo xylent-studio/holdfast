@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
-import { createDefaultSyncState, normalizeSyncStateRecord } from '@/storage/sync/state';
+import {
+  createDefaultSyncState,
+  normalizeSyncStateRecord,
+} from '@/storage/sync/state';
 
 describe('createDefaultSyncState', () => {
-  it('creates a device guest workspace before auth is wired', () => {
+  it('creates a device guest workspace by default', () => {
     const result = createDefaultSyncState({
       configured: false,
       reason: 'Missing env vars.',

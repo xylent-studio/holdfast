@@ -206,15 +206,21 @@ Key fields:
 - `remoteUserId`
 - `lastSyncedAt`
 
+Notes:
+
+- `remoteUserId` keeps the last known signed-in owner on the device so a local workspace can reattach safely after sign-in
+- this is a device-level ownership marker, not the final per-record remote ownership model
+
 ## Session Progression
 
-The intended account path is:
+The current public auth path is:
 
 1. `device-guest`
-2. `anonymous-user`
-3. `member`
+2. `member`
 
 `authState` tracks whether there is an authenticated backend session. `identityState` tracks what kind of workspace owner the device is currently attached to.
+
+`anonymous-user` is still reserved in the schema, but it is not the current V1 product path.
 
 ## Versioning
 
@@ -250,7 +256,7 @@ Planned Supabase mapping:
 - Postgres tables for items, lists, list items, daily records, weekly records, routines, settings, and attachment metadata
 - Storage buckets for attachment binaries
 - auth-scoped rows per user
-- anonymous users distinguished in RLS through Supabase auth claims
+- `user_id`-scoped RLS policies on every user-owned table
 - a sync worker translating local mutation records into remote upserts and deletes
 
 ## Migration Note

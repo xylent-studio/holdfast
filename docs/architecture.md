@@ -30,9 +30,9 @@ That means local persistence is not a side mode. It is the device-level replica 
 
 The first session model should match how strong modern apps behave:
 
-- the app opens immediately even before account creation
-- if the device is online and the backend is configured, the app should bootstrap an anonymous authenticated session in the background
-- if the device is offline, the app should keep a local guest workspace and attach it to the account path once connectivity returns
+- if auth is configured and the device does not already hold meaningful local work, the app should show a minimal sign-in front door
+- if the device already holds meaningful local work, the app should open that workspace quickly and let the user attach it to an account from inside the app
+- if the device is offline or auth is unavailable, the local workspace should still open safely
 - creating an account should upgrade the active workspace instead of asking the user to move data by hand
 
 This is not a separate "local mode". It is the bootstrap path into the same synced product.
@@ -67,7 +67,7 @@ The full sync engine is not wired yet, but the write path is already designed fo
 - `src/storage/local`
   IndexedDB table definitions, bootstrapping, snapshot assembly, and write commands.
 - `src/storage/sync`
-  Provider-neutral contracts plus the Supabase config boundary.
+  Provider-neutral contracts plus the Supabase config and auth boundary.
 - `src/features`
   Route-level product flows and dialogs.
 - `src/app`
@@ -129,11 +129,11 @@ Current hosting posture:
 ## Expected Sync Model
 
 1. The app opens into a device-local workspace immediately.
-2. If the backend is ready and the device is online, the app creates or resumes an anonymous authenticated session.
-3. The device writes to IndexedDB immediately.
-4. Mutation records upload in the background.
-5. Remote changes are pulled back into the local replica.
-6. The user can upgrade the anonymous workspace into a permanent account through linked email or OAuth.
+2. If auth is configured and the device is empty, the app shows the signed-out landing instead of dropping straight into the shell.
+3. Google OAuth is the primary sign-in path, with email magic link as fallback.
+4. Once signed in, the device writes to IndexedDB immediately and prepares for background sync.
+5. Mutation records upload in the background once sync is wired.
+6. Remote changes are pulled back into the local replica once sync is wired.
 7. Attachments upload separately from metadata.
 8. Offline changes remain safe until the network returns.
 
@@ -151,16 +151,17 @@ Holdfast is single-user and multi-device. The conflict posture should be:
 
 The preferred auth path is:
 
-- Supabase anonymous auth for low-friction bootstrap
-- Supabase manual identity linking for upgrade to email or OAuth
-- Cloudflare Turnstile for abuse protection around anonymous sign-in
-- RLS policies that distinguish anonymous users from durable member accounts where needed
+- Supabase Auth as the single provider boundary
+- Google OAuth first
+- email magic link fallback
+- RLS policies scoped by authenticated `user_id`
+- explicit redirect allow-lists for localhost, production, and previews
 
 ## Intentionally Not Here Yet
 
-- Supabase auth wiring
 - sync worker implementation
-- guest-to-member upgrade UI
+- remote merge worker
+- remove-device-data and delete-account flows
 - attachment preview pipeline
 - voice memo recording port
 - background retry worker
