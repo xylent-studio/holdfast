@@ -10,6 +10,7 @@ Thumbs.db
 .env.*.local
 .dev.vars
 .wrangler/
+supabase/.temp/
 *.log
 *.tsbuildinfo
 npm-debug.log*
