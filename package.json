@@ -25,6 +25,7 @@
     "cf:whoami": "wrangler whoami",
     "cf:pages:list": "wrangler pages project list --json",
     "cf:pages:status": "node scripts/pages-validation.mjs",
+    "cf:pages:auth-preflight": "node scripts/pages-validation.mjs --auth-preflight --base-url https://holdfast-validation.pages.dev",
     "cf:pages:validate": "node scripts/pages-validation.mjs --project holdfast-validation --create --deploy --smoke",
     "supabase": "supabase",
     "supabase:status": "supabase status",

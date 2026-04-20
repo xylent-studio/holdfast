@@ -1,0 +1,93 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { SCHEMA_VERSION } from '@/domain/constants';
+import { ItemDetailsDialog } from '@/features/item-details/ItemDetailsDialog';
+
+const addFilesToItemMock = vi.fn();
+const deleteItemMock = vi.fn();
+const getAttachmentDownloadMock = vi.fn();
+const removeAttachmentMock = vi.fn();
+const saveItemMock = vi.fn();
+const toggleFocusMock = vi.fn();
+
+vi.mock('@/storage/local/api', () => ({
+  addFilesToItem: (...args: unknown[]) => addFilesToItemMock(...args),
+  deleteItem: (...args: unknown[]) => deleteItemMock(...args),
+  getAttachmentDownload: (...args: unknown[]) => getAttachmentDownloadMock(...args),
+  removeAttachment: (...args: unknown[]) => removeAttachmentMock(...args),
+  saveItem: (...args: unknown[]) => saveItemMock(...args),
+  toggleFocus: (...args: unknown[]) => toggleFocusMock(...args),
+}));
+
+describe('ItemDetailsDialog', () => {
+  beforeEach(() => {
+    addFilesToItemMock.mockReset();
+    deleteItemMock.mockReset();
+    getAttachmentDownloadMock.mockReset();
+    removeAttachmentMock.mockReset();
+    saveItemMock.mockReset();
+    toggleFocusMock.mockReset();
+  });
+
+  it('shows a visible error when an attachment cannot be downloaded', async () => {
+    getAttachmentDownloadMock.mockResolvedValue(null);
+
+    render(
+      <ItemDetailsDialog
+        currentDate="2026-04-20"
+        isFocused={false}
+        isOpen
+        item={{
+          attachments: [
+            {
+              id: '11111111-1111-4111-8111-111111111111',
+              schemaVersion: SCHEMA_VERSION,
+              itemId: '22222222-2222-4222-8222-222222222222',
+              name: 'receipt.txt',
+              kind: 'file',
+              mimeType: 'text/plain',
+              size: 12,
+              blobId: '33333333-3333-4333-8333-333333333333',
+              createdAt: '2026-04-20T08:00:00.000Z',
+              updatedAt: '2026-04-20T08:00:00.000Z',
+              deletedAt: null,
+              syncState: 'synced',
+            },
+          ],
+          body: '',
+          captureMode: null,
+          createdAt: '2026-04-20T08:00:00.000Z',
+          id: '22222222-2222-4222-8222-222222222222',
+          kind: 'task',
+          lane: 'admin',
+          schemaVersion: SCHEMA_VERSION,
+          scheduledDate: null,
+          scheduledTime: null,
+          sourceDate: '2026-04-20',
+          sourceItemId: null,
+          sourceText: null,
+          routineId: null,
+          completedAt: null,
+          archivedAt: null,
+          status: 'inbox',
+          syncState: 'synced',
+          title: 'Receipt',
+          updatedAt: '2026-04-20T08:00:00.000Z',
+          deletedAt: null,
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Couldn't download this file yet. Keep this device signed in and online, then try again.",
+        ),
+      ).toBeVisible();
+    });
+  });
+});

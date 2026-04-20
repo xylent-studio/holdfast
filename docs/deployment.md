@@ -56,6 +56,12 @@ Why:
 - it keeps the eventual production `holdfast` project clean for Git integration
 - it avoids locking the production project into Direct Upload just to get early hosted smoke
 
+Before provider-backed hosted auth smoke, run:
+
+- `npm run cf:pages:auth-preflight`
+
+That preflight uses a server-only Supabase key from the shell to verify that generated email-link redirects stay on the hosted validation origin instead of falling back to localhost or another stale Site URL.
+
 Rules:
 
 - do not attach `holdfast.xylent.studio` to the validation project
@@ -150,6 +156,7 @@ Current repo/backend foundation already includes:
 - `npm run cf:whoami`
 - `npm run cf:pages:list`
 - `npm run cf:pages:status`
+- `npm run cf:pages:auth-preflight`
 - `npm run cf:pages:validate`
 - `npm run build`
 - `npm run test:e2e`

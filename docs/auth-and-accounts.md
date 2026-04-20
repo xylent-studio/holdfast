@@ -159,6 +159,12 @@ Required allow-list targets:
 - `https://holdfast.xylent.studio/auth/callback`
 - preview callback URLs for hosted previews before public testing
 
+Before hosted auth smoke on the validation project, use the repo preflight:
+
+- `npm run cf:pages:auth-preflight`
+
+That checks whether Supabase-generated email-link redirects are still pointing at localhost or another stale origin before a deeper hosted auth pass.
+
 Required Google OAuth basics:
 
 - Google OAuth client

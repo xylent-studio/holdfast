@@ -52,6 +52,10 @@ export function ItemDetailsDialog({
   const [status, setStatus] = useState<ItemStatus>(item.status);
   const [scheduledDate, setScheduledDate] = useState(item.scheduledDate ?? '');
   const [scheduledTime, setScheduledTime] = useState(item.scheduledTime ?? '');
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<
+    string | null
+  >(null);
   const moveToCurrentDayLabel =
     currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
   const normalizedStatus =
@@ -89,8 +93,15 @@ export function ItemDetailsDialog({
   };
 
   const handleDownload = async (attachmentId: string): Promise<void> => {
-    const payload = await getAttachmentDownload(attachmentId);
+    setDownloadError(null);
+    setDownloadingAttachmentId(attachmentId);
+
+    const payload = await getAttachmentDownload(attachmentId).catch(() => null);
     if (!payload) {
+      setDownloadingAttachmentId(null);
+      setDownloadError(
+        "Couldn't download this file yet. Keep this device signed in and online, then try again.",
+      );
       return;
     }
 
@@ -102,6 +113,7 @@ export function ItemDetailsDialog({
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    setDownloadingAttachmentId(null);
   };
 
   return (
@@ -237,7 +249,9 @@ export function ItemDetailsDialog({
                       onClick={() => void handleDownload(attachment.id)}
                       type="button"
                     >
-                      Download
+                      {downloadingAttachmentId === attachment.id
+                        ? 'Downloading...'
+                        : 'Download'}
                     </button>
                     <button
                       className="button danger small"
@@ -253,6 +267,9 @@ export function ItemDetailsDialog({
           ) : (
             <div className="empty-inline">No attachments yet.</div>
           )}
+          {downloadError ? (
+            <p className="auth-feedback danger">{downloadError}</p>
+          ) : null}
           <label className="button ghost file-button">
             <input
               multiple

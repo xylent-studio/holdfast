@@ -16,12 +16,14 @@ Usage:
   node scripts/pages-validation.mjs
   node scripts/pages-validation.mjs --project holdfast-validation --create --deploy
   node scripts/pages-validation.mjs --project holdfast-validation --create --deploy --smoke
+  node scripts/pages-validation.mjs --auth-preflight --base-url https://holdfast-validation.pages.dev
   node scripts/pages-validation.mjs --smoke --base-url https://holdfast-validation.pages.dev
 
 Options:
   --project <name>    Pages project name. Default: ${DEFAULT_PROJECT}
   --branch <name>     Pages branch to deploy. Default: ${DEFAULT_BRANCH}
   --base-url <url>    Hosted base URL for smoke tests.
+  --auth-preflight    Verify Supabase-generated email links stay on the hosted origin.
   --create            Create the Pages project if it does not exist.
   --deploy            Build the app and deploy dist to the Pages project.
   --smoke             Run Playwright smoke tests against the hosted URL.
@@ -118,6 +120,7 @@ function escapeForCmd(value) {
 
 function parseArgs(argv) {
   const options = {
+    authPreflight: false,
     baseUrl: null,
     branch: DEFAULT_BRANCH,
     create: false,
@@ -146,6 +149,11 @@ function parseArgs(argv) {
     if (arg === '--base-url') {
       options.baseUrl = argv[index + 1] ?? null;
       index += 1;
+      continue;
+    }
+
+    if (arg === '--auth-preflight') {
+      options.authPreflight = true;
       continue;
     }
 
@@ -188,6 +196,10 @@ function currentPagesCallback(options) {
   return `${currentPagesOrigin(options).replace(/\/$/u, '')}/auth/callback`;
 }
 
+function currentAuthProbeTarget(options) {
+  return `${currentPagesCallback(options)}?next=/settings`;
+}
+
 function requireBuildEnv(envValues) {
   const missing = [];
 
@@ -204,6 +216,22 @@ function requireBuildEnv(envValues) {
       `Missing build-time auth env: ${missing.join(', ')}. Add them to .env or the shell before deploying hosted validation.`,
     );
   }
+}
+
+function requireAuthProbeEnv(envValues) {
+  const supabaseUrl = envValues.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY ?? null;
+
+  if (!supabaseUrl || !secretKey) {
+    throw new Error(
+      'Hosted auth preflight needs VITE_SUPABASE_URL (or SUPABASE_URL) plus SUPABASE_SECRET_KEY in the shell. Keep the secret key out of repo files.',
+    );
+  }
+
+  return {
+    secretKey,
+    supabaseUrl,
+  };
 }
 
 function loadBuildEnv() {
@@ -274,95 +302,148 @@ function printStatus(project, envValues, options) {
   );
 }
 
-const options = parseArgs(process.argv.slice(2));
-
-if (options.help) {
-  printUsage();
-  process.exit(0);
-}
-
-const envValues = loadBuildEnv();
-
-run('npx', ['wrangler', 'whoami']);
-
-const projects = getPagesProjects();
-let project =
-  projects.find((candidate) => getProjectName(candidate) === options.project) ??
-  null;
-let projectExists = Boolean(project);
-
-printStatus(project, envValues, options);
-
-if (options.create && !projectExists) {
-  console.log(`Creating Pages project ${options.project}...`);
-  run('npx', [
-    'wrangler',
-    'pages',
-    'project',
-    'create',
-    options.project,
-    '--production-branch',
-    options.branch,
-    '--compatibility-date',
-    getCompatibilityDate(),
-  ]);
-  projectExists = true;
-  project = {
-    'Project Domains': `${options.project}.pages.dev`,
-    'Project Name': options.project,
-  };
-}
-
-if (options.deploy) {
-  requireBuildEnv(envValues);
-
-  if (!projectExists) {
-    throw new Error(
-      `Pages project ${options.project} does not exist. Re-run with --create or create it in Cloudflare first.`,
-    );
-  }
-
-  if (!options.skipBuild) {
-    run('npm', ['run', 'build']);
-  }
-
-  console.log(`Deploying dist to ${options.project}...`);
-  run('npx', [
-    'wrangler',
-    'pages',
-    'deployment',
-    'create',
-    'dist',
-    '--project-name',
-    options.project,
-    '--branch',
-    options.branch,
-    '--commit-dirty',
-    '--upload-source-maps',
-  ]);
-
-  console.log(`Hosted validation URL: ${currentPagesOrigin(options)}`);
-  console.log('Add these before Google hosted sign-in smoke if you have not already:');
-  console.log(`- Supabase redirect allow-list: ${currentPagesCallback(options)}`);
-  console.log(`- Google authorized JavaScript origin: ${currentPagesOrigin(options)}`);
-  console.log(
-    '- Google authorized redirect URI: use the Supabase callback shown in the provider settings.',
-  );
-}
-
-if (options.smoke) {
-  if (!options.baseUrl && !projectExists && !options.deploy) {
-    throw new Error(
-      `Pages project ${options.project} does not exist. Pass --base-url or create and deploy the validation project first.`,
-    );
-  }
-
-  const smokeUrl = currentPagesOrigin(options);
-  console.log(`Running Playwright smoke against ${smokeUrl}...`);
-  run('npx', ['playwright', 'test'], {
-    env: {
-      ...process.env,
-      PLAYWRIGHT_BASE_URL: smokeUrl,
+async function runHostedAuthPreflight(envValues, options) {
+  const { secretKey, supabaseUrl } = requireAuthProbeEnv(envValues);
+  const { createClient } = await import('@supabase/supabase-js');
+  const authProbeTarget = currentAuthProbeTarget(options);
+  const email = `holdfast-auth-preflight-${Date.now()}@example.com`;
+  const client = createClient(supabaseUrl, secretKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
     },
   });
+
+  const { data, error } = await client.auth.admin.generateLink({
+    type: 'magiclink',
+    email,
+    redirectTo: authProbeTarget,
+  });
+
+  if (error) {
+    throw new Error(`Hosted auth preflight failed to generate a link: ${error.message}`);
+  }
+
+  const generatedRedirect = data?.properties?.redirect_to ?? null;
+
+  console.log('Hosted auth redirect preflight');
+  console.log(`- Probe email: ${email}`);
+  console.log(`- Requested redirect: ${authProbeTarget}`);
+  console.log(`- Generated redirect: ${generatedRedirect ?? 'none'}`);
+
+  if (!generatedRedirect?.startsWith(currentPagesOrigin(options))) {
+    throw new Error(
+      `Supabase is still generating email-link redirects for ${generatedRedirect ?? 'an empty redirect'} instead of the hosted origin ${currentPagesOrigin(
+        options,
+      )}. Update Supabase Auth URL configuration before hosted auth smoke.`,
+    );
+  }
 }
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+
+  if (options.help) {
+    printUsage();
+    return;
+  }
+
+  const envValues = loadBuildEnv();
+
+  run('npx', ['wrangler', 'whoami']);
+
+  const projects = getPagesProjects();
+  let project =
+    projects.find((candidate) => getProjectName(candidate) === options.project) ??
+    null;
+  let projectExists = Boolean(project);
+
+  printStatus(project, envValues, options);
+
+  if (options.create && !projectExists) {
+    console.log(`Creating Pages project ${options.project}...`);
+    run('npx', [
+      'wrangler',
+      'pages',
+      'project',
+      'create',
+      options.project,
+      '--production-branch',
+      options.branch,
+      '--compatibility-date',
+      getCompatibilityDate(),
+    ]);
+    projectExists = true;
+    project = {
+      'Project Domains': `${options.project}.pages.dev`,
+      'Project Name': options.project,
+    };
+  }
+
+  if (options.deploy) {
+    requireBuildEnv(envValues);
+
+    if (!projectExists) {
+      throw new Error(
+        `Pages project ${options.project} does not exist. Re-run with --create or create it in Cloudflare first.`,
+      );
+    }
+
+    if (!options.skipBuild) {
+      run('npm', ['run', 'build']);
+    }
+
+    console.log(`Deploying dist to ${options.project}...`);
+    run('npx', [
+      'wrangler',
+      'pages',
+      'deployment',
+      'create',
+      'dist',
+      '--project-name',
+      options.project,
+      '--branch',
+      options.branch,
+      '--commit-dirty',
+      '--upload-source-maps',
+    ]);
+
+    console.log(`Hosted validation URL: ${currentPagesOrigin(options)}`);
+    console.log(
+      'Add these before Google hosted sign-in smoke if you have not already:',
+    );
+    console.log(`- Supabase redirect allow-list: ${currentPagesCallback(options)}`);
+    console.log(
+      `- Google authorized JavaScript origin: ${currentPagesOrigin(options)}`,
+    );
+    console.log(
+      '- Google authorized redirect URI: use the Supabase callback shown in the provider settings.',
+    );
+  }
+
+  if (options.authPreflight) {
+    await runHostedAuthPreflight(envValues, options);
+  }
+
+  if (options.smoke) {
+    if (!options.baseUrl && !projectExists && !options.deploy) {
+      throw new Error(
+        `Pages project ${options.project} does not exist. Pass --base-url or create and deploy the validation project first.`,
+      );
+    }
+
+    const smokeUrl = currentPagesOrigin(options);
+    console.log(`Running Playwright smoke against ${smokeUrl}...`);
+    run('npx', ['playwright', 'test'], {
+      env: {
+        ...process.env,
+        PLAYWRIGHT_BASE_URL: smokeUrl,
+      },
+    });
+  }
+}
+
+await main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
