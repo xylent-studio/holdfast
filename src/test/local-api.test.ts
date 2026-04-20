@@ -36,6 +36,17 @@ afterEach(async () => {
 });
 
 describe('capture guardrails', () => {
+  it('returns a snapshot on an empty database without writing during read', async () => {
+    const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
+
+    expect(snapshot.currentDate).toBe(CURRENT_DATE);
+    expect(snapshot.currentDay.date).toBe(CURRENT_DATE);
+    expect(snapshot.items).toEqual([]);
+    expect(snapshot.lists).toEqual([]);
+    expect(snapshot.listItems).toEqual([]);
+    expect(snapshot.syncState.id).toBe('sync');
+  });
+
   it('keeps capture items out of task-only controls and Now selectors', async () => {
     await createItem({
       title: 'Receipt and note',

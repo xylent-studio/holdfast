@@ -327,6 +327,39 @@ async function ensureWeeklyRecord(weekStart: string): Promise<WeeklyRecord> {
   return created;
 }
 
+async function readSettingsAndSyncSnapshot(): Promise<{
+  settings: SettingsRecord;
+  syncState: SyncStateRecord;
+}> {
+  const [settings, syncState] = await Promise.all([
+    db.settings.get(SETTINGS_ROW_ID),
+    db.syncState.get(SYNC_STATE_ROW_ID),
+  ]);
+
+  return {
+    settings: settings
+      ? SettingsRecordSchema.parse(settings)
+      : defaultSettings(),
+    syncState: syncState
+      ? normalizeSyncStateRecord(syncState)
+      : createDefaultSyncState(getSupabaseSyncStatus()),
+  };
+}
+
+async function readDailyRecordOrDefault(date: string): Promise<DailyRecord> {
+  const existing = await db.dailyRecords.get(date);
+  return existing ? DailyRecordSchema.parse(existing) : defaultDailyRecord(date);
+}
+
+async function readWeeklyRecordOrDefault(
+  weekStart: string,
+): Promise<WeeklyRecord> {
+  const existing = await db.weeklyRecords.get(weekStart);
+  return existing
+    ? WeeklyRecordSchema.parse(existing)
+    : defaultWeeklyRecord(weekStart);
+}
+
 async function queueMutation(record: MutationRecord): Promise<void> {
   await db.mutationQueue.put(record);
 }
@@ -398,9 +431,9 @@ export async function getHoldfastSnapshot(
     lists,
     listItems,
   ] = await Promise.all([
-    ensureSettingsAndSync(),
-    ensureDailyRecord(currentDate),
-    ensureWeeklyRecord(weekStart),
+    readSettingsAndSyncSnapshot(),
+    readDailyRecordOrDefault(currentDate),
+    readWeeklyRecordOrDefault(weekStart),
     db.items
       .toArray()
       .then((rows) => rows.map((item) => ItemRecordSchema.parse(item))),
