@@ -9,16 +9,20 @@ const retrySyncMock = vi.fn();
 const signOutMock = vi.fn();
 const updateSettingsMock = vi.fn();
 const updateWeeklyRecordMock = vi.fn();
+let mockedSession: { user: { id: string } } | null = {
+  user: { id: 'user-1' },
+};
+let mockedEmail = 'justin@example.com';
+let mockedDisplayName: string | null = 'Justin';
+let mockedProviderLabel: string | null = 'Google';
 
 vi.mock('@/app/auth/useAuth', () => ({
   useAuth: () => ({
     configured: true,
-    displayName: 'Justin',
-    email: 'justin@example.com',
-    providerLabel: 'Google',
-    session: {
-      user: { id: 'user-1' },
-    },
+    displayName: mockedDisplayName,
+    email: mockedEmail,
+    providerLabel: mockedProviderLabel,
+    session: mockedSession,
     signOut: signOutMock,
   }),
 }));
@@ -142,6 +146,10 @@ describe('SettingsView', () => {
     signOutMock.mockReset();
     updateSettingsMock.mockReset();
     updateWeeklyRecordMock.mockReset();
+    mockedSession = { user: { id: 'user-1' } };
+    mockedEmail = 'justin@example.com';
+    mockedDisplayName = 'Justin';
+    mockedProviderLabel = 'Google';
   });
 
   it('keeps advanced sections collapsed until opened', () => {
@@ -173,5 +181,48 @@ describe('SettingsView', () => {
       standards: '',
       why: '',
     });
+  });
+
+  it('keeps recovery language grounded for a signed-out member workspace', () => {
+    mockedSession = null;
+    mockedEmail = '';
+    mockedDisplayName = null;
+    mockedProviderLabel = null;
+    const snapshot = makeSnapshot();
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      authState: 'signed-out',
+      authPromptState: 'session-expired',
+    };
+
+    render(<SettingsView currentDate="2026-04-20" snapshot={snapshot} />);
+
+    expect(
+      screen.getByText('Sign in again to keep this device in sync.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("We'll keep what's already here and sync it to your account."),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Signed out on this device')).toBeInTheDocument();
+  });
+
+  it('shows the original-account warning when the workspace owner mismatches', () => {
+    mockedSession = null;
+    mockedEmail = '';
+    mockedDisplayName = null;
+    mockedProviderLabel = null;
+    const snapshot = makeSnapshot();
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      authState: 'signed-out',
+      authPromptState: 'account-mismatch',
+    };
+
+    render(<SettingsView currentDate="2026-04-20" snapshot={snapshot} />);
+
+    expect(
+      screen.getByText("This device is still holding another account's workspace."),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Needs the original account')).toBeInTheDocument();
   });
 });

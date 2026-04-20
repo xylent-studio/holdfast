@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom';
 
 import { AuthCallbackView } from '@/app/auth/AuthCallbackView';
+import { shouldShowAuthLanding } from '@/app/auth/gating';
 import { AuthLandingView } from '@/app/auth/AuthLandingView';
 import { AuthProvider } from '@/app/auth/AuthProvider';
 import { AuthRecoveryPanel } from '@/app/auth/AuthRecoveryPanel';
@@ -79,17 +80,19 @@ function AppRoutes() {
   const hasLocalData = snapshot ? hasMeaningfulLocalState(snapshot) : false;
   const shouldWaitForAuthGate =
     Boolean(snapshot) && auth.configured && !auth.isReady && !hasLocalData;
-  const shouldShowLanding =
-    Boolean(snapshot) &&
-    auth.configured &&
-    auth.isReady &&
-    !auth.session &&
-    !hasLocalData;
   const shouldShowSessionRecovery =
     Boolean(snapshot) &&
     auth.configured &&
     auth.isReady &&
     shouldShowRecoveryPanel(snapshot.syncState, Boolean(auth.session));
+  const shouldShowLanding = shouldShowAuthLanding({
+    authConfigured: auth.configured,
+    authReady: auth.isReady,
+    hasLocalData,
+    hasSession: Boolean(auth.session),
+    shouldShowSessionRecovery,
+    snapshotReady: Boolean(snapshot),
+  });
 
   if (location.pathname === '/auth/callback') {
     return <AuthCallbackView />;

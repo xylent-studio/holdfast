@@ -17,6 +17,7 @@ Usage:
   node scripts/pages-validation.mjs --project holdfast-validation --create --deploy
   node scripts/pages-validation.mjs --project holdfast-validation --create --deploy --smoke
   node scripts/pages-validation.mjs --auth-preflight --base-url https://holdfast-validation.pages.dev
+  node scripts/pages-validation.mjs --auth-smoke --base-url https://holdfast-validation.pages.dev
   node scripts/pages-validation.mjs --smoke --base-url https://holdfast-validation.pages.dev
 
 Options:
@@ -24,6 +25,7 @@ Options:
   --branch <name>     Pages branch to deploy. Default: ${DEFAULT_BRANCH}
   --base-url <url>    Hosted base URL for smoke tests.
   --auth-preflight    Verify Supabase-generated email links stay on the hosted origin.
+  --auth-smoke        Run hosted auth smoke after preflight using server-side magic links.
   --create            Create the Pages project if it does not exist.
   --deploy            Build the app and deploy dist to the Pages project.
   --smoke             Run Playwright smoke tests against the hosted URL.
@@ -120,6 +122,7 @@ function escapeForCmd(value) {
 
 function parseArgs(argv) {
   const options = {
+    authSmoke: false,
     authPreflight: false,
     baseUrl: null,
     branch: DEFAULT_BRANCH,
@@ -154,6 +157,11 @@ function parseArgs(argv) {
 
     if (arg === '--auth-preflight') {
       options.authPreflight = true;
+      continue;
+    }
+
+    if (arg === '--auth-smoke') {
+      options.authSmoke = true;
       continue;
     }
 
@@ -302,6 +310,16 @@ function printStatus(project, envValues, options) {
   );
 }
 
+function runPlaywrightSuite(suiteArgs, envValues, extraEnv = {}) {
+  run('npx', ['playwright', 'test', ...suiteArgs], {
+    env: {
+      ...envValues,
+      ...process.env,
+      ...extraEnv,
+    },
+  });
+}
+
 async function runHostedAuthPreflight(envValues, options) {
   const { secretKey, supabaseUrl } = requireAuthProbeEnv(envValues);
   const { createClient } = await import('@supabase/supabase-js');
@@ -425,6 +443,15 @@ async function main() {
     await runHostedAuthPreflight(envValues, options);
   }
 
+  if (options.authSmoke) {
+    await runHostedAuthPreflight(envValues, options);
+    console.log(`Running hosted auth smoke against ${currentPagesOrigin(options)}...`);
+    runPlaywrightSuite(['tests/e2e/hosted-auth.spec.ts'], envValues, {
+      PLAYWRIGHT_AUTH_SMOKE: '1',
+      PLAYWRIGHT_BASE_URL: currentPagesOrigin(options),
+    });
+  }
+
   if (options.smoke) {
     if (!options.baseUrl && !projectExists && !options.deploy) {
       throw new Error(
@@ -434,11 +461,8 @@ async function main() {
 
     const smokeUrl = currentPagesOrigin(options);
     console.log(`Running Playwright smoke against ${smokeUrl}...`);
-    run('npx', ['playwright', 'test'], {
-      env: {
-        ...process.env,
-        PLAYWRIGHT_BASE_URL: smokeUrl,
-      },
+    runPlaywrightSuite([], envValues, {
+      PLAYWRIGHT_BASE_URL: smokeUrl,
     });
   }
 }

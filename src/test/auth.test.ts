@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   hasAuthOwnerMismatch,
+  resolveSignedOutAuthPromptState,
   signedInAuthPatch,
   signedOutAuthPatch,
 } from '@/app/auth/sync-state';
+import { shouldShowAuthLanding } from '@/app/auth/gating';
 import { shouldShowSessionRecovery } from '@/app/auth/recovery';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { SCHEMA_VERSION } from '@/domain/constants';
@@ -178,6 +180,49 @@ describe('auth sync state guards', () => {
       remoteUserId: '11111111-1111-4111-8111-111111111111',
     });
   });
+
+  it('keeps member prompt states sticky across later signed-out sync passes', () => {
+    const snapshot = makeSnapshot();
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      identityState: 'member',
+      authPromptState: 'account-mismatch',
+      remoteUserId: '11111111-1111-4111-8111-111111111111',
+    };
+
+    expect(resolveSignedOutAuthPromptState(snapshot.syncState, null)).toBe(
+      'account-mismatch',
+    );
+
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      authPromptState: 'signed-out-by-user',
+    };
+
+    expect(resolveSignedOutAuthPromptState(snapshot.syncState, null)).toBe(
+      'signed-out-by-user',
+    );
+  });
+
+  it('falls back to session-expired when a member workspace loses session state without a prior prompt', () => {
+    const snapshot = makeSnapshot();
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      identityState: 'member',
+      authPromptState: 'none',
+      remoteUserId: '11111111-1111-4111-8111-111111111111',
+    };
+
+    expect(resolveSignedOutAuthPromptState(snapshot.syncState, null)).toBe(
+      'session-expired',
+    );
+    expect(
+      resolveSignedOutAuthPromptState(
+        snapshot.syncState,
+        'account-mismatch',
+      ),
+    ).toBe('account-mismatch');
+  });
 });
 
 describe('shouldShowSessionRecovery', () => {
@@ -204,5 +249,33 @@ describe('shouldShowSessionRecovery', () => {
 
     expect(shouldShowSessionRecovery(snapshot.syncState, false)).toBe(true);
     expect(shouldShowSessionRecovery(snapshot.syncState, true)).toBe(false);
+  });
+});
+
+describe('shouldShowAuthLanding', () => {
+  it('shows the landing for a clean signed-out device', () => {
+    expect(
+      shouldShowAuthLanding({
+        authConfigured: true,
+        authReady: true,
+        hasLocalData: false,
+        hasSession: false,
+        shouldShowSessionRecovery: false,
+        snapshotReady: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not show the landing when a member workspace needs recovery', () => {
+    expect(
+      shouldShowAuthLanding({
+        authConfigured: true,
+        authReady: true,
+        hasLocalData: false,
+        hasSession: false,
+        shouldShowSessionRecovery: true,
+        snapshotReady: true,
+      }),
+    ).toBe(false);
   });
 });

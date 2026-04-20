@@ -62,6 +62,12 @@ Before provider-backed hosted auth smoke, run:
 
 That preflight uses a server-only Supabase key from the shell to verify that generated email-link redirects stay on the hosted validation origin instead of falling back to localhost or another stale Site URL.
 
+Once that passes, run:
+
+- `npm run cf:pages:auth-smoke`
+
+That deploys the current build to the validation project, then uses server-side generated magic links to exercise hosted sign-in, recovery, and wrong-account protection against that live deployment.
+
 Rules:
 
 - do not attach `holdfast.xylent.studio` to the validation project
@@ -157,6 +163,7 @@ Current repo/backend foundation already includes:
 - `npm run cf:pages:list`
 - `npm run cf:pages:status`
 - `npm run cf:pages:auth-preflight`
+- `npm run cf:pages:auth-smoke`
 - `npm run cf:pages:validate`
 - `npm run build`
 - `npm run test:e2e`

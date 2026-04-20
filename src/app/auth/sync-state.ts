@@ -41,3 +41,20 @@ export function signedOutAuthPatch(
       current.identityState === 'member' ? current.remoteUserId : null,
   };
 }
+
+export function resolveSignedOutAuthPromptState(
+  current: SyncStateRecord,
+  pendingPromptState: SyncAuthPromptState | null,
+): SyncAuthPromptState {
+  if (pendingPromptState) {
+    return pendingPromptState;
+  }
+
+  if (current.identityState !== 'member') {
+    return 'none';
+  }
+
+  return current.authPromptState === 'none'
+    ? 'session-expired'
+    : current.authPromptState;
+}

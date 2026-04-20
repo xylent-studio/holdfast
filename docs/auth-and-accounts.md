@@ -165,6 +165,12 @@ Before hosted auth smoke on the validation project, use the repo preflight:
 
 That checks whether Supabase-generated email-link redirects are still pointing at localhost or another stale origin before a deeper hosted auth pass.
 
+When the preflight passes, run:
+
+- `npm run cf:pages:auth-smoke`
+
+That hosted auth smoke deploys the current validation build, then uses server-side generated magic links to verify the validation app can sign in, recover a lost local session, and reject the wrong account on a member-owned device workspace.
+
 Required Google OAuth basics:
 
 - Google OAuth client

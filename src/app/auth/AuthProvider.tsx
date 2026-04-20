@@ -10,6 +10,7 @@ import type { Session } from '@supabase/supabase-js';
 import { AuthContext, type AuthContextValue } from '@/app/auth/context';
 import {
   hasAuthOwnerMismatch,
+  resolveSignedOutAuthPromptState,
   signedInAuthPatch,
   signedOutAuthPatch,
 } from '@/app/auth/sync-state';
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (nextSession?.user?.id) {
         if (hasAuthOwnerMismatch(current, nextSession.user.id)) {
           pendingSignedOutPromptRef.current = 'account-mismatch';
+          await updateSyncState(signedOutAuthPatch(current, 'account-mismatch'));
           setError(
             "This device is still holding another account's workspace. Sign back into that account to keep syncing here.",
           );
@@ -59,9 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return nextSession;
       }
 
-      const promptState =
-        pendingSignedOutPromptRef.current ??
-        (current.identityState === 'member' ? 'session-expired' : 'none');
+      const promptState = resolveSignedOutAuthPromptState(
+        current,
+        pendingSignedOutPromptRef.current,
+      );
       pendingSignedOutPromptRef.current = null;
       await updateSyncState(signedOutAuthPatch(current, promptState));
       return null;

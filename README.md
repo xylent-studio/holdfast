@@ -93,6 +93,7 @@ Useful commands:
 npm run cf:whoami
 npm run cf:pages:status
 npm run cf:pages:auth-preflight
+npm run cf:pages:auth-smoke
 npm run cf:pages:validate
 npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev
 npm run supabase -- --version

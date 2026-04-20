@@ -270,6 +270,8 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
   const auth = useAuth();
   const sync = useSync();
   const localDataExists = hasMeaningfulLocalState(snapshot);
+  const deviceWorkspaceExists =
+    localDataExists || snapshot.syncState.identityState === 'member';
   const [workspaceSafetyOpen, setWorkspaceSafetyOpen] = useState(false);
   const [longerViewOpen, setLongerViewOpen] = useState(false);
   const [weeklyOpen, setWeeklyOpen] = useState(false);
@@ -358,7 +360,7 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
             </>
           ) : (
             <AuthAccessActions
-              hasLocalData={localDataExists}
+              hasLocalData={deviceWorkspaceExists}
               nextPath="/settings"
             />
           )}
