@@ -18,7 +18,7 @@ Status: mostly complete
 - port voice memo recording
 - port dictation
 - port richer attachment preview
-- port export/import flows
+- finish current-workspace restore/import flows
 - tighten focus behavior
 - improve finish-day ergonomics
 

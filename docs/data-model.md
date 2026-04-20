@@ -301,3 +301,24 @@ Current extension direction:
 - add raw-capture preservation without forcing immediate classification
 - add first-class list primitives without creating a second navigation model
 - preserve migration sanity by evolving the schema deliberately rather than smuggling list semantics into the existing task/note shape
+
+## Manual Backup Export
+
+The app can export a manual workspace backup from the current local replica.
+
+That backup intentionally includes:
+
+- items
+- lists and list items
+- daily and weekly records
+- routines
+- settings
+- attachment metadata plus attachment payloads
+
+That backup intentionally excludes:
+
+- mutation queue internals
+- sync state
+- local-only recovery-session history
+
+This keeps the file user-meaningful instead of leaking device bookkeeping into a backup the user may actually need later.

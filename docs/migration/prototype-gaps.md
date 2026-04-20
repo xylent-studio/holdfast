@@ -62,7 +62,7 @@ The new app now includes a deliberate recovery path for earlier prototype data:
 - undo newer recoveries cleanly on-device through recorded recovery-session history
 - let older recoveries roll back from the same browser source or backup file, using a best-effort safety-first undo path when pre-undo snapshots do not exist
 
-General workspace export is still deferred.
+General workspace backup export now exists. Current-workspace restore/import is still deferred.
 
 ### Attachment preview UX
 

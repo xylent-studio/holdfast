@@ -6,6 +6,7 @@ import { LANES } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import { currentWeekLabel } from '@/domain/logic/selectors';
 import { PrototypeRecoveryPanel } from '@/features/settings/PrototypeRecoveryPanel';
+import { WorkspaceBackupPanel } from '@/features/settings/WorkspaceBackupPanel';
 import {
   createRoutine,
   deleteRoutine,
@@ -142,6 +143,7 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
         </div>
       </Panel>
 
+      <WorkspaceBackupPanel />
       <PrototypeRecoveryPanel />
 
       <Panel>
