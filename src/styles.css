@@ -294,14 +294,16 @@ p {
 .auth-shell {
   display: grid;
   min-height: 100vh;
-  padding: 1rem;
+  padding: 1.5rem;
   place-items: center;
 }
 
 .auth-card {
+  align-items: flex-start;
   gap: 1.25rem;
   margin: 0 auto;
-  max-width: 560px;
+  max-width: 720px;
+  padding: 1.4rem;
   width: 100%;
 }
 
@@ -312,10 +314,21 @@ p {
   gap: 0.85rem;
 }
 
+.auth-copy h1 {
+  font-size: clamp(2.2rem, 5vw, 3rem);
+  line-height: 0.98;
+  margin: 0;
+  max-width: 12ch;
+}
+
+.auth-copy p {
+  max-width: 34rem;
+}
+
 .auth-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .auth-email-box {
@@ -324,7 +337,7 @@ p {
   border-radius: 20px;
   display: grid;
   gap: 0.75rem;
-  padding: 0.9rem;
+  padding: 1rem;
 }
 
 .auth-trust-line,
@@ -334,6 +347,25 @@ p {
 
 .auth-feedback.danger {
   color: var(--danger);
+}
+
+.auth-stack .button,
+.auth-actions .button,
+.file-button {
+  width: 100%;
+}
+
+.recovery-note,
+.recovery-result {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 0.95rem 1rem;
+}
+
+.recovery-note {
+  display: grid;
+  gap: 0.25rem;
 }
 
 .grid {
@@ -627,6 +659,13 @@ p {
   background: var(--accent-soft);
   border: 1px solid rgba(103, 225, 173, 0.3);
   color: var(--text);
+}
+
+@media (min-width: 761px) {
+  .auth-card {
+    gap: 1.5rem;
+    grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.9fr);
+  }
 }
 
 @media (max-width: 760px) {

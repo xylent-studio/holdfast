@@ -52,9 +52,15 @@ The prototype had in-browser audio recording. The new app currently supports att
 
 The prototype exposed speech-to-text capture in some flows. Not yet ported.
 
-### Export/import
+### Prototype recovery import
 
-The prototype could export and import a backup payload. Not yet ported into the new app.
+The new app now includes a deliberate recovery path for earlier prototype data:
+
+- recover from the old browser cache when the app is running on the same origin
+- import a prototype backup JSON file when the earlier cache lives on another origin
+- merge imported items, routines, daily records, weekly records, settings, and attachments without wiping the current workspace
+
+General workspace export is still deferred.
 
 ### Attachment preview UX
 

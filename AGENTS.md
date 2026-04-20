@@ -84,7 +84,7 @@ High-signal files:
 
 - Voice memo recording and dictation from the prototype are not yet ported.
 - Supabase auth, remote schema, storage policies, and browser sync foundation are wired, but hosted provider setup, broader multi-device validation, and richer conflict handling are still incomplete.
-- Export/import and richer attachment preview are not yet ported.
+- Prototype recovery import is available, but general export and richer attachment preview are not yet ported.
 - The schema still uses `today` as the stored state key for user-facing `Now`.
 
 Do not improvise around those gaps. Implement them deliberately or document them.

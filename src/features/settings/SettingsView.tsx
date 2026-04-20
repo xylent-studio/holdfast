@@ -5,6 +5,7 @@ import { useSync } from '@/app/sync/SyncProvider';
 import { LANES } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import { currentWeekLabel } from '@/domain/logic/selectors';
+import { PrototypeRecoveryPanel } from '@/features/settings/PrototypeRecoveryPanel';
 import {
   createRoutine,
   deleteRoutine,
@@ -140,6 +141,8 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
           )}
         </div>
       </Panel>
+
+      <PrototypeRecoveryPanel />
 
       <Panel>
         <div className="panel-header">
