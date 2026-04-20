@@ -155,6 +155,7 @@ Required callback route:
 Required allow-list targets:
 
 - `http://localhost:4173/auth/callback`
+- `https://holdfast-validation.pages.dev/auth/callback`
 - `https://holdfast.xylent.studio/auth/callback`
 - preview callback URLs for hosted previews before public testing
 

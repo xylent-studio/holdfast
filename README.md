@@ -91,6 +91,9 @@ Useful commands:
 
 ```bash
 npm run cf:whoami
+npm run cf:pages:status
+npm run cf:pages:validate
+npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev
 npm run supabase -- --version
 npm run supabase:link
 npm run supabase:status

@@ -46,7 +46,8 @@ Status: mostly complete
 ## Phase 5: Launch And Hosting
 
 - authenticate Cloudflare tooling and MCP access
-- create the Cloudflare Pages project once auth parity is good enough
+- keep using the disposable Pages validation project for hosted smoke
+- create the production Cloudflare Pages project once auth parity is good enough
 - connect `holdfast.xylent.studio`
 - set production environment variables in Pages
 - decide whether to keep or redirect the `*.pages.dev` hostname

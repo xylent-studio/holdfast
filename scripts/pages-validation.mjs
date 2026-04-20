@@ -1,0 +1,368 @@
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+
+const DEFAULT_PROJECT = 'holdfast-validation';
+const DEFAULT_BRANCH = 'main';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function printUsage() {
+  console.log(`Holdfast Pages validation
+
+Usage:
+  node scripts/pages-validation.mjs
+  node scripts/pages-validation.mjs --project holdfast-validation --create --deploy
+  node scripts/pages-validation.mjs --project holdfast-validation --create --deploy --smoke
+  node scripts/pages-validation.mjs --smoke --base-url https://holdfast-validation.pages.dev
+
+Options:
+  --project <name>    Pages project name. Default: ${DEFAULT_PROJECT}
+  --branch <name>     Pages branch to deploy. Default: ${DEFAULT_BRANCH}
+  --base-url <url>    Hosted base URL for smoke tests.
+  --create            Create the Pages project if it does not exist.
+  --deploy            Build the app and deploy dist to the Pages project.
+  --smoke             Run Playwright smoke tests against the hosted URL.
+  --skip-build        Skip npm run build before deploy.
+  --help              Show this message.
+`);
+}
+
+function stripQuotes(value) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+
+  return value;
+}
+
+function loadEnvFile(filePath) {
+  if (!existsSync(filePath)) {
+    return {};
+  }
+
+  const content = readFileSync(filePath, 'utf8');
+  const values = {};
+
+  for (const rawLine of content.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1).trim();
+    values[key] = stripQuotes(value);
+  }
+
+  return values;
+}
+
+function parseJsonc(filePath) {
+  const content = readFileSync(filePath, 'utf8')
+    .replace(/^\s*\/\/.*$/gmu, '')
+    .trim();
+  return JSON.parse(content);
+}
+
+function run(binary, args, options = {}) {
+  const spawnOptions = {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: options.env ?? process.env,
+    stdio: options.capture ? 'pipe' : 'inherit',
+  };
+  const result =
+    process.platform === 'win32'
+      ? spawnSync(
+          process.env.ComSpec ?? 'cmd.exe',
+          ['/d', '/s', '/c', [binary, ...args].map(escapeForCmd).join(' ')],
+          spawnOptions,
+        )
+      : spawnSync(binary, args, spawnOptions);
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0) {
+    const detail =
+      options.capture && (result.stderr || result.stdout)
+        ? `\n${(result.stderr || result.stdout).trim()}`
+        : '';
+    throw new Error(
+      `${binary} ${args.join(' ')} failed with exit code ${result.status}.${detail}`,
+    );
+  }
+
+  return options.capture ? result.stdout.trim() : '';
+}
+
+function escapeForCmd(value) {
+  if (/^[\w./:@=-]+$/u.test(value)) {
+    return value;
+  }
+
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function parseArgs(argv) {
+  const options = {
+    baseUrl: null,
+    branch: DEFAULT_BRANCH,
+    create: false,
+    deploy: false,
+    help: false,
+    project: DEFAULT_PROJECT,
+    skipBuild: false,
+    smoke: false,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === '--project') {
+      options.project = argv[index + 1] ?? options.project;
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--branch') {
+      options.branch = argv[index + 1] ?? options.branch;
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--base-url') {
+      options.baseUrl = argv[index + 1] ?? null;
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--create') {
+      options.create = true;
+      continue;
+    }
+
+    if (arg === '--deploy') {
+      options.deploy = true;
+      continue;
+    }
+
+    if (arg === '--smoke') {
+      options.smoke = true;
+      continue;
+    }
+
+    if (arg === '--skip-build') {
+      options.skipBuild = true;
+      continue;
+    }
+
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+      continue;
+    }
+
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+
+  return options;
+}
+
+function currentPagesOrigin(options) {
+  return options.baseUrl ?? `https://${options.project}.pages.dev`;
+}
+
+function currentPagesCallback(options) {
+  return `${currentPagesOrigin(options).replace(/\/$/u, '')}/auth/callback`;
+}
+
+function requireBuildEnv(envValues) {
+  const missing = [];
+
+  if (!envValues.VITE_SUPABASE_URL) {
+    missing.push('VITE_SUPABASE_URL');
+  }
+
+  if (!envValues.VITE_SUPABASE_ANON_KEY) {
+    missing.push('VITE_SUPABASE_ANON_KEY');
+  }
+
+  if (missing.length) {
+    throw new Error(
+      `Missing build-time auth env: ${missing.join(', ')}. Add them to .env or the shell before deploying hosted validation.`,
+    );
+  }
+}
+
+function loadBuildEnv() {
+  const envPath = path.join(repoRoot, '.env');
+  return {
+    ...loadEnvFile(envPath),
+    ...process.env,
+  };
+}
+
+function getPagesProjects() {
+  const raw = run(
+    'npx',
+    ['wrangler', 'pages', 'project', 'list', '--json'],
+    { capture: true },
+  );
+
+  return JSON.parse(raw || '[]');
+}
+
+function getProjectName(project) {
+  return project.name ?? project['Project Name'] ?? null;
+}
+
+function getProjectDomain(project) {
+  return project.domain ?? project['Project Domains'] ?? null;
+}
+
+function getLatestDeployment(projectName) {
+  const raw = run(
+    'npx',
+    ['wrangler', 'pages', 'deployment', 'list', '--project-name', projectName, '--json'],
+    { capture: true },
+  );
+  const deployments = JSON.parse(raw || '[]');
+  return deployments[0] ?? null;
+}
+
+function getCompatibilityDate() {
+  const wranglerConfig = parseJsonc(path.join(repoRoot, 'wrangler.jsonc'));
+  return wranglerConfig.compatibility_date;
+}
+
+function printStatus(project, envValues, options) {
+  const latestDeployment = project ? getLatestDeployment(options.project) : null;
+
+  console.log('Holdfast Pages validation status');
+  console.log(`- Pages project: ${options.project}`);
+  console.log(`- Project exists: ${project ? 'yes' : 'no'}`);
+  console.log(
+    `- Build auth env ready: ${
+      envValues.VITE_SUPABASE_URL && envValues.VITE_SUPABASE_ANON_KEY
+        ? 'yes'
+        : 'no'
+    }`,
+  );
+  console.log(
+    `- Hosted origin: ${
+      project ? `https://${getProjectDomain(project)}` : currentPagesOrigin(options)
+    }`,
+  );
+  console.log(`- Hosted callback: ${currentPagesCallback(options)}`);
+  if (latestDeployment?.Deployment) {
+    console.log(`- Latest deployment: ${latestDeployment.Deployment}`);
+  }
+  console.log(
+    '- Reminder: keep the eventual production Pages project Git-integrated; use this validation project as a disposable hosted smoke surface.',
+  );
+}
+
+const options = parseArgs(process.argv.slice(2));
+
+if (options.help) {
+  printUsage();
+  process.exit(0);
+}
+
+const envValues = loadBuildEnv();
+
+run('npx', ['wrangler', 'whoami']);
+
+const projects = getPagesProjects();
+let project =
+  projects.find((candidate) => getProjectName(candidate) === options.project) ??
+  null;
+let projectExists = Boolean(project);
+
+printStatus(project, envValues, options);
+
+if (options.create && !projectExists) {
+  console.log(`Creating Pages project ${options.project}...`);
+  run('npx', [
+    'wrangler',
+    'pages',
+    'project',
+    'create',
+    options.project,
+    '--production-branch',
+    options.branch,
+    '--compatibility-date',
+    getCompatibilityDate(),
+  ]);
+  projectExists = true;
+  project = {
+    'Project Domains': `${options.project}.pages.dev`,
+    'Project Name': options.project,
+  };
+}
+
+if (options.deploy) {
+  requireBuildEnv(envValues);
+
+  if (!projectExists) {
+    throw new Error(
+      `Pages project ${options.project} does not exist. Re-run with --create or create it in Cloudflare first.`,
+    );
+  }
+
+  if (!options.skipBuild) {
+    run('npm', ['run', 'build']);
+  }
+
+  console.log(`Deploying dist to ${options.project}...`);
+  run('npx', [
+    'wrangler',
+    'pages',
+    'deployment',
+    'create',
+    'dist',
+    '--project-name',
+    options.project,
+    '--branch',
+    options.branch,
+    '--commit-dirty',
+    '--upload-source-maps',
+  ]);
+
+  console.log(`Hosted validation URL: ${currentPagesOrigin(options)}`);
+  console.log('Add these before Google hosted sign-in smoke if you have not already:');
+  console.log(`- Supabase redirect allow-list: ${currentPagesCallback(options)}`);
+  console.log(`- Google authorized JavaScript origin: ${currentPagesOrigin(options)}`);
+  console.log(
+    '- Google authorized redirect URI: use the Supabase callback shown in the provider settings.',
+  );
+}
+
+if (options.smoke) {
+  if (!options.baseUrl && !projectExists && !options.deploy) {
+    throw new Error(
+      `Pages project ${options.project} does not exist. Pass --base-url or create and deploy the validation project first.`,
+    );
+  }
+
+  const smokeUrl = currentPagesOrigin(options);
+  console.log(`Running Playwright smoke against ${smokeUrl}...`);
+  run('npx', ['playwright', 'test'], {
+    env: {
+      ...process.env,
+      PLAYWRIGHT_BASE_URL: smokeUrl,
+    },
+  });
+}
