@@ -1,5 +1,5 @@
 interface LoadingPanelProps {
-  layout?: 'app' | 'auth';
+  layout?: 'app' | 'auth' | 'screen';
 }
 
 export function LoadingPanel({ layout = 'app' }: LoadingPanelProps) {
@@ -15,6 +15,16 @@ export function LoadingPanel({ layout = 'app' }: LoadingPanelProps) {
     return (
       <div className="auth-shell">
         <section className="panel auth-card">
+          <div className="auth-copy">{content}</div>
+        </section>
+      </div>
+    );
+  }
+
+  if (layout === 'screen') {
+    return (
+      <div className="loading-screen">
+        <section className="panel loading-screen-card">
           <div className="auth-copy">{content}</div>
         </section>
       </div>

@@ -1,8 +1,30 @@
 import { describe, expect, it } from 'vitest';
 
-import { planQuickAddItem } from '@/domain/logic/capture';
+import { buildQuickAddDraft, planQuickAddItem } from '@/domain/logic/capture';
 
 describe('planQuickAddItem', () => {
+  it('uses route-aware defaults for current-context add surfaces', () => {
+    expect(buildQuickAddDraft('2026-04-20', 'today')).toEqual({
+      captureMode: 'context',
+      chosenDate: '2026-04-20',
+      chosenTime: '',
+      kind: 'task',
+      placement: 'today',
+      shapeNow: true,
+      timingMode: 'tomorrow',
+    });
+
+    expect(buildQuickAddDraft('2026-04-20', 'upcoming')).toEqual({
+      captureMode: 'context',
+      chosenDate: '2026-04-20',
+      chosenTime: '',
+      kind: 'task',
+      placement: 'upcoming',
+      shapeNow: true,
+      timingMode: 'someday',
+    });
+  });
+
   it('defaults to uncertain Inbox capture without forced classification', () => {
     const result = planQuickAddItem({
       rawText: 'groceries, eggs, coffee, check pantry first',
@@ -54,6 +76,26 @@ describe('planQuickAddItem', () => {
       sourceDate: '2026-04-18',
       scheduledDate: '2026-04-19',
       scheduledTime: '09:30',
+    });
+  });
+
+  it('preserves context capture mode when the current surface placement is explicit', () => {
+    const result = planQuickAddItem({
+      rawText: 'Check in with vendor',
+      currentDate: '2026-04-18',
+      shapeNow: true,
+      kind: 'task',
+      placement: 'today',
+      timingMode: 'tomorrow',
+      chosenDate: '2026-04-18',
+      chosenTime: '',
+      captureMode: 'context',
+    });
+
+    expect(result).toMatchObject({
+      captureMode: 'context',
+      scheduledDate: '2026-04-18',
+      status: 'today',
     });
   });
 });

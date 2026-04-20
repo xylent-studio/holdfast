@@ -12,4 +12,6 @@ test('shows the signed-out landing on a clean browser', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: 'Email me a sign-in link' }),
   ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
 });

@@ -15,6 +15,16 @@ export type QuickAddTimingMode =
   | 'someday';
 export type QuickAddPlacement = 'today' | 'upcoming';
 
+export interface QuickAddDraft {
+  captureMode: Extract<CaptureMode, 'context' | 'direct'>;
+  chosenDate: DateKey;
+  chosenTime: string;
+  kind: Extract<ItemKind, 'task' | 'note'>;
+  placement: QuickAddPlacement;
+  shapeNow: boolean;
+  timingMode: QuickAddTimingMode;
+}
+
 export interface QuickAddPlanInput {
   rawText: string;
   currentDate: DateKey;
@@ -40,6 +50,45 @@ export interface PlannedQuickAddItem {
   sourceDate: DateKey;
   scheduledDate: DateKey | null;
   scheduledTime: string | null;
+}
+
+export function buildQuickAddDraft(
+  currentDate: DateKey,
+  preferredPlacement: QuickAddPlacement | null,
+): QuickAddDraft {
+  if (preferredPlacement === 'today') {
+    return {
+      captureMode: 'context',
+      chosenDate: currentDate,
+      chosenTime: '',
+      kind: 'task',
+      placement: 'today',
+      shapeNow: true,
+      timingMode: 'tomorrow',
+    };
+  }
+
+  if (preferredPlacement === 'upcoming') {
+    return {
+      captureMode: 'context',
+      chosenDate: currentDate,
+      chosenTime: '',
+      kind: 'task',
+      placement: 'upcoming',
+      shapeNow: true,
+      timingMode: 'someday',
+    };
+  }
+
+  return {
+    captureMode: 'direct',
+    chosenDate: currentDate,
+    chosenTime: '',
+    kind: 'task',
+    placement: 'today',
+    shapeNow: false,
+    timingMode: 'tomorrow',
+  };
 }
 
 export function splitCapturedText(

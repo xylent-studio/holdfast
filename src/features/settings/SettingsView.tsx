@@ -1,22 +1,18 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 
 import { AuthAccessActions } from '@/app/auth/AuthAccessActions';
 import { useAuth } from '@/app/auth/useAuth';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { useSync } from '@/app/sync/useSync';
-import { LANES } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import { currentWeekLabel } from '@/domain/logic/selectors';
-import {
-  createRoutine,
-  deleteRoutine,
-  updateRoutine,
-  updateSettings,
-  updateWeeklyRecord,
-} from '@/storage/local/api';
+import { updateSettings, updateWeeklyRecord } from '@/storage/local/api';
 import type { HoldfastSnapshot } from '@/storage/local/api';
-import { EmptyState } from '@/shared/ui/EmptyState';
+import type { SettingsRecord, WeeklyRecord } from '@/domain/schemas/records';
 import { Panel } from '@/shared/ui/Panel';
+
+import { ExpandablePanel } from './ExpandablePanel';
+import { RoutineSetupPanel } from './RoutineSetupPanel';
 
 const PrototypeRecoveryPanel = lazy(async () =>
   import('@/features/settings/PrototypeRecoveryPanel').then((module) => ({
@@ -32,6 +28,20 @@ const WorkspaceBackupPanel = lazy(async () =>
 interface SettingsViewProps {
   currentDate: DateKey;
   snapshot: HoldfastSnapshot;
+}
+
+interface LongerViewEditorProps {
+  settings: SettingsRecord;
+}
+
+interface WeeklyEditorProps {
+  currentDate: DateKey;
+  weeklyRecord: WeeklyRecord;
+}
+
+function summarizeText(...values: string[]): string {
+  const summary = values.find((value) => value.trim())?.trim() ?? 'Nothing set yet.';
+  return summary.length > 120 ? `${summary.slice(0, 117).trimEnd()}...` : summary;
 }
 
 function syncStatusLabel(
@@ -72,10 +82,203 @@ function syncStatusLabel(
     : 'Not signed in';
 }
 
+function LongerViewEditor({ settings }: LongerViewEditorProps) {
+  const [direction, setDirection] = useState(settings.direction);
+  const [standards, setStandards] = useState(settings.standards);
+  const [why, setWhy] = useState(settings.why);
+  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'saving'>(
+    'idle',
+  );
+  const dirty =
+    direction !== settings.direction ||
+    standards !== settings.standards ||
+    why !== settings.why;
+
+  const handleSave = async (): Promise<void> => {
+    if (!dirty) {
+      return;
+    }
+
+    setSaveState('saving');
+    await updateSettings({ direction, standards, why });
+    setSaveState('saved');
+  };
+
+  return (
+    <>
+      <div className="grid two">
+        <label className="field-stack">
+          <span>12-month direction</span>
+          <textarea
+            aria-label="12-month direction"
+            onChange={(event) => {
+              setSaveState('idle');
+              setDirection(event.target.value);
+            }}
+            rows={4}
+            value={direction}
+          />
+        </label>
+        <label className="field-stack">
+          <span>Non-negotiables</span>
+          <textarea
+            aria-label="Non-negotiables"
+            onChange={(event) => {
+              setSaveState('idle');
+              setStandards(event.target.value);
+            }}
+            rows={4}
+            value={standards}
+          />
+        </label>
+      </div>
+      <label className="field-stack">
+        <span>Why this matters</span>
+        <textarea
+          aria-label="Why this matters"
+          onChange={(event) => {
+            setSaveState('idle');
+            setWhy(event.target.value);
+          }}
+          rows={4}
+          value={why}
+        />
+      </label>
+      <div className="dialog-actions">
+        {saveState === 'saved' && !dirty ? (
+          <span className="form-status">Saved</span>
+        ) : null}
+        <button
+          className="button ghost"
+          disabled={!dirty}
+          onClick={() => {
+            setDirection(settings.direction);
+            setStandards(settings.standards);
+            setWhy(settings.why);
+            setSaveState('idle');
+          }}
+          type="button"
+        >
+          Cancel
+        </button>
+        <button
+          className="button accent"
+          disabled={!dirty || saveState === 'saving'}
+          onClick={() => void handleSave()}
+          type="button"
+        >
+          {saveState === 'saving' ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function WeeklyEditor({ currentDate, weeklyRecord }: WeeklyEditorProps) {
+  const [focus, setFocus] = useState(weeklyRecord.focus);
+  const [protect, setProtect] = useState(weeklyRecord.protect);
+  const [notes, setNotes] = useState(weeklyRecord.notes);
+  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'saving'>(
+    'idle',
+  );
+  const dirty =
+    focus !== weeklyRecord.focus ||
+    protect !== weeklyRecord.protect ||
+    notes !== weeklyRecord.notes;
+
+  const handleSave = async (): Promise<void> => {
+    if (!dirty) {
+      return;
+    }
+
+    setSaveState('saving');
+    await updateWeeklyRecord(currentDate, { focus, notes, protect });
+    setSaveState('saved');
+  };
+
+  return (
+    <>
+      <div className="grid two">
+        <label className="field-stack">
+          <span>Week focus</span>
+          <textarea
+            aria-label="Week focus"
+            onChange={(event) => {
+              setSaveState('idle');
+              setFocus(event.target.value);
+            }}
+            rows={4}
+            value={focus}
+          />
+        </label>
+        <label className="field-stack">
+          <span>Protect</span>
+          <textarea
+            aria-label="Protect"
+            onChange={(event) => {
+              setSaveState('idle');
+              setProtect(event.target.value);
+            }}
+            rows={4}
+            value={protect}
+          />
+        </label>
+      </div>
+      <label className="field-stack">
+        <span>Notes</span>
+        <textarea
+          aria-label="Notes"
+          onChange={(event) => {
+            setSaveState('idle');
+            setNotes(event.target.value);
+          }}
+          rows={4}
+          value={notes}
+        />
+      </label>
+      <div className="dialog-actions">
+        {saveState === 'saved' && !dirty ? (
+          <span className="form-status">Saved</span>
+        ) : null}
+        <button
+          className="button ghost"
+          disabled={!dirty}
+          onClick={() => {
+            setFocus(weeklyRecord.focus);
+            setProtect(weeklyRecord.protect);
+            setNotes(weeklyRecord.notes);
+            setSaveState('idle');
+          }}
+          type="button"
+        >
+          Cancel
+        </button>
+        <button
+          className="button accent"
+          disabled={!dirty || saveState === 'saving'}
+          onClick={() => void handleSave()}
+          type="button"
+        >
+          {saveState === 'saving' ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
   const auth = useAuth();
   const sync = useSync();
   const localDataExists = hasMeaningfulLocalState(snapshot);
+  const [workspaceSafetyOpen, setWorkspaceSafetyOpen] = useState(false);
+  const [longerViewOpen, setLongerViewOpen] = useState(false);
+  const [weeklyOpen, setWeeklyOpen] = useState(false);
+  const [routineOpen, setRoutineOpen] = useState(false);
+  const routineSummary = snapshot.routines.length
+    ? `${snapshot.routines.length} routine${
+        snapshot.routines.length === 1 ? '' : 's'
+      } ready to review.`
+    : 'No custom routines yet.';
 
   return (
     <div className="stack">
@@ -162,246 +365,73 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
         </div>
       </Panel>
 
-      <Suspense fallback={null}>
-        <WorkspaceBackupPanel />
-        <PrototypeRecoveryPanel />
-      </Suspense>
-
-      <Panel>
-        <div className="panel-header">
-          <h2>Settings</h2>
-          <p>Keep this light. Set only what helps.</p>
-        </div>
-        <div className="grid two">
-          <label className="field-stack">
-            <span>12-month direction</span>
-            <textarea
-              defaultValue={snapshot.settings.direction}
-              key={`direction-${snapshot.settings.updatedAt}`}
-              onBlur={(event) =>
-                void updateSettings({ direction: event.target.value })
-              }
-              rows={4}
-            />
-          </label>
-          <label className="field-stack">
-            <span>Non-negotiables</span>
-            <textarea
-              defaultValue={snapshot.settings.standards}
-              key={`standards-${snapshot.settings.updatedAt}`}
-              onBlur={(event) =>
-                void updateSettings({ standards: event.target.value })
-              }
-              rows={4}
-            />
-          </label>
-        </div>
-        <label className="field-stack">
-          <span>Why this matters</span>
-          <textarea
-            defaultValue={snapshot.settings.why}
-            key={`why-${snapshot.settings.updatedAt}`}
-            onBlur={(event) => void updateSettings({ why: event.target.value })}
-            rows={4}
-          />
-        </label>
-      </Panel>
-
-      <Panel>
-        <div className="panel-header">
-          <h2>Weekly</h2>
-          <p>{currentWeekLabel(currentDate)}</p>
-        </div>
-        <div className="grid two">
-          <label className="field-stack">
-            <span>Week focus</span>
-            <textarea
-              defaultValue={snapshot.weeklyRecord.focus}
-              key={`week-focus-${snapshot.weeklyRecord.updatedAt}`}
-              onBlur={(event) =>
-                void updateWeeklyRecord(currentDate, {
-                  focus: event.target.value,
-                })
-              }
-              rows={4}
-            />
-          </label>
-          <label className="field-stack">
-            <span>Protect</span>
-            <textarea
-              defaultValue={snapshot.weeklyRecord.protect}
-              key={`week-protect-${snapshot.weeklyRecord.updatedAt}`}
-              onBlur={(event) =>
-                void updateWeeklyRecord(currentDate, {
-                  protect: event.target.value,
-                })
-              }
-              rows={4}
-            />
-          </label>
-        </div>
-        <label className="field-stack">
-          <span>Notes</span>
-          <textarea
-            defaultValue={snapshot.weeklyRecord.notes}
-            key={`week-notes-${snapshot.weeklyRecord.updatedAt}`}
-            onBlur={(event) =>
-              void updateWeeklyRecord(currentDate, {
-                notes: event.target.value,
-              })
-            }
-            rows={4}
-          />
-        </label>
-      </Panel>
-
-      <Panel>
-        <div className="panel-header split">
-          <div>
-            <h2>Custom routines</h2>
-            <p>Recurring things Holdfast should bring into Now or Upcoming.</p>
-          </div>
-          <button
-            className="button accent"
-            onClick={() => void createRoutine()}
-            type="button"
-          >
-            Add routine
-          </button>
-        </div>
-        {snapshot.routines.length ? (
-          <div className="item-list">
-            {snapshot.routines.map((routine) => (
-              <article className="item-card day-result" key={routine.id}>
-                <label className="field-stack">
-                  <span>Title</span>
-                  <input
-                    onBlur={(event) =>
-                      void updateRoutine(routine.id, {
-                        title: event.target.value,
-                      })
-                    }
-                    defaultValue={routine.title}
-                    type="text"
-                  />
-                </label>
-                <div className="grid two">
-                  <label className="field-stack">
-                    <span>Area</span>
-                    <select
-                      onChange={(event) =>
-                        void updateRoutine(routine.id, {
-                          lane: event.target
-                            .value as (typeof LANES)[number]['key'],
-                        })
-                      }
-                      value={routine.lane}
-                    >
-                      {LANES.map((lane) => (
-                        <option key={lane.key} value={lane.key}>
-                          {lane.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field-stack">
-                    <span>Destination</span>
-                    <select
-                      onChange={(event) =>
-                        void updateRoutine(routine.id, {
-                          destination: event.target.value as
-                            | 'today'
-                            | 'upcoming',
-                        })
-                      }
-                      value={routine.destination}
-                    >
-                      <option value="today">Now</option>
-                      <option value="upcoming">Upcoming</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="grid two">
-                  <label className="field-stack">
-                    <span>Time</span>
-                    <input
-                      onBlur={(event) =>
-                        void updateRoutine(routine.id, {
-                          scheduledTime: event.target.value || null,
-                        })
-                      }
-                      defaultValue={routine.scheduledTime ?? ''}
-                      type="time"
-                    />
-                  </label>
-                  <label className="field-stack">
-                    <span>Status</span>
-                    <select
-                      onChange={(event) =>
-                        void updateRoutine(routine.id, {
-                          active: event.target.value === 'active',
-                        })
-                      }
-                      value={routine.active ? 'active' : 'off'}
-                    >
-                      <option value="active">Active</option>
-                      <option value="off">Off</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="field-stack">
-                  <span>Days</span>
-                  <div className="chip-row">
-                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => (
-                      <button
-                        className={`chip ${routine.weekdays.includes(index) ? 'active' : ''}`}
-                        key={`${routine.id}-${index}`}
-                        onClick={() =>
-                          void updateRoutine(routine.id, {
-                            weekdays: routine.weekdays.includes(index)
-                              ? routine.weekdays.filter(
-                                  (entry) => entry !== index,
-                                )
-                              : [...routine.weekdays, index].sort(
-                                  (left, right) => left - right,
-                                ),
-                          })
-                        }
-                        type="button"
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <label className="field-stack">
-                  <span>Notes</span>
-                  <textarea
-                    onBlur={(event) =>
-                      void updateRoutine(routine.id, {
-                        notes: event.target.value,
-                      })
-                    }
-                    defaultValue={routine.notes}
-                    rows={3}
-                  />
-                </label>
-                <div className="dialog-actions">
-                  <button
-                    className="button danger"
-                    onClick={() => void deleteRoutine(routine.id)}
-                    type="button"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <EmptyState>No custom routines yet.</EmptyState>
+      <ExpandablePanel
+        description="Keep only the longer-view notes that actually help."
+        isOpen={longerViewOpen}
+        onToggle={() => setLongerViewOpen((current) => !current)}
+        summary={summarizeText(
+          snapshot.settings.direction,
+          snapshot.settings.standards,
+          snapshot.settings.why,
         )}
-      </Panel>
+        title="Longer view"
+      >
+        <LongerViewEditor
+          key={snapshot.settings.updatedAt}
+          settings={snapshot.settings}
+        />
+      </ExpandablePanel>
+
+      <ExpandablePanel
+        description={currentWeekLabel(currentDate)}
+        isOpen={weeklyOpen}
+        onToggle={() => setWeeklyOpen((current) => !current)}
+        summary={
+          summarizeText(
+            snapshot.weeklyRecord.focus,
+            snapshot.weeklyRecord.protect,
+            snapshot.weeklyRecord.notes,
+          ) === 'Nothing set yet.'
+            ? `${currentWeekLabel(currentDate)}. Nothing set yet.`
+            : summarizeText(
+                snapshot.weeklyRecord.focus,
+                snapshot.weeklyRecord.protect,
+                snapshot.weeklyRecord.notes,
+              )
+        }
+        title="This week"
+      >
+        <WeeklyEditor
+          currentDate={currentDate}
+          key={snapshot.weeklyRecord.updatedAt}
+          weeklyRecord={snapshot.weeklyRecord}
+        />
+      </ExpandablePanel>
+
+      <ExpandablePanel
+        description="Recurring things Holdfast should bring into Now or Upcoming."
+        isOpen={routineOpen}
+        onToggle={() => setRoutineOpen((current) => !current)}
+        summary={routineSummary}
+        title="Routine setup"
+      >
+        <RoutineSetupPanel routines={snapshot.routines} />
+      </ExpandablePanel>
+
+      <ExpandablePanel
+        description="Backup this workspace or recover earlier local work when you need to."
+        isOpen={workspaceSafetyOpen}
+        onToggle={() => setWorkspaceSafetyOpen((current) => !current)}
+        summary="Back up this device or recover earlier prototype work."
+        title="Workspace safety"
+      >
+        <Suspense fallback={<div className="empty-inline">Loading tools...</div>}>
+          <div className="stack">
+            <WorkspaceBackupPanel />
+            <PrototypeRecoveryPanel />
+          </div>
+        </Suspense>
+      </ExpandablePanel>
     </div>
   );
 }

@@ -175,6 +175,10 @@ textarea {
   justify-content: flex-end;
 }
 
+.active-toggle {
+  border-color: rgba(103, 225, 173, 0.3);
+}
+
 .date-input {
   width: 10.5rem;
 }
@@ -200,6 +204,11 @@ textarea {
 .button:hover,
 .chip:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.52;
 }
 
 .button.accent,
@@ -328,7 +337,7 @@ p {
 .auth-actions {
   display: grid;
   gap: 0.65rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .auth-email-box {
@@ -539,6 +548,12 @@ p {
   color: var(--muted);
 }
 
+.section-summary,
+.form-status {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
 .day-result {
   gap: 0.6rem;
 }
@@ -626,6 +641,18 @@ p {
 .loading-panel {
   min-height: 14rem;
   place-content: center;
+}
+
+.loading-screen {
+  display: grid;
+  min-height: 100vh;
+  padding: 1.5rem;
+  place-items: center;
+}
+
+.loading-screen-card {
+  max-width: 32rem;
+  width: 100%;
 }
 
 .bottom-nav {

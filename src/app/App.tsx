@@ -45,6 +45,20 @@ const SettingsView = lazy(async () =>
   })),
 );
 
+function quickAddPlacementForPath(
+  pathname: string,
+): 'today' | 'upcoming' | null {
+  if (pathname === '/now') {
+    return 'today';
+  }
+
+  if (pathname === '/upcoming') {
+    return 'upcoming';
+  }
+
+  return null;
+}
+
 function AppRoutes() {
   const [currentDate, setCurrentDate] = useState(todayDateKey());
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -81,6 +95,10 @@ function AppRoutes() {
     return <AuthCallbackView />;
   }
 
+  if (!snapshot) {
+    return <LoadingPanel layout="screen" />;
+  }
+
   if (shouldWaitForAuthGate) {
     return <LoadingPanel layout="auth" />;
   }
@@ -93,11 +111,13 @@ function AppRoutes() {
     <>
       <AppShell
         currentDate={currentDate}
-        isLoading={!snapshot}
         onAdd={() => setQuickAddOpen(true)}
         onChangeDate={setCurrentDate}
         onOpenSettings={() => navigate('/settings')}
-        openCount={snapshot ? openItems(snapshot.items).length : 0}
+        openCount={openItems(snapshot.items).length}
+        showDateControls={
+          location.pathname !== '/inbox' && location.pathname !== '/settings'
+        }
         viewPath={location.pathname}
       >
         {shouldShowSessionRecovery && location.pathname !== '/settings' ? (
@@ -113,57 +133,51 @@ function AppRoutes() {
             <Route
               path="/now"
               element={
-                snapshot ? (
-                  <NowView
-                    currentDate={currentDate}
-                    onOpenItem={setSelectedItemId}
-                    snapshot={snapshot}
-                  />
-                ) : null
+                <NowView
+                  currentDate={currentDate}
+                  onOpenItem={setSelectedItemId}
+                  snapshot={snapshot}
+                />
               }
             />
             <Route
               path="/inbox"
               element={
-                snapshot ? (
-                  <InboxView
-                    currentDate={currentDate}
-                    onOpenItem={setSelectedItemId}
-                    snapshot={snapshot}
-                  />
-                ) : null
+                <InboxView
+                  currentDate={currentDate}
+                  onOpenItem={setSelectedItemId}
+                  snapshot={snapshot}
+                />
               }
             />
             <Route
               path="/upcoming"
               element={
-                snapshot ? (
-                  <UpcomingView
-                    currentDate={currentDate}
-                    onOpenItem={setSelectedItemId}
-                    snapshot={snapshot}
-                  />
-                ) : null
+                <UpcomingView
+                  currentDate={currentDate}
+                  onOpenItem={setSelectedItemId}
+                  snapshot={snapshot}
+                />
               }
             />
             <Route
               path="/review"
               element={
-                snapshot ? (
-                  <ReviewView
-                    currentDate={currentDate}
-                    onOpenItem={setSelectedItemId}
-                    snapshot={snapshot}
-                  />
-                ) : null
+                <ReviewView
+                  currentDate={currentDate}
+                  onJumpToDate={(date) => {
+                    setCurrentDate(date);
+                    navigate('/now');
+                  }}
+                  onOpenItem={setSelectedItemId}
+                  snapshot={snapshot}
+                />
               }
             />
             <Route
               path="/settings"
               element={
-                snapshot ? (
-                  <SettingsView currentDate={currentDate} snapshot={snapshot} />
-                ) : null
+                <SettingsView currentDate={currentDate} snapshot={snapshot} />
               }
             />
           </Routes>
@@ -173,6 +187,7 @@ function AppRoutes() {
         currentDate={currentDate}
         isOpen={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}
+        preferredPlacement={quickAddPlacementForPath(location.pathname)}
       />
       {selectedItem ? (
         <Suspense fallback={null}>

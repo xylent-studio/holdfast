@@ -18,12 +18,14 @@ import { StatCard } from '@/shared/ui/StatCard';
 
 interface ReviewViewProps {
   currentDate: DateKey;
+  onJumpToDate: (date: DateKey) => void;
   onOpenItem: (itemId: string) => void;
   snapshot: HoldfastSnapshot;
 }
 
 export function ReviewView({
   currentDate,
+  onJumpToDate,
   onOpenItem,
   snapshot,
 }: ReviewViewProps) {
@@ -102,6 +104,15 @@ export function ReviewView({
                         .filter(Boolean)
                         .join(' | ') || 'Day entry'}
                     </p>
+                    <div className="dialog-actions">
+                      <button
+                        className="button ghost small"
+                        onClick={() => onJumpToDate(result.date as DateKey)}
+                        type="button"
+                      >
+                        Open day
+                      </button>
+                    </div>
                   </div>
                 ),
               )}
@@ -183,6 +194,15 @@ export function ReviewView({
                   Closeout | {day.closed ? 'yes' : 'no'}
                 </span>
               </div>
+              <div className="dialog-actions">
+                <button
+                  className="button ghost small"
+                  onClick={() => onJumpToDate(day.date as DateKey)}
+                  type="button"
+                >
+                  Open day
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -205,6 +225,15 @@ export function ReviewView({
                   This title is still open across multiple items. Consider
                   making it a routine or clarifying scope.
                 </p>
+                <div className="dialog-actions">
+                  <button
+                    className="button ghost small"
+                    onClick={() => setSearch(title)}
+                    type="button"
+                  >
+                    Show matches
+                  </button>
+                </div>
               </div>
             ))}
           </div>

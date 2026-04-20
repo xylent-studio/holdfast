@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { addDays, niceDate, todayDateKey, type DateKey } from '@/domain/dates';
 
 interface TopBarProps {
@@ -6,6 +8,7 @@ interface TopBarProps {
   onChangeDate: (value: DateKey) => void;
   onOpenSettings: () => void;
   openCount: number;
+  showDateControls: boolean;
 }
 
 export function TopBar({
@@ -14,7 +17,9 @@ export function TopBar({
   onChangeDate,
   onOpenSettings,
   openCount,
+  showDateControls,
 }: TopBarProps) {
+  const [showDateJump, setShowDateJump] = useState(false);
   const today = todayDateKey();
   const delta =
     (new Date(`${currentDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86_400_000;
@@ -33,23 +38,48 @@ export function TopBar({
         </div>
       </div>
       <div className="topbar-actions">
-        <div className="date-controls">
-          <button className="button ghost" onClick={() => onChangeDate(addDays(currentDate, -1))} type="button">
-            Prev
-          </button>
-          <button className={`button ${currentDate === today ? 'accent' : 'ghost'}`} onClick={() => onChangeDate(today)} type="button">
-            Today
-          </button>
-          <button className="button ghost" onClick={() => onChangeDate(addDays(currentDate, 1))} type="button">
-            Next
-          </button>
-        </div>
-        <input
-          className="date-input"
-          onChange={(event) => onChangeDate(event.target.value as DateKey)}
-          type="date"
-          value={currentDate}
-        />
+        {showDateControls ? (
+          <>
+            <div className="date-controls">
+              <button
+                className="button ghost"
+                onClick={() => onChangeDate(addDays(currentDate, -1))}
+                type="button"
+              >
+                Prev
+              </button>
+              <button
+                className={`button ${currentDate === today ? 'accent' : 'ghost'}`}
+                onClick={() => onChangeDate(today)}
+                type="button"
+              >
+                Today
+              </button>
+              <button
+                className="button ghost"
+                onClick={() => onChangeDate(addDays(currentDate, 1))}
+                type="button"
+              >
+                Next
+              </button>
+            </div>
+            <button
+              className={`button ghost ${showDateJump ? 'active-toggle' : ''}`}
+              onClick={() => setShowDateJump((current) => !current)}
+              type="button"
+            >
+              Jump to date
+            </button>
+            {showDateJump ? (
+              <input
+                className="date-input"
+                onChange={(event) => onChangeDate(event.target.value as DateKey)}
+                type="date"
+                value={currentDate}
+              />
+            ) : null}
+          </>
+        ) : null}
         <button className="button accent" onClick={onAdd} type="button">
           Add
         </button>
