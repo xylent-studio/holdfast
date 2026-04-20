@@ -4,6 +4,7 @@ Treat this repo as a real product codebase, not a demo.
 
 ## Read First
 
+0. If this machine has the local intel workspace, run `C:\dev\_intel\scripts\Resolve-AgentContext.ps1 -TargetPath C:\dev\GitHub\Holdfast` before deeper work.
 1. [docs/control/docs-index.md](/C:/dev/GitHub/Holdfast/docs/control/docs-index.md)
 2. [docs/product.md](/C:/dev/GitHub/Holdfast/docs/product.md)
 3. [docs/core-flows.md](/C:/dev/GitHub/Holdfast/docs/core-flows.md)
@@ -13,6 +14,8 @@ Treat this repo as a real product codebase, not a demo.
 7. [docs/deployment.md](/C:/dev/GitHub/Holdfast/docs/deployment.md)
 
 The files in [docs/control](/C:/dev/GitHub/Holdfast/docs/control) are the governing product contract. If code, docs, or naming conflict with them, surface the conflict explicitly and resolve it on purpose.
+
+Machine-local `_intel` outputs are supplemental context only. They can help with continuity and handoff on this machine, but they do not override repo docs, code, or the control contract.
 
 ## Product Rules
 
@@ -44,9 +47,10 @@ If a change affects product meaning or persistence semantics, start in `src/doma
 - Use the project-local Wrangler CLI via `npx wrangler` or `npm run cf:*`.
 - Use the project-local Supabase CLI via `npx supabase` or `npm run supabase:*`.
 - GitHub CLI is installed at `C:\Program Files\GitHub CLI\gh.exe`, but may require a fresh shell to appear on `PATH`.
-- `gh` auth is not configured yet. Do not assume GitHub CLI is ready until `gh auth status` passes.
-- `wrangler` is installed, but Cloudflare auth is not configured yet. Do not assume Pages or DNS actions are available until `npm run cf:whoami` passes.
+- `gh` auth is currently configured on this machine. Re-check with `gh auth status` if a later shell behaves differently.
+- `wrangler` auth is currently configured on this machine. Re-check with `npm run cf:whoami` before relying on Pages or DNS actions from a new shell or environment.
 - Docker is not installed, so `supabase start` will not work until a Docker-compatible runtime is added.
+- The `_intel` scripts live outside this repo. Use them when present on this machine, but do not make repo work depend on them being portable.
 
 ## Search Strategy
 
@@ -79,6 +83,7 @@ High-signal files:
 4. Keep feature code thin and product-specific.
 5. Add or update tests when behavior changes.
 6. Update docs if product rules, flows, architecture, or naming changed.
+7. When the local intel workspace is available, write a checkpoint with `C:\dev\_intel\scripts\Write-AgentCheckpoint.ps1 -TargetPath C:\dev\GitHub\Holdfast -TaskType code -Summary "..."` after a pass that materially changes product, storage, auth, sync, or deployment behavior.
 
 ## Current Gaps To Respect
 
