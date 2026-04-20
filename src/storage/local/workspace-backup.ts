@@ -12,8 +12,19 @@ import type {
 import { getAttachmentDownload } from '@/storage/local/api';
 import { db } from '@/storage/local/db';
 
+type BackupRecord<T extends { syncState: unknown }> = Omit<T, 'syncState'>;
+type BackupItemRecord = BackupRecord<ItemRecord>;
+type BackupListRecord = BackupRecord<ListRecord>;
+type BackupListItemRecord = BackupRecord<ListItemRecord>;
+type BackupDailyRecord = BackupRecord<DailyRecord>;
+type BackupWeeklyRecord = BackupRecord<WeeklyRecord>;
+type BackupRoutineRecord = BackupRecord<RoutineRecord>;
+type BackupSettingsRecord = BackupRecord<SettingsRecord>;
+type BackupAttachmentRecord = BackupRecord<AttachmentRecord>;
+
 export interface WorkspaceBackupSummary {
   attachmentCount: number;
+  attachmentPayloadMissingCount: number;
   dayCount: number;
   itemCount: number;
   listCount: number;
@@ -23,24 +34,25 @@ export interface WorkspaceBackupSummary {
 }
 
 export interface WorkspaceBackupAttachment {
-  dataUrl: string;
-  record: AttachmentRecord;
+  dataUrl: string | null;
+  payloadState: 'embedded' | 'missing';
+  record: BackupAttachmentRecord;
 }
 
 export interface WorkspaceBackupFile {
   appSchemaVersion: typeof SCHEMA_VERSION;
   attachments: WorkspaceBackupAttachment[];
-  dailyRecords: DailyRecord[];
+  dailyRecords: BackupDailyRecord[];
   exportedAt: string;
   format: 'holdfast-backup';
-  items: ItemRecord[];
-  listItems: ListItemRecord[];
-  lists: ListRecord[];
-  routines: RoutineRecord[];
-  settings: SettingsRecord | null;
+  items: BackupItemRecord[];
+  listItems: BackupListItemRecord[];
+  lists: BackupListRecord[];
+  routines: BackupRoutineRecord[];
+  settings: BackupSettingsRecord | null;
   summary: WorkspaceBackupSummary;
   version: 1;
-  weeklyRecords: WeeklyRecord[];
+  weeklyRecords: BackupWeeklyRecord[];
 }
 
 export interface WorkspaceBackupExport {
@@ -53,13 +65,13 @@ function compareByCreatedAt<T extends { createdAt: string; id: string }>(
   left: T,
   right: T,
 ): number {
-  return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
+  return (
+    left.createdAt.localeCompare(right.createdAt) ||
+    left.id.localeCompare(right.id)
+  );
 }
 
-function compareByDate<T extends { date: string }>(
-  left: T,
-  right: T,
-): number {
+function compareByDate<T extends { date: string }>(left: T, right: T): number {
   return left.date.localeCompare(right.date);
 }
 
@@ -70,10 +82,7 @@ function compareByWeekStart<T extends { weekStart: string }>(
   return left.weekStart.localeCompare(right.weekStart);
 }
 
-function compareListItems(
-  left: ListItemRecord,
-  right: ListItemRecord,
-): number {
+function compareListItems(left: ListItemRecord, right: ListItemRecord): number {
   return (
     left.listId.localeCompare(right.listId) ||
     left.position - right.position ||
@@ -109,16 +118,19 @@ async function blobToDataUrl(blob: Blob, mimeType: string): Promise<string> {
 }
 
 function buildBackupSummary(
-  items: ItemRecord[],
-  lists: ListRecord[],
-  listItems: ListItemRecord[],
-  dailyRecords: DailyRecord[],
-  weeklyRecords: WeeklyRecord[],
-  routines: RoutineRecord[],
+  items: BackupItemRecord[],
+  lists: BackupListRecord[],
+  listItems: BackupListItemRecord[],
+  dailyRecords: BackupDailyRecord[],
+  weeklyRecords: BackupWeeklyRecord[],
+  routines: BackupRoutineRecord[],
   attachments: WorkspaceBackupAttachment[],
 ): WorkspaceBackupSummary {
   return {
     attachmentCount: attachments.length,
+    attachmentPayloadMissingCount: attachments.filter(
+      (attachment) => attachment.payloadState === 'missing',
+    ).length,
     dayCount: dailyRecords.length,
     itemCount: items.length,
     listCount: lists.length,
@@ -130,6 +142,14 @@ function buildBackupSummary(
 
 export function workspaceBackupFilename(exportedAt: string): string {
   return `holdfast-backup-${exportedAt.slice(0, 10)}.json`;
+}
+
+function stripSyncState<T extends { syncState: unknown }>(
+  record: T,
+): Omit<T, 'syncState'> {
+  const { syncState, ...rest } = record;
+  void syncState;
+  return rest;
 }
 
 export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
@@ -155,20 +175,24 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
 
   const items = itemRows
     .filter((item) => !item.deletedAt)
-    .sort(compareByCreatedAt);
+    .sort(compareByCreatedAt)
+    .map(stripSyncState);
   const lists = listRows
     .filter((list) => !list.deletedAt)
-    .sort(compareByCreatedAt);
+    .sort(compareByCreatedAt)
+    .map(stripSyncState);
   const activeItemIds = new Set(items.map((item) => item.id));
   const activeListIds = new Set(lists.map((list) => list.id));
   const listItems = listItemRows
     .filter(
       (listItem) => !listItem.deletedAt && activeListIds.has(listItem.listId),
     )
-    .sort(compareListItems);
+    .sort(compareListItems)
+    .map(stripSyncState);
   const routines = routineRows
     .filter((routine) => !routine.deletedAt)
-    .sort(compareByCreatedAt);
+    .sort(compareByCreatedAt)
+    .map(stripSyncState);
   const activeAttachments = attachmentRows
     .filter(
       (attachment) =>
@@ -179,20 +203,22 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
   const attachments: WorkspaceBackupAttachment[] = [];
   for (const attachment of activeAttachments) {
     const payload = await getAttachmentDownload(attachment.id);
-    if (!payload) {
-      throw new Error(
-        `Couldn't include attachment "${attachment.name}" in the backup yet.`,
-      );
-    }
 
     attachments.push({
-      dataUrl: await blobToDataUrl(payload.blob, attachment.mimeType),
-      record: attachment,
+      dataUrl: payload
+        ? await blobToDataUrl(payload.blob, attachment.mimeType)
+        : null,
+      payloadState: payload ? 'embedded' : 'missing',
+      record: stripSyncState(attachment),
     });
   }
 
-  const sortedDailyRecords = dailyRecords.sort(compareByDate);
-  const sortedWeeklyRecords = weeklyRecords.sort(compareByWeekStart);
+  const sortedDailyRecords = dailyRecords
+    .sort(compareByDate)
+    .map(stripSyncState);
+  const sortedWeeklyRecords = weeklyRecords
+    .sort(compareByWeekStart)
+    .map(stripSyncState);
   const exportedAt = new Date().toISOString();
 
   return {
@@ -205,7 +231,7 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
     listItems,
     lists,
     routines,
-    settings: settings ?? null,
+    settings: settings ? stripSyncState(settings) : null,
     summary: buildBackupSummary(
       items,
       lists,
@@ -220,8 +246,7 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
   };
 }
 
-export async function createWorkspaceBackupExport():
-  Promise<WorkspaceBackupExport> {
+export async function createWorkspaceBackupExport(): Promise<WorkspaceBackupExport> {
   const backup = await createWorkspaceBackup();
   const blob = new Blob([JSON.stringify(backup, null, 2)], {
     type: 'application/json',

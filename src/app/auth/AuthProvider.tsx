@@ -1,13 +1,18 @@
 import {
-  createContext,
-  useContext,
   useEffect,
   useEffectEvent,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 
+import { AuthContext, type AuthContextValue } from '@/app/auth/context';
+import {
+  hasAuthOwnerMismatch,
+  signedInAuthPatch,
+  signedOutAuthPatch,
+} from '@/app/auth/sync-state';
 import { getCurrentSyncState, updateSyncState } from '@/storage/local/api';
 import {
   authDisplayName,
@@ -16,26 +21,8 @@ import {
   buildAuthCallbackUrl,
   normalizeAuthNextPath,
 } from '@/storage/sync/supabase/auth';
-import { getSupabaseSyncStatus } from '@/storage/sync/supabase/config';
 import { getSupabaseBrowserClient } from '@/storage/sync/supabase/client';
-
-interface AuthContextValue {
-  configured: boolean;
-  displayName: string | null;
-  email: string | null;
-  error: string | null;
-  isReady: boolean;
-  magicLinkSentTo: string | null;
-  providerLabel: string | null;
-  session: Session | null;
-  user: User | null;
-  clearFeedback: () => void;
-  continueWithGoogle: (nextPath?: string) => Promise<void>;
-  sendMagicLink: (email: string, nextPath?: string) => Promise<boolean>;
-  signOut: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import type { SyncAuthPromptState } from '@/domain/schemas/records';
 
 function friendlyErrorMessage(fallback: string, error: unknown): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -48,30 +35,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(!configured);
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSentTo, setMagicLinkSentTo] = useState<string | null>(null);
+  const pendingSignedOutPromptRef = useRef<SyncAuthPromptState | null>(null);
 
   const syncSessionToLocal = useEffectEvent(
     async (nextSession: Session | null) => {
-      const syncStatus = getSupabaseSyncStatus();
+      const current = await getCurrentSyncState();
 
       if (nextSession?.user?.id) {
-        await updateSyncState({
-          mode: syncStatus.configured ? 'ready' : 'disabled',
-          authState: 'signed-in',
-          identityState: 'member',
-          remoteUserId: nextSession.user.id,
-        });
-        return;
+        if (hasAuthOwnerMismatch(current, nextSession.user.id)) {
+          pendingSignedOutPromptRef.current = 'account-mismatch';
+          setError(
+            "This device is still holding another account's workspace. Sign back into that account to keep syncing here.",
+          );
+          const { error: signOutError } = await client!.auth.signOut();
+          if (signOutError) {
+            pendingSignedOutPromptRef.current = null;
+            throw signOutError;
+          }
+          return null;
+        }
+
+        await updateSyncState(signedInAuthPatch(nextSession.user.id));
+        return nextSession;
       }
 
-      const current = await getCurrentSyncState();
-      await updateSyncState({
-        mode: syncStatus.configured ? 'ready' : 'disabled',
-        authState: 'signed-out',
-        identityState:
-          current.identityState === 'member' ? 'member' : 'device-guest',
-        remoteUserId:
-          current.identityState === 'member' ? current.remoteUserId : null,
-      });
+      const promptState =
+        pendingSignedOutPromptRef.current ??
+        (current.identityState === 'member' ? 'session-expired' : 'none');
+      pendingSignedOutPromptRef.current = null;
+      await updateSyncState(signedOutAuthPatch(current, promptState));
+      return null;
     },
   );
 
@@ -93,9 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setError("Couldn't restore your session yet.");
         }
 
-        setSession(data.session ?? null);
+        const resolvedSession = await syncSessionToLocal(data.session ?? null);
+        if (cancelled) {
+          return;
+        }
+
+        setSession(resolvedSession);
         setIsReady(true);
-        await syncSessionToLocal(data.session ?? null);
       })
       .catch((caughtError) => {
         if (cancelled) {
@@ -114,13 +111,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = client.auth.onAuthStateChange((_event, nextSession) => {
-      if (cancelled) {
-        return;
-      }
+      void syncSessionToLocal(nextSession)
+        .then((resolvedSession) => {
+          if (cancelled) {
+            return;
+          }
 
-      setSession(nextSession);
-      setIsReady(true);
-      void syncSessionToLocal(nextSession);
+          setSession(resolvedSession);
+          setIsReady(true);
+        })
+        .catch((caughtError) => {
+          if (cancelled) {
+            return;
+          }
+
+          setError(
+            friendlyErrorMessage(
+              "Couldn't restore your session yet.",
+              caughtError,
+            ),
+          );
+          setIsReady(true);
+        });
     });
 
     return () => {
@@ -194,22 +206,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    pendingSignedOutPromptRef.current = 'signed-out-by-user';
     const { error: signOutError } = await client.auth.signOut();
     if (signOutError) {
+      pendingSignedOutPromptRef.current = null;
       setError("Couldn't sign out. Try again.");
-      return;
     }
-
-    const current = await getCurrentSyncState();
-    await updateSyncState({
-      mode: getSupabaseSyncStatus().configured ? 'ready' : 'disabled',
-      authState: 'signed-out',
-      identityState:
-        current.identityState === 'member' ? 'member' : 'device-guest',
-      remoteUserId:
-        current.identityState === 'member' ? current.remoteUserId : null,
-    });
-    setSession(null);
   };
 
   const value: AuthContextValue = {
@@ -229,14 +231,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error('useAuth must be used inside AuthProvider.');
-  }
-
-  return context;
 }

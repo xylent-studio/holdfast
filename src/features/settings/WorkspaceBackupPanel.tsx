@@ -11,13 +11,21 @@ function pluralize(count: number, label: string): string {
 }
 
 function summaryLine(summary: WorkspaceBackupSummary): string {
-  return [
+  const parts = [
     pluralize(summary.itemCount, 'item'),
     pluralize(summary.listCount, 'list'),
     pluralize(summary.listItemCount, 'list item'),
     pluralize(summary.routineCount, 'routine'),
     pluralize(summary.attachmentCount, 'attachment'),
-  ].join(' / ');
+  ];
+
+  if (summary.attachmentPayloadMissingCount) {
+    parts.push(
+      `${pluralize(summary.attachmentPayloadMissingCount, 'attachment file')} still missing on this device`,
+    );
+  }
+
+  return parts.join(' / ');
 }
 
 function errorMessage(error: unknown): string {
@@ -45,9 +53,7 @@ export function WorkspaceBackupPanel() {
       anchor.click();
       anchor.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1_000);
-      setResult(
-        `Downloaded a backup with ${summaryLine(backup.summary)}.`,
-      );
+      setResult(`Downloaded a backup with ${summaryLine(backup.summary)}.`);
     } catch (error) {
       setFeedback(errorMessage(error));
     } finally {

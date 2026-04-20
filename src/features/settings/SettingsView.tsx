@@ -1,12 +1,12 @@
+import { Suspense, lazy } from 'react';
+
 import { AuthAccessActions } from '@/app/auth/AuthAccessActions';
-import { useAuth } from '@/app/auth/AuthProvider';
+import { useAuth } from '@/app/auth/useAuth';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
-import { useSync } from '@/app/sync/SyncProvider';
+import { useSync } from '@/app/sync/useSync';
 import { LANES } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import { currentWeekLabel } from '@/domain/logic/selectors';
-import { PrototypeRecoveryPanel } from '@/features/settings/PrototypeRecoveryPanel';
-import { WorkspaceBackupPanel } from '@/features/settings/WorkspaceBackupPanel';
 import {
   createRoutine,
   deleteRoutine,
@@ -17,6 +17,17 @@ import {
 import type { HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Panel } from '@/shared/ui/Panel';
+
+const PrototypeRecoveryPanel = lazy(async () =>
+  import('@/features/settings/PrototypeRecoveryPanel').then((module) => ({
+    default: module.PrototypeRecoveryPanel,
+  })),
+);
+const WorkspaceBackupPanel = lazy(async () =>
+  import('@/features/settings/WorkspaceBackupPanel').then((module) => ({
+    default: module.WorkspaceBackupPanel,
+  })),
+);
 
 interface SettingsViewProps {
   currentDate: DateKey;
@@ -29,6 +40,7 @@ function syncStatusLabel(
   isOnline: boolean,
   pendingMutationCount: number,
   syncMode: HoldfastSnapshot['syncState']['mode'],
+  authPromptState: HoldfastSnapshot['syncState']['authPromptState'],
   identityState: HoldfastSnapshot['syncState']['identityState'],
 ): string {
   if (!configured) {
@@ -51,6 +63,10 @@ function syncStatusLabel(
     return 'Up to date';
   }
 
+  if (authPromptState === 'account-mismatch') {
+    return 'Needs the original account';
+  }
+
   return identityState === 'member'
     ? 'Signed out on this device'
     : 'Not signed in';
@@ -69,9 +85,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
           <p>
             {auth.session
               ? 'Stay signed in quietly and let Holdfast catch up in the background.'
-              : snapshot.syncState.identityState === 'member'
-                ? 'Sign in again to keep this device in sync.'
-                : 'Sign in once and pick back up anywhere.'}
+              : snapshot.syncState.authPromptState === 'account-mismatch'
+                ? "This device is still holding another account's workspace."
+                : snapshot.syncState.identityState === 'member'
+                  ? 'Sign in again to keep this device in sync.'
+                  : 'Sign in once and pick back up anywhere.'}
           </p>
         </div>
         <div className="account-stack">
@@ -84,6 +102,7 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                 sync.isOnline,
                 sync.pendingMutationCount,
                 snapshot.syncState.mode,
+                snapshot.syncState.authPromptState,
                 snapshot.syncState.identityState,
               )}
             </strong>
@@ -143,8 +162,10 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
         </div>
       </Panel>
 
-      <WorkspaceBackupPanel />
-      <PrototypeRecoveryPanel />
+      <Suspense fallback={null}>
+        <WorkspaceBackupPanel />
+        <PrototypeRecoveryPanel />
+      </Suspense>
 
       <Panel>
         <div className="panel-header">

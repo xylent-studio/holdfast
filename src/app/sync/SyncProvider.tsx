@@ -1,24 +1,16 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useEffectEvent,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useEffect, useEffectEvent, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
-import { useAuth } from '@/app/auth/AuthProvider';
+import { useAuth } from '@/app/auth/useAuth';
+import { SyncContext } from '@/app/sync/context';
 import { db } from '@/storage/local/db';
-import { syncHoldfastWithSupabase } from '@/storage/sync/supabase/engine';
 
-interface SyncContextValue {
-  isOnline: boolean;
-  pendingMutationCount: number;
-  retrySync: () => Promise<void>;
+async function runSupabaseSync(): Promise<void> {
+  const { syncHoldfastWithSupabase } =
+    await import('@/storage/sync/supabase/engine');
+
+  await syncHoldfastWithSupabase();
 }
-
-const SyncContext = createContext<SyncContextValue | null>(null);
 
 export function SyncProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
@@ -43,7 +35,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await syncHoldfastWithSupabase();
+      await runSupabaseSync();
     } catch {
       // Sync state is recorded in IndexedDB; keep the shell calm.
     }
@@ -55,7 +47,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await syncHoldfastWithSupabase();
+      await runSupabaseSync();
     } catch {
       // Sync state is recorded in IndexedDB; keep the shell calm.
     }
@@ -103,14 +95,4 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       {children}
     </SyncContext.Provider>
   );
-}
-
-export function useSync(): SyncContextValue {
-  const context = useContext(SyncContext);
-
-  if (!context) {
-    throw new Error('useSync must be used inside SyncProvider.');
-  }
-
-  return context;
 }

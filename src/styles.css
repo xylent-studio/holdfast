@@ -698,10 +698,13 @@ p {
 
   .attachment-row,
   .account-row,
-  .auth-actions,
   .dialog-header,
   .panel-header.split {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .auth-actions {
+    grid-template-columns: 1fr;
   }
 }

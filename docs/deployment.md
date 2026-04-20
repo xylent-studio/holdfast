@@ -10,6 +10,12 @@ The repo is prepared for the eventual Cloudflare release, but the public Pages p
 - auth feels at least as trustworthy as the prototype
 - sync is safe enough that using the hosted app will not erode trust
 
+As of April 20, 2026:
+
+- local Cloudflare CLI auth is working
+- `wrangler pages project list --json` returns `[]`
+- no Pages project exists yet for Holdfast
+
 ## Chosen Hosting Direction
 
 - frontend hosting: Cloudflare Pages
@@ -40,6 +46,8 @@ The repo now includes:
 - project-local `wrangler`
 - `wrangler.jsonc` for source-controlled Pages configuration
 - npm scripts for basic Cloudflare auth checks
+- Playwright-based auth-landing smoke coverage in CI
+- pinned local Node version files for reproducible builds
 
 This does not create a public deployment by itself.
 
@@ -48,8 +56,8 @@ This does not create a public deployment by itself.
 ### Cloudflare
 
 - authenticate `wrangler`
-- restore Cloudflare MCP authentication inside Codex
 - confirm the `xylent.studio` zone is accessible in the same Cloudflare account used for Pages
+- create the Pages project only after the product gates below are met
 
 ### Supabase
 
@@ -93,12 +101,24 @@ Current repo/backend foundation already includes:
 2. Create the Cloudflare Pages project from the GitHub repository.
 3. Set build command `npm run build`.
 4. Set build output directory `dist`.
-5. Add production environment variables.
-6. Configure Supabase Site URL and redirect allow-list entries for dev, preview, and production.
-7. Attach `holdfast.xylent.studio`.
-8. Decide whether to keep or redirect the `*.pages.dev` hostname.
-9. Run hosted smoke tests across desktop, mobile, online, and offline states.
+5. Pin the Pages Node version to `24.14.0`.
+6. Add production environment variables.
+7. Configure Supabase Site URL and redirect allow-list entries for dev, preview, and production.
+8. Attach `holdfast.xylent.studio`.
+9. Decide whether to keep or redirect the `*.pages.dev` hostname.
+10. Run hosted smoke tests across desktop, mobile, online, and offline states.
+11. Verify service-worker install/update and offline shell behavior on the hosted build.
 
-## Current Blocker
+## Current Hosted State
 
-Cloudflare API access from Codex is currently failing with an authentication error. Repo and Supabase schema preparation are complete, but hosted Pages and DNS actions still require you to fix that auth path or provide an equivalent authenticated route.
+- local Wrangler access is working in the current dev environment
+- no Cloudflare Pages project exists yet
+- no production hostname is attached yet
+- hosted release remains blocked by product readiness, not CLI authentication
+
+## Useful Checks
+
+- `npm run cf:whoami`
+- `npx wrangler pages project list --json`
+- `npm run build`
+- `npm run test:e2e`

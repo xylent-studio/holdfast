@@ -16,6 +16,7 @@ describe('createDefaultSyncState', () => {
     expect(result.mode).toBe('disabled');
     expect(result.authState).toBe('signed-out');
     expect(result.identityState).toBe('device-guest');
+    expect(result.authPromptState).toBe('none');
     expect(result.remoteUserId).toBeNull();
   });
 });
@@ -34,6 +35,7 @@ describe('normalizeSyncStateRecord', () => {
     });
 
     expect(result.identityState).toBe('device-guest');
+    expect(result.authPromptState).toBe('none');
     expect(result.remoteUserId).toBeNull();
   });
 });

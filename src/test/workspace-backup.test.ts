@@ -2,9 +2,8 @@ import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { downloadAttachmentBlob } = vi.hoisted(() => ({
-  downloadAttachmentBlob: vi.fn<
-    (userId: string, attachmentId: string) => Promise<Blob>
-  >(),
+  downloadAttachmentBlob:
+    vi.fn<(userId: string, attachmentId: string) => Promise<Blob>>(),
 }));
 
 vi.mock('@/storage/sync/supabase/attachments', () => ({
@@ -48,6 +47,21 @@ afterEach(async () => {
   db.close();
   await Dexie.delete(HOLDFAST_DB_NAME);
 });
+
+function collectSyncStateKeys(value: unknown): string[] {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  const entries = Array.isArray(value)
+    ? value.flatMap((entry) => collectSyncStateKeys(entry))
+    : Object.entries(value).flatMap(([key, entry]) => [
+        ...(key === 'syncState' ? [key] : []),
+        ...collectSyncStateKeys(entry),
+      ]);
+
+  return entries;
+}
 
 describe('workspace backup export', () => {
   it('exports the current workspace with lists, routines, day state, and attachments', async () => {
@@ -109,6 +123,7 @@ describe('workspace backup export', () => {
     );
     expect(backup.summary).toEqual({
       attachmentCount: 0,
+      attachmentPayloadMissingCount: 0,
       dayCount: 1,
       itemCount: 1,
       listCount: 1,
@@ -153,6 +168,9 @@ describe('workspace backup export', () => {
       format: 'holdfast-backup',
       summary: backup.summary,
     });
+    expect(
+      collectSyncStateKeys(JSON.parse(await exported.blob.text())),
+    ).toEqual([]);
   });
 
   it('fills backup attachments from sync when the local blob cache is missing', async () => {
@@ -177,10 +195,9 @@ describe('workspace backup export', () => {
     });
 
     const [item] = await db.items.toArray();
-    await addFilesToItem(
-      item!.id,
-      [new File(['local-copy'], 'receipt.txt', { type: 'text/plain' })],
-    );
+    await addFilesToItem(item!.id, [
+      new File(['local-copy'], 'receipt.txt', { type: 'text/plain' }),
+    ]);
 
     const [attachment] = await db.attachments.toArray();
     await db.attachmentBlobs.delete(attachment!.blobId);
@@ -198,5 +215,47 @@ describe('workspace backup export', () => {
     expect(backup.attachments[0]?.dataUrl).toBe(
       'data:text/plain;base64,cmVtb3RlLWNvcHk=',
     );
+    expect(backup.attachments[0]?.payloadState).toBe('embedded');
+  });
+
+  it('keeps exporting when a signed-out member workspace is missing a local attachment blob', async () => {
+    await updateSyncState({
+      authState: 'signed-out',
+      identityState: 'member',
+      authPromptState: 'signed-out-by-user',
+      remoteUserId: '11111111-1111-4111-8111-111111111111',
+    });
+
+    await createItem({
+      title: 'Receipt',
+      kind: 'task',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    const [item] = await db.items.toArray();
+    await addFilesToItem(item!.id, [
+      new File(['local-copy'], 'receipt.txt', { type: 'text/plain' }),
+    ]);
+
+    const [attachment] = await db.attachments.toArray();
+    await db.attachmentBlobs.delete(attachment!.blobId);
+
+    const backup = await createWorkspaceBackup();
+
+    expect(downloadAttachmentBlob).not.toHaveBeenCalled();
+    expect(backup.summary.attachmentCount).toBe(1);
+    expect(backup.summary.attachmentPayloadMissingCount).toBe(1);
+    expect(backup.attachments[0]).toMatchObject({
+      dataUrl: null,
+      payloadState: 'missing',
+    });
   });
 });

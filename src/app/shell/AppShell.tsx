@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { DateKey } from '@/domain/dates';
 import { BottomNav } from '@/app/shell/BottomNav';
 import { TopBar } from '@/app/shell/TopBar';
+import { LoadingPanel } from '@/shared/ui/LoadingPanel';
 
 interface AppShellProps {
   children: ReactNode;
@@ -37,15 +38,7 @@ export function AppShell({
           openCount={openCount}
         />
         <main className="app-content">
-          {isLoading ? (
-            <section className="panel loading-panel">
-              <div className="eyebrow">Holdfast</div>
-              <h1>Opening Holdfast</h1>
-              <p>Getting things ready.</p>
-            </section>
-          ) : (
-            children
-          )}
+          {isLoading ? <LoadingPanel /> : children}
         </main>
         <BottomNav viewPath={viewPath} />
       </div>

@@ -205,9 +205,7 @@ function toLegacyStatus(value: unknown): LegacyStatus {
   }
 }
 
-function toCurrentStatus(
-  value: LegacyStatus,
-): ItemRecord['status'] {
+function toCurrentStatus(value: LegacyStatus): ItemRecord['status'] {
   switch (value) {
     case 'later':
       return 'upcoming';
@@ -217,10 +215,7 @@ function toCurrentStatus(
 }
 
 function toIsoDate(value: unknown, fallback: string): string {
-  if (
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}$/.test(value)
-  ) {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return value;
   }
 
@@ -257,10 +252,7 @@ function optionalTimestamp(value: unknown): string | null {
   return null;
 }
 
-function booleanTimestamp(
-  value: unknown,
-  fallback: string,
-): string | null {
+function booleanTimestamp(value: unknown, fallback: string): string | null {
   return value ? fallback : null;
 }
 
@@ -365,8 +357,12 @@ function normalizeCurrentLikeWorkspace(raw: unknown): LegacyPrototypeWorkspace {
       startedAt: booleanTimestamp(entry.started, updatedAt),
       closedAt: booleanTimestamp(entry.closed, updatedAt),
       readiness: {
-        water: Boolean((entry.care as Record<string, unknown> | undefined)?.water),
-        food: Boolean((entry.care as Record<string, unknown> | undefined)?.food),
+        water: Boolean(
+          (entry.care as Record<string, unknown> | undefined)?.water,
+        ),
+        food: Boolean(
+          (entry.care as Record<string, unknown> | undefined)?.food,
+        ),
         supplements: Boolean(
           (entry.care as Record<string, unknown> | undefined)?.vitamins,
         ),
@@ -381,18 +377,15 @@ function normalizeCurrentLikeWorkspace(raw: unknown): LegacyPrototypeWorkspace {
         ),
       },
       focusLegacyKeys: Array.isArray(entry.top3)
-        ? entry.top3.filter((value): value is string => typeof value === 'string')
+        ? entry.top3.filter(
+            (value): value is string => typeof value === 'string',
+          )
         : [],
-      launchNote:
-        typeof entry.launchNote === 'string' ? entry.launchNote : '',
-      closeWin:
-        typeof entry.closeWin === 'string' ? entry.closeWin : '',
-      closeCarry:
-        typeof entry.closeCarry === 'string' ? entry.closeCarry : '',
-      closeSeed:
-        typeof entry.closeSeed === 'string' ? entry.closeSeed : '',
-      closeNote:
-        typeof entry.closeNote === 'string' ? entry.closeNote : '',
+      launchNote: typeof entry.launchNote === 'string' ? entry.launchNote : '',
+      closeWin: typeof entry.closeWin === 'string' ? entry.closeWin : '',
+      closeCarry: typeof entry.closeCarry === 'string' ? entry.closeCarry : '',
+      closeSeed: typeof entry.closeSeed === 'string' ? entry.closeSeed : '',
+      closeNote: typeof entry.closeNote === 'string' ? entry.closeNote : '',
       seededRoutineLegacyKeys: Array.isArray(entry.seededRoutineIds)
         ? entry.seededRoutineIds.filter(
             (value): value is string => typeof value === 'string',
@@ -496,52 +489,51 @@ function normalizeCurrentLikeWorkspace(raw: unknown): LegacyPrototypeWorkspace {
   });
 
   workspace.settings = {
-    direction:
-      typeof settings.focus === 'string' ? settings.focus : '',
-    standards:
-      typeof settings.standards === 'string' ? settings.standards : '',
+    direction: typeof settings.focus === 'string' ? settings.focus : '',
+    standards: typeof settings.standards === 'string' ? settings.standards : '',
     why: typeof settings.why === 'string' ? settings.why : '',
-    routines: (Array.isArray(settings.routines) ? settings.routines : [])
-      .flatMap((rawRoutine, index) => {
-        if (!rawRoutine || typeof rawRoutine !== 'object') {
-          return [];
-        }
+    routines: (Array.isArray(settings.routines)
+      ? settings.routines
+      : []
+    ).flatMap((rawRoutine, index) => {
+      if (!rawRoutine || typeof rawRoutine !== 'object') {
+        return [];
+      }
 
-        const entry = rawRoutine as Record<string, unknown>;
-        const text =
-          typeof entry.text === 'string' ? entry.text.trim() : '';
-        if (!text) {
-          return [];
-        }
+      const entry = rawRoutine as Record<string, unknown>;
+      const text = typeof entry.text === 'string' ? entry.text.trim() : '';
+      if (!text) {
+        return [];
+      }
 
-        const legacyKey =
-          typeof entry.id === 'string' && entry.id.trim()
-            ? entry.id
-            : `routine-${index}-${text}`;
-        const updatedAt = nowIso();
+      const legacyKey =
+        typeof entry.id === 'string' && entry.id.trim()
+          ? entry.id
+          : `routine-${index}-${text}`;
+      const updatedAt = nowIso();
 
-        return [
-          {
-            legacyKey,
-            text,
-            lane: toLane(entry.lane),
-            destination: entry.seed === 'later' ? 'upcoming' : 'today',
-            weekdays: Array.isArray(entry.days)
-              ? entry.days
-                  .filter((value): value is number => typeof value === 'number')
-                  .filter((value) => value >= 0 && value <= 6)
-              : [0, 1, 2, 3, 4, 5, 6],
-            scheduledTime:
-              typeof entry.time === 'string' && entry.time.trim()
-                ? entry.time
-                : null,
-            notes: typeof entry.notes === 'string' ? entry.notes : '',
-            active: entry.active !== false,
-            createdAt: updatedAt,
-            updatedAt,
-          } satisfies LegacyPrototypeRoutine,
-        ];
-      }),
+      return [
+        {
+          legacyKey,
+          text,
+          lane: toLane(entry.lane),
+          destination: entry.seed === 'later' ? 'upcoming' : 'today',
+          weekdays: Array.isArray(entry.days)
+            ? entry.days
+                .filter((value): value is number => typeof value === 'number')
+                .filter((value) => value >= 0 && value <= 6)
+            : [0, 1, 2, 3, 4, 5, 6],
+          scheduledTime:
+            typeof entry.time === 'string' && entry.time.trim()
+              ? entry.time
+              : null,
+          notes: typeof entry.notes === 'string' ? entry.notes : '',
+          active: entry.active !== false,
+          createdAt: updatedAt,
+          updatedAt,
+        } satisfies LegacyPrototypeRoutine,
+      ];
+    }),
   };
 
   return workspace;
@@ -681,7 +673,11 @@ function migrateLegacyV2Workspace(raw: unknown): LegacyPrototypeWorkspace {
         : {};
     const updatedAt = nowIso();
     const focusLegacyKeys = (
-      Array.isArray(entry.top3) ? entry.top3 : Array.isArray(entry.critical3) ? entry.critical3 : []
+      Array.isArray(entry.top3)
+        ? entry.top3
+        : Array.isArray(entry.critical3)
+          ? entry.critical3
+          : []
     )
       .map((rawItem) =>
         rawItem && typeof rawItem === 'object'
@@ -700,8 +696,12 @@ function migrateLegacyV2Workspace(raw: unknown): LegacyPrototypeWorkspace {
       startedAt: booleanTimestamp(entry.launched, updatedAt),
       closedAt: booleanTimestamp(entry.closed, updatedAt),
       readiness: {
-        water: Boolean((entry.care as Record<string, unknown> | undefined)?.water),
-        food: Boolean((entry.care as Record<string, unknown> | undefined)?.food),
+        water: Boolean(
+          (entry.care as Record<string, unknown> | undefined)?.water,
+        ),
+        food: Boolean(
+          (entry.care as Record<string, unknown> | undefined)?.food,
+        ),
         supplements: Boolean(
           (entry.care as Record<string, unknown> | undefined)?.vitamins,
         ),
@@ -723,8 +723,8 @@ function migrateLegacyV2Workspace(raw: unknown): LegacyPrototypeWorkspace {
           ? ((entry.evening as Record<string, unknown>).done as string)
           : '',
       closeCarry:
-        typeof (entry.evening as Record<string, unknown> | undefined)
-          ?.carry === 'string'
+        typeof (entry.evening as Record<string, unknown> | undefined)?.carry ===
+        'string'
           ? ((entry.evening as Record<string, unknown>).carry as string)
           : '',
       closeSeed:
@@ -901,7 +901,9 @@ function migrateLegacyV2Workspace(raw: unknown): LegacyPrototypeWorkspace {
   return workspace;
 }
 
-function normalizeLegacyPrototypeWorkspace(raw: unknown): LegacyPrototypeWorkspace {
+function normalizeLegacyPrototypeWorkspace(
+  raw: unknown,
+): LegacyPrototypeWorkspace {
   if (
     raw &&
     typeof raw === 'object' &&
@@ -960,7 +962,9 @@ function buildImportedDailyRecord(
   });
 }
 
-function buildImportedWeeklyRecord(legacyWeek: LegacyPrototypeWeek): WeeklyRecord {
+function buildImportedWeeklyRecord(
+  legacyWeek: LegacyPrototypeWeek,
+): WeeklyRecord {
   return WeeklyRecordSchema.parse({
     weekStart: legacyWeek.weekStart,
     schemaVersion: SCHEMA_VERSION,
@@ -1012,16 +1016,19 @@ async function resolveLegacyPrototypeWorkspace(
     );
 
     for (const attachment of item.attachments) {
-      attachmentIdsByLegacyKey.set(`${item.legacyKey}:${attachment.legacyKey}`, {
-        attachmentId: await deterministicId(
-          'prototype-attachment',
-          `${item.legacyKey}:${attachment.legacyKey}`,
-        ),
-        blobId: await deterministicId(
-          'prototype-attachment-blob',
-          `${item.legacyKey}:${attachment.legacyKey}`,
-        ),
-      });
+      attachmentIdsByLegacyKey.set(
+        `${item.legacyKey}:${attachment.legacyKey}`,
+        {
+          attachmentId: await deterministicId(
+            'prototype-attachment',
+            `${item.legacyKey}:${attachment.legacyKey}`,
+          ),
+          blobId: await deterministicId(
+            'prototype-attachment-blob',
+            `${item.legacyKey}:${attachment.legacyKey}`,
+          ),
+        },
+      );
     }
   }
 
@@ -1080,8 +1087,7 @@ function mergeDailyRecord(
         current.readiness.supplements || imported.readiness.supplements,
       hygiene: current.readiness.hygiene || imported.readiness.hygiene,
       movement: current.readiness.movement || imported.readiness.movement,
-      sleepSetup:
-        current.readiness.sleepSetup || imported.readiness.sleepSetup,
+      sleepSetup: current.readiness.sleepSetup || imported.readiness.sleepSetup,
     },
     focusItemIds: Array.from(
       new Set([...current.focusItemIds, ...imported.focusItemIds]),
@@ -1095,7 +1101,9 @@ function mergeDailyRecord(
       new Set([...current.seededRoutineIds, ...imported.seededRoutineIds]),
     ),
     updatedAt:
-      imported.updatedAt > current.updatedAt ? imported.updatedAt : current.updatedAt,
+      imported.updatedAt > current.updatedAt
+        ? imported.updatedAt
+        : current.updatedAt,
     syncState: 'pending',
   });
 }
@@ -1110,7 +1118,9 @@ function mergeWeeklyRecord(
     protect: mergeText(current.protect, imported.protect),
     notes: mergeText(current.notes, imported.notes),
     updatedAt:
-      imported.updatedAt > current.updatedAt ? imported.updatedAt : current.updatedAt,
+      imported.updatedAt > current.updatedAt
+        ? imported.updatedAt
+        : current.updatedAt,
     syncState: 'pending',
   });
 }
@@ -1125,7 +1135,9 @@ function mergeSettingsRecord(
     standards: mergeText(current.standards, imported.standards),
     why: mergeText(current.why, imported.why),
     updatedAt:
-      imported.updatedAt > current.updatedAt ? imported.updatedAt : current.updatedAt,
+      imported.updatedAt > current.updatedAt
+        ? imported.updatedAt
+        : current.updatedAt,
     syncState: 'pending',
   });
 }
@@ -1145,48 +1157,23 @@ function defaultSettingsRecord(): SettingsRecord {
   });
 }
 
-function defaultDailyRecordForUndo(date: string): DailyRecord {
-  const timestamp = nowIso();
-
-  return DailyRecordSchema.parse({
-    date,
-    schemaVersion: SCHEMA_VERSION,
-    startedAt: null,
-    closedAt: null,
-    readiness: {
-      water: false,
-      food: false,
-      supplements: false,
-      hygiene: false,
-      movement: false,
-      sleepSetup: false,
-    },
-    focusItemIds: [],
-    launchNote: '',
-    closeWin: '',
-    closeCarry: '',
-    closeSeed: '',
-    closeNote: '',
-    seededRoutineIds: [],
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    syncState: 'pending',
-  });
+function isEmptyDailyRecordForUndo(record: DailyRecord): boolean {
+  return Boolean(
+    !record.startedAt &&
+    !record.closedAt &&
+    Object.values(record.readiness).every((value) => value === false) &&
+    !record.focusItemIds.length &&
+    !record.launchNote &&
+    !record.closeWin &&
+    !record.closeCarry &&
+    !record.closeSeed &&
+    !record.closeNote &&
+    !record.seededRoutineIds.length,
+  );
 }
 
-function defaultWeeklyRecordForUndo(weekStart: string): WeeklyRecord {
-  const timestamp = nowIso();
-
-  return WeeklyRecordSchema.parse({
-    weekStart,
-    schemaVersion: SCHEMA_VERSION,
-    focus: '',
-    protect: '',
-    notes: '',
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    syncState: 'pending',
-  });
+function isEmptyWeeklyRecordForUndo(record: WeeklyRecord): boolean {
+  return Boolean(!record.focus && !record.protect && !record.notes);
 }
 
 function createMutationRecord(
@@ -1209,10 +1196,7 @@ function createMutationRecord(
   });
 }
 
-async function deterministicId(
-  scope: string,
-  key: string,
-): Promise<string> {
+async function deterministicId(scope: string, key: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     'SHA-256',
     new TextEncoder().encode(`${scope}:${key}`),
@@ -1221,9 +1205,7 @@ async function deterministicId(
   bytes[6] = (bytes[6] & 0x0f) | 0x50;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
-  const hex = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, '0'),
-  );
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'));
 
   return [
     hex.slice(0, 4).join(''),
@@ -1234,8 +1216,7 @@ async function deterministicId(
   ].join('-');
 }
 
-async function getLatestOpenPrototypeRecoverySession():
-  Promise<PrototypeRecoverySessionRecord | null> {
+async function getLatestOpenPrototypeRecoverySession(): Promise<PrototypeRecoverySessionRecord | null> {
   const sessions = await db.prototypeRecoverySessions
     .orderBy('createdAt')
     .reverse()
@@ -1290,8 +1271,8 @@ async function pruneRecoveryMutations(
   const mutations = await db.mutationQueue.toArray();
   const recoveryMutationIds = mutations
     .filter((mutation) => mutation.type.endsWith('.recovered'))
-    .filter((mutation) =>
-      targets[mutation.entity]?.has(mutation.entityId) ?? false,
+    .filter(
+      (mutation) => targets[mutation.entity]?.has(mutation.entityId) ?? false,
     )
     .map((mutation) => mutation.id);
 
@@ -1366,21 +1347,23 @@ async function deleteItemCascadeForUndo(
     return { attachmentsDeleted: 0, itemDeleted: false };
   }
 
-  const attachments = await db.attachments.where('itemId').equals(itemId).toArray();
+  const attachments = await db.attachments
+    .where('itemId')
+    .equals(itemId)
+    .toArray();
   await db.items.delete(itemId);
-  await db.attachments.bulkDelete(attachments.map((attachment) => attachment.id));
+  await db.attachments.bulkDelete(
+    attachments.map((attachment) => attachment.id),
+  );
   await db.attachmentBlobs.bulkDelete(
     attachments.map((attachment) => attachment.blobId),
   );
   await removeItemFromFocusEverywhere(itemId);
   for (const attachment of attachments) {
     await db.mutationQueue.put(
-      createMutationRecord(
-        'attachment',
-        attachment.id,
-        'attachment.deleted',
-        { attachmentId: attachment.id },
-      ),
+      createMutationRecord('attachment', attachment.id, 'attachment.deleted', {
+        attachmentId: attachment.id,
+      }),
     );
   }
   await db.mutationQueue.put(
@@ -1412,12 +1395,24 @@ async function restoreDailyRecordForUndo(
   date: string,
   previous: DailyRecord | null,
 ): Promise<boolean> {
-  const next = previous
-    ? pendingDailyRecord(previous)
-    : defaultDailyRecordForUndo(date);
   const current = await db.dailyRecords.get(date);
+  if (!current) {
+    return false;
+  }
 
-  if (current && sameRecordContent(current, next)) {
+  if (!previous) {
+    await db.dailyRecords.delete(date);
+    await db.mutationQueue.put(
+      createMutationRecord('dailyRecord', date, 'daily.recovery.undone', {
+        date,
+      }),
+    );
+    return true;
+  }
+
+  const next = pendingDailyRecord(previous);
+
+  if (sameRecordContent(current, next)) {
     return false;
   }
 
@@ -1434,12 +1429,29 @@ async function restoreWeeklyRecordForUndo(
   weekStart: string,
   previous: WeeklyRecord | null,
 ): Promise<boolean> {
-  const next = previous
-    ? pendingWeeklyRecord(previous)
-    : defaultWeeklyRecordForUndo(weekStart);
   const current = await db.weeklyRecords.get(weekStart);
+  if (!current) {
+    return false;
+  }
 
-  if (current && sameRecordContent(current, next)) {
+  if (!previous) {
+    await db.weeklyRecords.delete(weekStart);
+    await db.mutationQueue.put(
+      createMutationRecord(
+        'weeklyRecord',
+        weekStart,
+        'weekly.recovery.undone',
+        {
+          weekStart,
+        },
+      ),
+    );
+    return true;
+  }
+
+  const next = pendingWeeklyRecord(previous);
+
+  if (sameRecordContent(current, next)) {
     return false;
   }
 
@@ -1484,49 +1496,115 @@ async function softlyUndoDailyRecordFromImportedState(
     return false;
   }
 
-  const next = sameRecordContent(current, imported)
-    ? defaultDailyRecordForUndo(imported.date)
-    : DailyRecordSchema.parse({
-        ...current,
-        focusItemIds: current.focusItemIds.filter(
-          (itemId) => !imported.focusItemIds.includes(itemId),
-        ),
-        launchNote:
-          imported.launchNote && current.launchNote === imported.launchNote
-            ? ''
-            : current.launchNote,
-        closeWin:
-          imported.closeWin && current.closeWin === imported.closeWin
-            ? ''
-            : current.closeWin,
-        closeCarry:
-          imported.closeCarry && current.closeCarry === imported.closeCarry
-            ? ''
-            : current.closeCarry,
-        closeSeed:
-          imported.closeSeed && current.closeSeed === imported.closeSeed
-            ? ''
-            : current.closeSeed,
-        closeNote:
-          imported.closeNote && current.closeNote === imported.closeNote
-            ? ''
-            : current.closeNote,
-        seededRoutineIds: current.seededRoutineIds.filter(
-          (routineId) => !imported.seededRoutineIds.includes(routineId),
-        ),
-        updatedAt: nowIso(),
-        syncState: 'pending',
-      });
+  if (sameRecordContent(current, imported)) {
+    await db.dailyRecords.delete(imported.date);
+    await db.mutationQueue.put(
+      createMutationRecord(
+        'dailyRecord',
+        imported.date,
+        'daily.recovery.undone',
+        {
+          date: imported.date,
+        },
+      ),
+    );
+    return true;
+  }
 
+  const next = DailyRecordSchema.parse({
+    ...current,
+    startedAt:
+      imported.startedAt && current.startedAt === imported.startedAt
+        ? null
+        : current.startedAt,
+    closedAt:
+      imported.closedAt && current.closedAt === imported.closedAt
+        ? null
+        : current.closedAt,
+    readiness: {
+      water:
+        imported.readiness.water && current.readiness.water
+          ? false
+          : current.readiness.water,
+      food:
+        imported.readiness.food && current.readiness.food
+          ? false
+          : current.readiness.food,
+      supplements:
+        imported.readiness.supplements && current.readiness.supplements
+          ? false
+          : current.readiness.supplements,
+      hygiene:
+        imported.readiness.hygiene && current.readiness.hygiene
+          ? false
+          : current.readiness.hygiene,
+      movement:
+        imported.readiness.movement && current.readiness.movement
+          ? false
+          : current.readiness.movement,
+      sleepSetup:
+        imported.readiness.sleepSetup && current.readiness.sleepSetup
+          ? false
+          : current.readiness.sleepSetup,
+    },
+    focusItemIds: current.focusItemIds.filter(
+      (itemId) => !imported.focusItemIds.includes(itemId),
+    ),
+    launchNote:
+      imported.launchNote && current.launchNote === imported.launchNote
+        ? ''
+        : current.launchNote,
+    closeWin:
+      imported.closeWin && current.closeWin === imported.closeWin
+        ? ''
+        : current.closeWin,
+    closeCarry:
+      imported.closeCarry && current.closeCarry === imported.closeCarry
+        ? ''
+        : current.closeCarry,
+    closeSeed:
+      imported.closeSeed && current.closeSeed === imported.closeSeed
+        ? ''
+        : current.closeSeed,
+    closeNote:
+      imported.closeNote && current.closeNote === imported.closeNote
+        ? ''
+        : current.closeNote,
+    seededRoutineIds: current.seededRoutineIds.filter(
+      (routineId) => !imported.seededRoutineIds.includes(routineId),
+    ),
+    updatedAt: nowIso(),
+    syncState: 'pending',
+  });
   if (sameRecordContent(current, next)) {
     return false;
   }
 
+  if (isEmptyDailyRecordForUndo(next)) {
+    await db.dailyRecords.delete(imported.date);
+    await db.mutationQueue.put(
+      createMutationRecord(
+        'dailyRecord',
+        imported.date,
+        'daily.recovery.undone',
+        {
+          date: imported.date,
+        },
+      ),
+    );
+    return true;
+  }
+
   await db.dailyRecords.put(next);
   await db.mutationQueue.put(
-    createMutationRecord('dailyRecord', imported.date, 'daily.recovery.undone', {
-      date: imported.date,
-    }),
+    createMutationRecord(
+      'dailyRecord',
+      imported.date,
+      'daily.recovery.undone',
+      {
+        date: imported.date,
+      },
+    ),
   );
   return true;
 }
@@ -1539,24 +1617,47 @@ async function softlyUndoWeeklyRecordFromImportedState(
     return false;
   }
 
-  const next = sameRecordContent(current, imported)
-    ? defaultWeeklyRecordForUndo(imported.weekStart)
-    : WeeklyRecordSchema.parse({
-        ...current,
-        focus:
-          imported.focus && current.focus === imported.focus ? '' : current.focus,
-        protect:
-          imported.protect && current.protect === imported.protect
-            ? ''
-            : current.protect,
-        notes:
-          imported.notes && current.notes === imported.notes ? '' : current.notes,
-        updatedAt: nowIso(),
-        syncState: 'pending',
-      });
+  if (sameRecordContent(current, imported)) {
+    await db.weeklyRecords.delete(imported.weekStart);
+    await db.mutationQueue.put(
+      createMutationRecord(
+        'weeklyRecord',
+        imported.weekStart,
+        'weekly.recovery.undone',
+        { weekStart: imported.weekStart },
+      ),
+    );
+    return true;
+  }
 
+  const next = WeeklyRecordSchema.parse({
+    ...current,
+    focus:
+      imported.focus && current.focus === imported.focus ? '' : current.focus,
+    protect:
+      imported.protect && current.protect === imported.protect
+        ? ''
+        : current.protect,
+    notes:
+      imported.notes && current.notes === imported.notes ? '' : current.notes,
+    updatedAt: nowIso(),
+    syncState: 'pending',
+  });
   if (sameRecordContent(current, next)) {
     return false;
+  }
+
+  if (isEmptyWeeklyRecordForUndo(next)) {
+    await db.weeklyRecords.delete(imported.weekStart);
+    await db.mutationQueue.put(
+      createMutationRecord(
+        'weeklyRecord',
+        imported.weekStart,
+        'weekly.recovery.undone',
+        { weekStart: imported.weekStart },
+      ),
+    );
+    return true;
   }
 
   await db.weeklyRecords.put(next);
@@ -1574,7 +1675,8 @@ async function softlyUndoWeeklyRecordFromImportedState(
 async function softlyUndoSettingsFromImportedState(
   imported: Pick<SettingsRecord, 'direction' | 'standards' | 'why'>,
 ): Promise<boolean> {
-  const current = (await db.settings.get(SETTINGS_ROW_ID)) ?? defaultSettingsRecord();
+  const current =
+    (await db.settings.get(SETTINGS_ROW_ID)) ?? defaultSettingsRecord();
   const importedRecord = SettingsRecordSchema.parse({
     ...current,
     direction: imported.direction,
@@ -1676,14 +1778,20 @@ async function undoRecordedPrototypeRecovery(
         ...previousDailyByDate.keys(),
       ])) {
         if (
-          await restoreDailyRecordForUndo(date, previousDailyByDate.get(date) ?? null)
+          await restoreDailyRecordForUndo(
+            date,
+            previousDailyByDate.get(date) ?? null,
+          )
         ) {
           result.daysRestored += 1;
         }
       }
 
       const previousWeeklyByStart = new Map(
-        session.previousWeeklyRecords.map((record) => [record.weekStart, record]),
+        session.previousWeeklyRecords.map((record) => [
+          record.weekStart,
+          record,
+        ]),
       );
       for (const weekStart of new Set([
         ...session.createdWeeklyRecordDates,
@@ -1702,7 +1810,9 @@ async function undoRecordedPrototypeRecovery(
       result.settingsRestored = await restoreSettingsForUndo(
         session.previousSettings,
       );
-      await pruneRecoveryMutations(buildRecoveryMutationTargetsFromSession(session));
+      await pruneRecoveryMutations(
+        buildRecoveryMutationTargetsFromSession(session),
+      );
       await db.prototypeRecoverySessions.put(
         PrototypeRecoverySessionRecordSchema.parse({
           ...session,
@@ -1743,7 +1853,9 @@ async function undoPrototypeRecoveryFromResolvedWorkspace(
     async () => {
       const itemIdsToDelete = new Set(resolved.itemIdByLegacyKey.values());
 
-      for (const { attachmentId } of resolved.attachmentIdsByLegacyKey.values()) {
+      for (const {
+        attachmentId,
+      } of resolved.attachmentIdsByLegacyKey.values()) {
         const attachment = await db.attachments.get(attachmentId);
         if (!attachment || itemIdsToDelete.has(attachment.itemId)) {
           continue;
@@ -1791,8 +1903,7 @@ async function undoPrototypeRecoveryFromResolvedWorkspace(
   return result;
 }
 
-export async function getLegacyPrototypeUndoAvailability():
-  Promise<LegacyPrototypeUndoAvailability> {
+export async function getLegacyPrototypeUndoAvailability(): Promise<LegacyPrototypeUndoAvailability> {
   const session = await getLatestOpenPrototypeRecoverySession();
   const browserSummary = (() => {
     try {
@@ -1814,15 +1925,17 @@ export async function getLegacyPrototypeUndoAvailability():
 
   const recoveredMutations = await db.mutationQueue
     .toArray()
-    .then((rows) => rows.filter((mutation) => mutation.type.endsWith('.recovered')));
+    .then((rows) =>
+      rows.filter((mutation) => mutation.type.endsWith('.recovered')),
+    );
 
   return {
     browserSummary,
     createdAt: recoveredMutations.length
-      ? recoveredMutations
+      ? (recoveredMutations
           .map((mutation) => mutation.createdAt)
           .sort()
-          .at(-1) ?? null
+          .at(-1) ?? null)
       : null,
     mode: recoveredMutations.length ? 'retroactive' : 'none',
     source: null,
@@ -1830,8 +1943,7 @@ export async function getLegacyPrototypeUndoAvailability():
   };
 }
 
-export async function undoLastLegacyPrototypeRecovery():
-  Promise<LegacyPrototypeUndoResult> {
+export async function undoLastLegacyPrototypeRecovery(): Promise<LegacyPrototypeUndoResult> {
   const session = await getLatestOpenPrototypeRecoverySession();
   if (!session) {
     throw new Error('No recovery with undo history was found yet.');
@@ -1848,8 +1960,7 @@ export async function undoLegacyPrototypeRecoveryData(
   );
 }
 
-export async function undoLegacyPrototypeRecoveryFromBrowserStorage():
-  Promise<LegacyPrototypeUndoResult> {
+export async function undoLegacyPrototypeRecoveryFromBrowserStorage(): Promise<LegacyPrototypeUndoResult> {
   const raw = readLegacyPrototypeBrowserRaw();
   if (!raw) {
     throw new Error(
@@ -1893,9 +2004,7 @@ function parseLegacyPrototypeJson(
   }
 }
 
-export function getLegacyPrototypeBrowserSummary():
-  | LegacyPrototypeSummary
-  | null {
+export function getLegacyPrototypeBrowserSummary(): LegacyPrototypeSummary | null {
   const raw = readLegacyPrototypeBrowserRaw();
   if (!raw) {
     return null;
@@ -1915,13 +2024,13 @@ function hasRecoverySessionChanges(
 ): boolean {
   return Boolean(
     session.createdItemIds.length ||
-      session.createdRoutineIds.length ||
-      session.createdAttachmentIds.length ||
-      session.createdDailyRecordDates.length ||
-      session.createdWeeklyRecordDates.length ||
-      session.previousDailyRecords.length ||
-      session.previousWeeklyRecords.length ||
-      session.previousSettings,
+    session.createdRoutineIds.length ||
+    session.createdAttachmentIds.length ||
+    session.createdDailyRecordDates.length ||
+    session.createdWeeklyRecordDates.length ||
+    session.previousDailyRecords.length ||
+    session.previousWeeklyRecords.length ||
+    session.previousSettings,
   );
 }
 
@@ -2274,10 +2383,7 @@ export async function importLegacyPrototypeBackupFile(
 ): Promise<LegacyPrototypeImportResult> {
   const text = await file.text();
   return importLegacyPrototypeData(
-    parseLegacyPrototypeJson(
-      text,
-      'That backup file could not be read.',
-    ),
+    parseLegacyPrototypeJson(text, 'That backup file could not be read.'),
     { source: 'file' },
   );
 }

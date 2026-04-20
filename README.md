@@ -14,7 +14,7 @@ This repo contains:
 - a real React + TypeScript + Vite app foundation
 - IndexedDB-backed local persistence shaped as a durable device replica
 - a sync-ready mutation queue and Supabase boundary for signed-in continuity
-- a guest-to-account auth model shaped around anonymous bootstrap and later account upgrade
+- a device-guest to member auth model with Google first and magic-link fallback
 - Cloudflare Pages and Wrangler groundwork for the eventual public deploy
 - control docs, implementation docs, and agent guidance for long-term development
 - archived source artifacts from the prototype and manager control-pack drop
@@ -61,12 +61,11 @@ Verified in this workspace:
 - Wrangler CLI is installed as a project dev dependency and available through `npx wrangler` or the npm scripts below
 - Supabase CLI is installed as a project dev dependency and available through `npx supabase` or the npm scripts below
 
-Installed but still needs shell refresh or login work:
+Account-linked tools may still need login depending on the machine:
 
 - GitHub CLI is installed at `C:\Program Files\GitHub CLI\gh.exe`
-- `gh` is not visible on the current shell `PATH` yet
-- `gh` is not authenticated yet
-- `wrangler` is not authenticated yet
+- verify GitHub auth with `gh auth status`
+- verify Cloudflare auth with `npm run cf:whoami`
 
 Still missing for local Supabase stack work:
 
@@ -116,10 +115,12 @@ The current app foundation is offline-capable and shaped for a sync-first signed
 
 - the local database is the device replica
 - writes already create mutation-log entries for future sync
-- the session model now explicitly distinguishes device guest, anonymous user, and member
-- auth and remote sync are not wired until Supabase is configured
+- the session model centers on `device-guest` and `member`; `anonymous-user` remains schema-reserved but is not the current product path
+- auth and remote sync are wired, but stay dormant until Supabase env vars and provider setup are present
+- the foreground tab runs periodic browser sync while signed in; no open tab means no retries yet
 
 Environment variables live in [.env.example](/C:/dev/GitHub/Holdfast/.env.example).
 
 Reference:
+
 - [Supabase CLI docs](https://supabase.com/docs/guides/local-development/cli/getting-started)

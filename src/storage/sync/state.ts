@@ -1,9 +1,14 @@
 import { SCHEMA_VERSION, SYNC_STATE_ROW_ID } from '@/domain/constants';
 import { nowIso } from '@/domain/dates';
-import { SyncStateRecordSchema, type SyncStateRecord } from '@/domain/schemas/records';
+import {
+  SyncStateRecordSchema,
+  type SyncStateRecord,
+} from '@/domain/schemas/records';
 import type { SyncBootstrapStatus } from '@/storage/sync/contracts';
 
-export function createDefaultSyncState(status: SyncBootstrapStatus): SyncStateRecord {
+export function createDefaultSyncState(
+  status: SyncBootstrapStatus,
+): SyncStateRecord {
   const timestamp = nowIso();
 
   return SyncStateRecordSchema.parse({
@@ -14,6 +19,7 @@ export function createDefaultSyncState(status: SyncBootstrapStatus): SyncStateRe
     lastSyncedAt: null,
     authState: 'signed-out',
     identityState: 'device-guest',
+    authPromptState: 'none',
     remoteUserId: null,
     createdAt: timestamp,
     updatedAt: timestamp,

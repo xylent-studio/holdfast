@@ -348,7 +348,9 @@ async function readSettingsAndSyncSnapshot(): Promise<{
 
 async function readDailyRecordOrDefault(date: string): Promise<DailyRecord> {
   const existing = await db.dailyRecords.get(date);
-  return existing ? DailyRecordSchema.parse(existing) : defaultDailyRecord(date);
+  return existing
+    ? DailyRecordSchema.parse(existing)
+    : defaultDailyRecord(date);
 }
 
 async function readWeeklyRecordOrDefault(
@@ -397,7 +399,12 @@ export async function updateSyncState(
   patch: Partial<
     Pick<
       SyncStateRecord,
-      'mode' | 'lastSyncedAt' | 'authState' | 'identityState' | 'remoteUserId'
+      | 'mode'
+      | 'lastSyncedAt'
+      | 'authState'
+      | 'identityState'
+      | 'authPromptState'
+      | 'remoteUserId'
     >
   >,
 ): Promise<SyncStateRecord> {
@@ -1333,12 +1340,14 @@ export async function getAttachmentDownload(
   const blobRow = await db.attachmentBlobs.get(attachment.blobId);
   if (!blobRow) {
     const syncState = await getCurrentSyncState();
-    if (!syncState.remoteUserId) {
+    if (syncState.authState !== 'signed-in' || !syncState.remoteUserId) {
       return null;
     }
 
-    const blob = await downloadAttachmentBlob(syncState.remoteUserId, attachmentId)
-      .catch(() => null);
+    const blob = await downloadAttachmentBlob(
+      syncState.remoteUserId,
+      attachmentId,
+    ).catch(() => null);
     if (!blob) {
       return null;
     }

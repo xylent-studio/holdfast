@@ -244,6 +244,12 @@ The current public auth path is:
 
 `authState` tracks whether there is an authenticated backend session. `identityState` tracks what kind of workspace owner the device is currently attached to.
 
+`authPromptState` is internal sync-adjacent state that lets the app distinguish:
+
+- calm signed-out state after explicit sign-out
+- session-loss recovery
+- wrong-account protection on a member-owned device workspace
+
 `anonymous-user` is still reserved in the schema, but it is not the current V1 product path.
 
 ## Versioning
@@ -313,7 +319,7 @@ That backup intentionally includes:
 - daily and weekly records
 - routines
 - settings
-- attachment metadata plus attachment payloads
+- attachment metadata plus attachment payloads when they are still available locally or can be rehydrated
 
 That backup intentionally excludes:
 
@@ -322,3 +328,6 @@ That backup intentionally excludes:
 - local-only recovery-session history
 
 This keeps the file user-meaningful instead of leaking device bookkeeping into a backup the user may actually need later.
+
+Per-record sync bookkeeping is stripped from the exported JSON.
+If an attachment file is missing on the device and cannot be rehydrated, the backup now preserves the attachment metadata with an explicit missing-payload marker instead of failing the whole export.

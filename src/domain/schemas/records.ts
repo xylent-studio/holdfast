@@ -47,6 +47,12 @@ export const SyncIdentityStateSchema = z.enum([
   'anonymous-user',
   'member',
 ]);
+export const SyncAuthPromptStateSchema = z.enum([
+  'none',
+  'session-expired',
+  'signed-out-by-user',
+  'account-mismatch',
+]);
 export const PrototypeRecoverySourceSchema = z.enum(['browser', 'file']);
 export const ReadinessKeySchema = z.enum([
   'water',
@@ -228,6 +234,7 @@ export const SyncStateRecordSchema = z.object({
   lastSyncedAt: z.string().nullable(),
   authState: SyncAuthStateSchema,
   identityState: SyncIdentityStateSchema.default('device-guest'),
+  authPromptState: SyncAuthPromptStateSchema.default('none'),
   remoteUserId: z.string().uuid().nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -271,6 +278,7 @@ export type AttachmentKind = z.infer<typeof AttachmentKindSchema>;
 export type SyncRecordState = z.infer<typeof SyncRecordStateSchema>;
 export type SyncAuthState = z.infer<typeof SyncAuthStateSchema>;
 export type SyncIdentityState = z.infer<typeof SyncIdentityStateSchema>;
+export type SyncAuthPromptState = z.infer<typeof SyncAuthPromptStateSchema>;
 export type PrototypeRecoverySource = z.infer<
   typeof PrototypeRecoverySourceSchema
 >;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { useAuth } from '@/app/auth/AuthProvider';
+import { useAuth } from '@/app/auth/useAuth';
 
 interface AuthAccessActionsProps {
   hasLocalData?: boolean;

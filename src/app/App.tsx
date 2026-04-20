@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import {
   BrowserRouter,
   Navigate,
@@ -10,21 +10,40 @@ import {
 
 import { AuthCallbackView } from '@/app/auth/AuthCallbackView';
 import { AuthLandingView } from '@/app/auth/AuthLandingView';
-import { AuthProvider, useAuth } from '@/app/auth/AuthProvider';
+import { AuthProvider } from '@/app/auth/AuthProvider';
 import { AuthRecoveryPanel } from '@/app/auth/AuthRecoveryPanel';
+import { shouldShowSessionRecovery as shouldShowRecoveryPanel } from '@/app/auth/recovery';
+import { useAuth } from '@/app/auth/useAuth';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { SyncProvider } from '@/app/sync/SyncProvider';
 import { AppShell } from '@/app/shell/AppShell';
 import { QuickAddDialog } from '@/features/capture/QuickAddDialog';
-import { InboxView } from '@/features/inbox/InboxView';
-import { ItemDetailsDialog } from '@/features/item-details/ItemDetailsDialog';
 import { NowView } from '@/features/now/NowView';
-import { ReviewView } from '@/features/review/ReviewView';
-import { SettingsView } from '@/features/settings/SettingsView';
 import { UpcomingView } from '@/features/upcoming/UpcomingView';
 import { todayDateKey } from '@/domain/dates';
 import { openItems } from '@/domain/logic/selectors';
 import { bootstrapHoldfast, useHoldfastSnapshot } from '@/storage/local/api';
+import { LoadingPanel } from '@/shared/ui/LoadingPanel';
+const InboxView = lazy(async () =>
+  import('@/features/inbox/InboxView').then((module) => ({
+    default: module.InboxView,
+  })),
+);
+const ItemDetailsDialog = lazy(async () =>
+  import('@/features/item-details/ItemDetailsDialog').then((module) => ({
+    default: module.ItemDetailsDialog,
+  })),
+);
+const ReviewView = lazy(async () =>
+  import('@/features/review/ReviewView').then((module) => ({
+    default: module.ReviewView,
+  })),
+);
+const SettingsView = lazy(async () =>
+  import('@/features/settings/SettingsView').then((module) => ({
+    default: module.SettingsView,
+  })),
+);
 
 function AppRoutes() {
   const [currentDate, setCurrentDate] = useState(todayDateKey());
@@ -56,25 +75,14 @@ function AppRoutes() {
     Boolean(snapshot) &&
     auth.configured &&
     auth.isReady &&
-    !auth.session &&
-    snapshot.syncState.identityState === 'member';
+    shouldShowRecoveryPanel(snapshot.syncState, Boolean(auth.session));
 
   if (location.pathname === '/auth/callback') {
     return <AuthCallbackView />;
   }
 
   if (shouldWaitForAuthGate) {
-    return (
-      <div className="auth-shell">
-        <section className="panel auth-card">
-          <div className="auth-copy">
-            <div className="eyebrow">Holdfast</div>
-            <h1>Opening Holdfast</h1>
-            <p>Getting things ready.</p>
-          </div>
-        </section>
-      </div>
-    );
+    return <LoadingPanel layout="auth" />;
   }
 
   if (shouldShowLanding) {
@@ -93,68 +101,73 @@ function AppRoutes() {
         viewPath={location.pathname}
       >
         {shouldShowSessionRecovery && location.pathname !== '/settings' ? (
-          <AuthRecoveryPanel nextPath={location.pathname} />
+          <AuthRecoveryPanel
+            nextPath={location.pathname}
+            reason={snapshot.syncState.authPromptState}
+          />
         ) : null}
-        <Routes>
-          <Route path="/" element={<Navigate replace to="/now" />} />
-          <Route path="/today" element={<Navigate replace to="/now" />} />
-          <Route
-            path="/now"
-            element={
-              snapshot ? (
-                <NowView
-                  currentDate={currentDate}
-                  onOpenItem={setSelectedItemId}
-                  snapshot={snapshot}
-                />
-              ) : null
-            }
-          />
-          <Route
-            path="/inbox"
-            element={
-              snapshot ? (
-                <InboxView
-                  currentDate={currentDate}
-                  onOpenItem={setSelectedItemId}
-                  snapshot={snapshot}
-                />
-              ) : null
-            }
-          />
-          <Route
-            path="/upcoming"
-            element={
-              snapshot ? (
-                <UpcomingView
-                  currentDate={currentDate}
-                  onOpenItem={setSelectedItemId}
-                  snapshot={snapshot}
-                />
-              ) : null
-            }
-          />
-          <Route
-            path="/review"
-            element={
-              snapshot ? (
-                <ReviewView
-                  currentDate={currentDate}
-                  onOpenItem={setSelectedItemId}
-                  snapshot={snapshot}
-                />
-              ) : null
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              snapshot ? (
-                <SettingsView currentDate={currentDate} snapshot={snapshot} />
-              ) : null
-            }
-          />
-        </Routes>
+        <Suspense fallback={<LoadingPanel />}>
+          <Routes>
+            <Route path="/" element={<Navigate replace to="/now" />} />
+            <Route path="/today" element={<Navigate replace to="/now" />} />
+            <Route
+              path="/now"
+              element={
+                snapshot ? (
+                  <NowView
+                    currentDate={currentDate}
+                    onOpenItem={setSelectedItemId}
+                    snapshot={snapshot}
+                  />
+                ) : null
+              }
+            />
+            <Route
+              path="/inbox"
+              element={
+                snapshot ? (
+                  <InboxView
+                    currentDate={currentDate}
+                    onOpenItem={setSelectedItemId}
+                    snapshot={snapshot}
+                  />
+                ) : null
+              }
+            />
+            <Route
+              path="/upcoming"
+              element={
+                snapshot ? (
+                  <UpcomingView
+                    currentDate={currentDate}
+                    onOpenItem={setSelectedItemId}
+                    snapshot={snapshot}
+                  />
+                ) : null
+              }
+            />
+            <Route
+              path="/review"
+              element={
+                snapshot ? (
+                  <ReviewView
+                    currentDate={currentDate}
+                    onOpenItem={setSelectedItemId}
+                    snapshot={snapshot}
+                  />
+                ) : null
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                snapshot ? (
+                  <SettingsView currentDate={currentDate} snapshot={snapshot} />
+                ) : null
+              }
+            />
+          </Routes>
+        </Suspense>
       </AppShell>
       <QuickAddDialog
         currentDate={currentDate}
@@ -162,16 +175,18 @@ function AppRoutes() {
         onClose={() => setQuickAddOpen(false)}
       />
       {selectedItem ? (
-        <ItemDetailsDialog
-          currentDate={currentDate}
-          isFocused={Boolean(
-            snapshot?.currentDay.focusItemIds.includes(selectedItem.id),
-          )}
-          item={selectedItem}
-          isOpen
-          key={selectedItem.id}
-          onClose={() => setSelectedItemId(null)}
-        />
+        <Suspense fallback={null}>
+          <ItemDetailsDialog
+            currentDate={currentDate}
+            isFocused={Boolean(
+              snapshot?.currentDay.focusItemIds.includes(selectedItem.id),
+            )}
+            item={selectedItem}
+            isOpen
+            key={selectedItem.id}
+            onClose={() => setSelectedItemId(null)}
+          />
+        </Suspense>
       ) : null}
     </>
   );

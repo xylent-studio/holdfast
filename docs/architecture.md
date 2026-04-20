@@ -8,7 +8,7 @@ Holdfast is built as an installable web app with:
 
 - React + TypeScript + Vite
 - IndexedDB via Dexie for the device replica
-- a mutation queue and browser sync worker for account-backed sync
+- a mutation queue and foreground browser sync loop for account-backed sync
 - a PWA shell for installability and offline resilience
 - a Supabase-backed auth, database, and file-storage boundary
 - a Cloudflare Pages deployment target prepared through Wrangler config and repo-local tooling
@@ -49,7 +49,7 @@ Dexie plus IndexedDB gives us:
 - incremental writes
 - cleaner sync boundaries
 
-### Mutation queue and sync worker foundation
+### Mutation queue and sync loop foundation
 
 Writes already create mutation-log entries. That shapes the local write model for:
 
@@ -58,12 +58,15 @@ Writes already create mutation-log entries. That shapes the local write model fo
 - idempotent handling
 - conflict inspection
 
-The signed-in shell now runs a background sync pass that:
+The signed-in shell now runs a foreground-tab sync pass that:
 
 - uploads pending local mutations
 - pulls remote changes back into IndexedDB
 - syncs attachment binaries through Supabase Storage
 - records device sync state quietly for the UI
+
+This is not a service-worker or background-worker system yet.
+If there is no open signed-in tab, there are no automatic retries.
 
 Conflict handling is intentionally simple for now. Richer merge behavior and broader release hardening still belong on the roadmap.
 

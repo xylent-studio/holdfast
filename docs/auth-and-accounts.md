@@ -105,6 +105,7 @@ Sign-out should:
 - stop account access and future sync on this device
 - keep local data in place
 - avoid implying deletion
+- return to a calm signed-out state instead of pretending the device hit an auth failure
 
 Sign-out is not delete.
 
@@ -134,7 +135,13 @@ Local foundation for that direction remains:
 
 - `authState` tracks whether this device currently has an active backend session
 - `identityState` tracks whether the device is still a local guest workspace or a member-owned workspace
+- `authPromptState` tracks whether signed-out UI should stay calm, ask for recovery, or block the wrong-account path
 - `remoteUserId` keeps the last known signed-in owner on the device
+
+Current safety guard:
+
+- Holdfast does not silently rebind a member-owned local workspace to a different signed-in account on the same device
+- if the wrong account signs in, the app signs back out and asks for the original account instead of risking cross-account sync
 
 That local marker is not a full replacement for per-record remote ownership.
 Per-record `user_id` scoping now exists remotely, but richer conflict handling and hosted-provider setup still need to be finished before broad public use.

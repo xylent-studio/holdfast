@@ -9,6 +9,7 @@ import {
 } from '@/domain/schemas/records';
 import { getHoldfastSnapshot } from '@/storage/local/api';
 import { HOLDFAST_DB_NAME, db } from '@/storage/local/db';
+import { createWorkspaceBackup } from '@/storage/local/workspace-backup';
 import {
   LEGACY_PROTOTYPE_STORAGE_KEY,
   getLegacyPrototypeBrowserSummary,
@@ -261,8 +262,12 @@ describe('legacy prototype recovery', () => {
     });
     expect(firstSnapshot.weeklyRecord.focus).toBe('Protect calm mornings.');
 
-    const importedTask = firstSnapshot.items.find((item) => item.title === 'Buy coffee');
-    const importedNote = firstSnapshot.items.find((item) => item.title === 'Gift idea');
+    const importedTask = firstSnapshot.items.find(
+      (item) => item.title === 'Buy coffee',
+    );
+    const importedNote = firstSnapshot.items.find(
+      (item) => item.title === 'Gift idea',
+    );
 
     expect(importedTask).toMatchObject({
       status: 'upcoming',
@@ -413,6 +418,7 @@ describe('legacy prototype recovery', () => {
 
     const undo = await undoLastLegacyPrototypeRecovery();
     const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
+    const backup = await createWorkspaceBackup();
 
     expect(undo).toMatchObject({
       itemsDeleted: 2,
@@ -425,6 +431,8 @@ describe('legacy prototype recovery', () => {
     });
     expect(snapshot.items).toEqual([]);
     expect(snapshot.routines).toEqual([]);
+    expect(await db.dailyRecords.count()).toBe(1);
+    expect(await db.weeklyRecords.count()).toBe(1);
     expect(snapshot.currentDay).toMatchObject({
       focusItemIds: [],
       readiness: {
@@ -448,6 +456,8 @@ describe('legacy prototype recovery', () => {
       standards: 'Keep the basics handled.',
       why: '',
     });
+    expect(backup.summary.dayCount).toBe(1);
+    expect(backup.summary.weekCount).toBe(1);
     expect(await getLegacyPrototypeUndoAvailability()).toMatchObject({
       mode: 'none',
     });
@@ -465,6 +475,7 @@ describe('legacy prototype recovery', () => {
 
     const undo = await undoLegacyPrototypeRecoveryData(payload);
     const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
+    const backup = await createWorkspaceBackup();
 
     expect(undo).toMatchObject({
       itemsDeleted: 2,
@@ -474,6 +485,8 @@ describe('legacy prototype recovery', () => {
     });
     expect(snapshot.items).toEqual([]);
     expect(snapshot.routines).toEqual([]);
+    expect(await db.dailyRecords.count()).toBe(0);
+    expect(await db.weeklyRecords.count()).toBe(0);
     expect(snapshot.currentDay.focusItemIds).toEqual([]);
     expect(snapshot.currentDay.launchNote).toBe('');
     expect(snapshot.weeklyRecord.focus).toBe('');
@@ -482,6 +495,8 @@ describe('legacy prototype recovery', () => {
       standards: '',
       why: '',
     });
+    expect(backup.summary.dayCount).toBe(0);
+    expect(backup.summary.weekCount).toBe(0);
     expect(await getLegacyPrototypeUndoAvailability()).toMatchObject({
       mode: 'none',
     });
