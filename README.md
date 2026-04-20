@@ -24,6 +24,22 @@ This repo contains:
 - [docs/docs-index.md](/C:/dev/GitHub/Holdfast/docs/docs-index.md)
 - [AGENTS.md](/C:/dev/GitHub/Holdfast/AGENTS.md)
 
+## Agent Re-Entry
+
+On machines that have the local intel workspace, start deeper repo work with:
+
+`.\scripts\rehydrate-agent.ps1`
+
+If the task already has a clear theme, pass a trigger:
+
+`.\scripts\rehydrate-agent.ps1 -Trigger "device-guest sync and now today alias"`
+
+For product-intent or anti-regression work:
+
+`.\scripts\rehydrate-agent.ps1 -Trigger "product meaning and guardrails"`
+
+This helper is a local continuity aid. Repo docs, code, config, and generated machine-state remain the source of truth.
+
 ## Stack
 
 - Frontend: React 19 + TypeScript + Vite

@@ -2,9 +2,31 @@
 
 Treat this repo as a real product codebase, not a demo.
 
+## Mandatory Re-Entry
+
+Before meaningful work in this repo on a machine that has the local intel workspace, run:
+
+`.\scripts\rehydrate-agent.ps1`
+
+If you already know the work theme, pass a trigger so routed recall lands on the right surfaces immediately:
+
+`.\scripts\rehydrate-agent.ps1 -Trigger "device-guest sync and now today alias"`
+
+For product meaning, guardrails, or anti-regression memory:
+
+`.\scripts\rehydrate-agent.ps1 -Trigger "product meaning and guardrails"`
+
+Do not skip re-entry for product, storage, auth, sync, deployment, or migration work unless the task is truly trivial.
+
+Trusted external context packs for Holdfast can be dropped into:
+
+`C:\dev\_intel\incoming-context\holdfast\pending`
+
+The local machine loop will ingest them automatically, preserve the raw source, and expose only distilled supplemental context through re-entry surfaces.
+
 ## Read First
 
-0. If this machine has the local intel workspace, run `C:\dev\_intel\scripts\Resolve-AgentContext.ps1 -TargetPath C:\dev\GitHub\Holdfast` before deeper work.
+0. Run `.\scripts\rehydrate-agent.ps1` if the local intel workspace exists on this machine.
 1. [docs/control/docs-index.md](/C:/dev/GitHub/Holdfast/docs/control/docs-index.md)
 2. [docs/product.md](/C:/dev/GitHub/Holdfast/docs/product.md)
 3. [docs/core-flows.md](/C:/dev/GitHub/Holdfast/docs/core-flows.md)
@@ -15,7 +37,7 @@ Treat this repo as a real product codebase, not a demo.
 
 The files in [docs/control](/C:/dev/GitHub/Holdfast/docs/control) are the governing product contract. If code, docs, or naming conflict with them, surface the conflict explicitly and resolve it on purpose.
 
-Machine-local `_intel` outputs are supplemental context only. They can help with continuity and handoff on this machine, but they do not override repo docs, code, or the control contract.
+Machine-local `_intel` outputs, including imported external context packs, are supplemental context only. They can help with continuity and handoff on this machine, but they do not override repo docs, code, or the control contract.
 
 ## Product Rules
 
@@ -77,13 +99,14 @@ High-signal files:
 
 ## Required Workflow For Meaningful Changes
 
-1. Confirm the governing control docs still support the change.
-2. Update or confirm the domain model.
-3. Update local persistence or mutation logging if write semantics change.
-4. Keep feature code thin and product-specific.
-5. Add or update tests when behavior changes.
-6. Update docs if product rules, flows, architecture, or naming changed.
-7. When the local intel workspace is available, write a checkpoint with `C:\dev\_intel\scripts\Write-AgentCheckpoint.ps1 -TargetPath C:\dev\GitHub\Holdfast -TaskType code -Summary "..."` after a pass that materially changes product, storage, auth, sync, or deployment behavior.
+1. Rehydrate through `.\scripts\rehydrate-agent.ps1` when available on this machine.
+2. Confirm the governing control docs still support the change.
+3. Update or confirm the domain model.
+4. Update local persistence or mutation logging if write semantics change.
+5. Keep feature code thin and product-specific.
+6. Add or update tests when behavior changes.
+7. Update docs if product rules, flows, architecture, or naming changed.
+8. When the local intel workspace is available, write a checkpoint with `C:\dev\_intel\scripts\Write-AgentCheckpoint.ps1 -TargetPath C:\dev\GitHub\Holdfast -TaskType code -Summary "..."` after a pass that materially changes product, storage, auth, sync, or deployment behavior.
 
 ## Current Gaps To Respect
 
