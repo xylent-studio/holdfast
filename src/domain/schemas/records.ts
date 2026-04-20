@@ -47,6 +47,7 @@ export const SyncIdentityStateSchema = z.enum([
   'anonymous-user',
   'member',
 ]);
+export const PrototypeRecoverySourceSchema = z.enum(['browser', 'file']);
 export const ReadinessKeySchema = z.enum([
   'water',
   'food',
@@ -232,6 +233,34 @@ export const SyncStateRecordSchema = z.object({
   updatedAt: z.string(),
 });
 
+export const LegacyPrototypeSummarySchema = z.object({
+  attachmentCount: z.number().int().nonnegative(),
+  dayCount: z.number().int().nonnegative(),
+  itemCount: z.number().int().nonnegative(),
+  noteCount: z.number().int().nonnegative(),
+  routineCount: z.number().int().nonnegative(),
+  taskCount: z.number().int().nonnegative(),
+  weekCount: z.number().int().nonnegative(),
+});
+
+export const PrototypeRecoverySessionRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  source: PrototypeRecoverySourceSchema,
+  createdAt: z.string(),
+  undoneAt: z.string().nullable(),
+  summary: LegacyPrototypeSummarySchema,
+  createdItemIds: z.array(z.string().uuid()),
+  createdRoutineIds: z.array(z.string().uuid()),
+  createdAttachmentIds: z.array(z.string().uuid()),
+  createdAttachmentBlobIds: z.array(z.string().uuid()),
+  createdDailyRecordDates: z.array(z.string()),
+  createdWeeklyRecordDates: z.array(z.string()),
+  previousDailyRecords: z.array(DailyRecordSchema),
+  previousWeeklyRecords: z.array(WeeklyRecordSchema),
+  previousSettings: SettingsRecordSchema.nullable(),
+});
+
 export type Lane = z.infer<typeof LaneSchema>;
 export type ItemKind = z.infer<typeof ItemKindSchema>;
 export type ItemStatus = z.infer<typeof ItemStatusSchema>;
@@ -242,6 +271,9 @@ export type AttachmentKind = z.infer<typeof AttachmentKindSchema>;
 export type SyncRecordState = z.infer<typeof SyncRecordStateSchema>;
 export type SyncAuthState = z.infer<typeof SyncAuthStateSchema>;
 export type SyncIdentityState = z.infer<typeof SyncIdentityStateSchema>;
+export type PrototypeRecoverySource = z.infer<
+  typeof PrototypeRecoverySourceSchema
+>;
 export type ReadinessKey = z.infer<typeof ReadinessKeySchema>;
 
 export type ItemRecord = z.infer<typeof ItemRecordSchema>;
@@ -255,3 +287,9 @@ export type AttachmentRecord = z.infer<typeof AttachmentRecordSchema>;
 export type AttachmentBlobRecord = z.infer<typeof AttachmentBlobRecordSchema>;
 export type MutationRecord = z.infer<typeof MutationRecordSchema>;
 export type SyncStateRecord = z.infer<typeof SyncStateRecordSchema>;
+export type LegacyPrototypeSummary = z.infer<
+  typeof LegacyPrototypeSummarySchema
+>;
+export type PrototypeRecoverySessionRecord = z.infer<
+  typeof PrototypeRecoverySessionRecordSchema
+>;

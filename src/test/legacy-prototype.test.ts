@@ -2,12 +2,20 @@ import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { DateKey } from '@/domain/dates';
+import {
+  DailyRecordSchema,
+  SettingsRecordSchema,
+  WeeklyRecordSchema,
+} from '@/domain/schemas/records';
 import { getHoldfastSnapshot } from '@/storage/local/api';
 import { HOLDFAST_DB_NAME, db } from '@/storage/local/db';
 import {
   LEGACY_PROTOTYPE_STORAGE_KEY,
   getLegacyPrototypeBrowserSummary,
+  getLegacyPrototypeUndoAvailability,
   importLegacyPrototypeData,
+  undoLastLegacyPrototypeRecovery,
+  undoLegacyPrototypeRecoveryData,
 } from '@/storage/local/legacy-prototype';
 
 const CURRENT_DATE = '2026-04-19' as DateKey;
@@ -340,5 +348,142 @@ describe('legacy prototype recovery', () => {
     expect(
       snapshot.items.find((item) => item.title === 'Gift idea for June'),
     ).toMatchObject({ kind: 'note', status: 'inbox' });
+  });
+
+  it('records undo history for new recoveries and restores prior local state', async () => {
+    const payload = currentLikePrototypeWorkspace();
+
+    await db.dailyRecords.put(
+      DailyRecordSchema.parse({
+        date: '2026-04-19',
+        schemaVersion: 2,
+        startedAt: null,
+        closedAt: null,
+        readiness: {
+          water: false,
+          food: true,
+          supplements: false,
+          hygiene: false,
+          movement: false,
+          sleepSetup: false,
+        },
+        focusItemIds: [],
+        launchNote: '',
+        closeWin: '',
+        closeCarry: '',
+        closeSeed: '',
+        closeNote: '',
+        seededRoutineIds: [],
+        createdAt: '2026-04-19T06:00:00.000Z',
+        updatedAt: '2026-04-19T06:00:00.000Z',
+        syncState: 'pending',
+      }),
+    );
+    await db.weeklyRecords.put(
+      WeeklyRecordSchema.parse({
+        weekStart: '2026-04-13',
+        schemaVersion: 2,
+        focus: '',
+        protect: 'Keep Sunday open.',
+        notes: '',
+        createdAt: '2026-04-13T06:00:00.000Z',
+        updatedAt: '2026-04-13T06:00:00.000Z',
+        syncState: 'pending',
+      }),
+    );
+    await db.settings.put(
+      SettingsRecordSchema.parse({
+        id: 'settings',
+        schemaVersion: 2,
+        direction: '',
+        standards: 'Keep the basics handled.',
+        why: '',
+        createdAt: '2026-04-18T06:00:00.000Z',
+        updatedAt: '2026-04-18T06:00:00.000Z',
+        syncState: 'pending',
+      }),
+    );
+
+    await importLegacyPrototypeData(payload, { source: 'file' });
+
+    expect(await getLegacyPrototypeUndoAvailability()).toMatchObject({
+      mode: 'recorded',
+      source: 'file',
+    });
+
+    const undo = await undoLastLegacyPrototypeRecovery();
+    const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
+
+    expect(undo).toMatchObject({
+      itemsDeleted: 2,
+      routinesDeleted: 1,
+      attachmentsDeleted: 2,
+      daysRestored: 1,
+      weeksRestored: 1,
+      settingsRestored: true,
+      partial: false,
+    });
+    expect(snapshot.items).toEqual([]);
+    expect(snapshot.routines).toEqual([]);
+    expect(snapshot.currentDay).toMatchObject({
+      focusItemIds: [],
+      readiness: {
+        water: false,
+        food: true,
+        supplements: false,
+        hygiene: false,
+        movement: false,
+        sleepSetup: false,
+      },
+      launchNote: '',
+      closeSeed: '',
+    });
+    expect(snapshot.weeklyRecord).toMatchObject({
+      focus: '',
+      protect: 'Keep Sunday open.',
+      notes: '',
+    });
+    expect(snapshot.settings).toMatchObject({
+      direction: '',
+      standards: 'Keep the basics handled.',
+      why: '',
+    });
+    expect(await getLegacyPrototypeUndoAvailability()).toMatchObject({
+      mode: 'none',
+    });
+  });
+
+  it('uses the backup payload to reverse older imports that predate undo sessions', async () => {
+    const payload = currentLikePrototypeWorkspace();
+
+    await importLegacyPrototypeData(payload, { source: 'file' });
+    await db.prototypeRecoverySessions.clear();
+
+    expect(await getLegacyPrototypeUndoAvailability()).toMatchObject({
+      mode: 'retroactive',
+    });
+
+    const undo = await undoLegacyPrototypeRecoveryData(payload);
+    const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
+
+    expect(undo).toMatchObject({
+      itemsDeleted: 2,
+      routinesDeleted: 1,
+      attachmentsDeleted: 2,
+      partial: true,
+    });
+    expect(snapshot.items).toEqual([]);
+    expect(snapshot.routines).toEqual([]);
+    expect(snapshot.currentDay.focusItemIds).toEqual([]);
+    expect(snapshot.currentDay.launchNote).toBe('');
+    expect(snapshot.weeklyRecord.focus).toBe('');
+    expect(snapshot.settings).toMatchObject({
+      direction: '',
+      standards: '',
+      why: '',
+    });
+    expect(await getLegacyPrototypeUndoAvailability()).toMatchObject({
+      mode: 'none',
+    });
   });
 });

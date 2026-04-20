@@ -1,11 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   getLegacyPrototypeBrowserSummary,
+  getLegacyPrototypeUndoAvailability,
   importLegacyPrototypeBackupFile,
   importLegacyPrototypeFromBrowserStorage,
+  undoLastLegacyPrototypeRecovery,
+  undoLegacyPrototypeRecoveryFromBackupFile,
+  undoLegacyPrototypeRecoveryFromBrowserStorage,
   type LegacyPrototypeImportResult,
   type LegacyPrototypeSummary,
+  type LegacyPrototypeUndoAvailability,
+  type LegacyPrototypeUndoResult,
 } from '@/storage/local/legacy-prototype';
 import { Panel } from '@/shared/ui/Panel';
 
@@ -51,6 +57,32 @@ function recoveryResultLine(result: LegacyPrototypeImportResult): string {
   return `Recovered ${recoveredParts.join(' / ')}.${suffix} Existing records were left in place.`;
 }
 
+function undoResultLine(result: LegacyPrototypeUndoResult): string {
+  const restoredParts = [
+    pluralize(result.itemsDeleted, 'item'),
+    pluralize(result.routinesDeleted, 'routine'),
+    pluralize(result.attachmentsDeleted, 'attachment'),
+  ];
+  const stateParts: string[] = [];
+
+  if (result.daysRestored || result.weeksRestored) {
+    stateParts.push(
+      `${pluralize(result.daysRestored, 'day')} restored`,
+      `${pluralize(result.weeksRestored, 'week')} restored`,
+    );
+  }
+
+  if (result.settingsRestored) {
+    stateParts.push('settings restored');
+  }
+
+  if (result.partial) {
+    stateParts.push('older imports only roll back merged day, week, and settings state when it is still safe to do so');
+  }
+
+  return `Undo removed ${restoredParts.join(' / ')}.${stateParts.length ? ` ${stateParts.join(' / ')}.` : ''}`;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error && error.message
     ? error.message
@@ -76,21 +108,52 @@ function readBrowserRecoveryState(): {
 
 export function PrototypeRecoveryPanel() {
   const [browserState, setBrowserState] = useState(readBrowserRecoveryState);
-  const [result, setResult] = useState<LegacyPrototypeImportResult | null>(null);
-  const [busyMode, setBusyMode] = useState<'browser' | 'file' | null>(null);
+  const [importResult, setImportResult] =
+    useState<LegacyPrototypeImportResult | null>(null);
+  const [undoAvailability, setUndoAvailability] =
+    useState<LegacyPrototypeUndoAvailability | null>(null);
+  const [undoResult, setUndoResult] =
+    useState<LegacyPrototypeUndoResult | null>(null);
+  const [busyMode, setBusyMode] = useState<
+    'recover-browser' | 'recover-file' | 'undo-browser' | 'undo-file' | 'undo-recorded' | null
+  >(null);
   const { browserSummary, feedback } = browserState;
 
-  async function handleBrowserRecovery(): Promise<void> {
-    setBusyMode('browser');
+  useEffect(() => {
+    let active = true;
+
+    void getLegacyPrototypeUndoAvailability().then((nextAvailability) => {
+      if (active) {
+        setUndoAvailability(nextAvailability);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function clearFeedback(): void {
     setBrowserState((current) => ({
       ...current,
       feedback: null,
     }));
+  }
+
+  async function refreshState(): Promise<void> {
+    setBrowserState(readBrowserRecoveryState());
+    setUndoAvailability(await getLegacyPrototypeUndoAvailability());
+  }
+
+  async function handleBrowserRecovery(): Promise<void> {
+    setBusyMode('recover-browser');
+    clearFeedback();
 
     try {
       const nextResult = await importLegacyPrototypeFromBrowserStorage();
-      setResult(nextResult);
-      setBrowserState(readBrowserRecoveryState());
+      setImportResult(nextResult);
+      setUndoResult(null);
+      await refreshState();
     } catch (error) {
       setBrowserState((current) => ({
         ...current,
@@ -102,16 +165,71 @@ export function PrototypeRecoveryPanel() {
   }
 
   async function handleFileRecovery(file: File): Promise<void> {
-    setBusyMode('file');
-    setBrowserState((current) => ({
-      ...current,
-      feedback: null,
-    }));
+    setBusyMode('recover-file');
+    clearFeedback();
 
     try {
       const nextResult = await importLegacyPrototypeBackupFile(file);
-      setResult(nextResult);
-      setBrowserState(readBrowserRecoveryState());
+      setImportResult(nextResult);
+      setUndoResult(null);
+      await refreshState();
+    } catch (error) {
+      setBrowserState((current) => ({
+        ...current,
+        feedback: errorMessage(error),
+      }));
+    } finally {
+      setBusyMode(null);
+    }
+  }
+
+  async function handleRecordedUndo(): Promise<void> {
+    setBusyMode('undo-recorded');
+    clearFeedback();
+
+    try {
+      const nextResult = await undoLastLegacyPrototypeRecovery();
+      setUndoResult(nextResult);
+      setImportResult(null);
+      await refreshState();
+    } catch (error) {
+      setBrowserState((current) => ({
+        ...current,
+        feedback: errorMessage(error),
+      }));
+    } finally {
+      setBusyMode(null);
+    }
+  }
+
+  async function handleBrowserUndo(): Promise<void> {
+    setBusyMode('undo-browser');
+    clearFeedback();
+
+    try {
+      const nextResult = await undoLegacyPrototypeRecoveryFromBrowserStorage();
+      setUndoResult(nextResult);
+      setImportResult(null);
+      await refreshState();
+    } catch (error) {
+      setBrowserState((current) => ({
+        ...current,
+        feedback: errorMessage(error),
+      }));
+    } finally {
+      setBusyMode(null);
+    }
+  }
+
+  async function handleFileUndo(file: File): Promise<void> {
+    setBusyMode('undo-file');
+    clearFeedback();
+
+    try {
+      const nextResult = await undoLegacyPrototypeRecoveryFromBackupFile(file);
+      setUndoResult(nextResult);
+      setImportResult(null);
+      await refreshState();
     } catch (error) {
       setBrowserState((current) => ({
         ...current,
@@ -155,13 +273,15 @@ export function PrototypeRecoveryPanel() {
             onClick={() => void handleBrowserRecovery()}
             type="button"
           >
-            {busyMode === 'browser'
+            {busyMode === 'recover-browser'
               ? 'Recovering...'
               : 'Recover from this browser'}
           </button>
         ) : null}
         <label className="button ghost file-button">
-          <span>{busyMode === 'file' ? 'Importing...' : 'Import backup file'}</span>
+          <span>
+            {busyMode === 'recover-file' ? 'Importing...' : 'Import backup file'}
+          </span>
           <input
             accept="application/json,.json"
             disabled={busyMode !== null}
@@ -177,8 +297,76 @@ export function PrototypeRecoveryPanel() {
         </label>
       </div>
 
-      {result ? (
-        <p className="recovery-result">{recoveryResultLine(result)}</p>
+      {undoAvailability?.mode === 'recorded' ? (
+        <div className="recovery-note">
+          <strong>Last recovery can be undone cleanly on this device.</strong>
+          {undoAvailability.summary ? (
+            <p>{recoverySummaryLine(undoAvailability.summary)}</p>
+          ) : null}
+          <div className="dialog-actions">
+            <button
+              className="button ghost"
+              disabled={busyMode !== null}
+              onClick={() => void handleRecordedUndo()}
+              type="button"
+            >
+              {busyMode === 'undo-recorded'
+                ? 'Undoing...'
+                : 'Undo last recovery'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {undoAvailability?.mode === 'retroactive' ? (
+        <div className="recovery-note">
+          <strong>An earlier recovery predates undo support.</strong>
+          <p>
+            Use the same source again to reverse it safely. Recovered items,
+            routines, and attachments will be removed. Day, week, and settings
+            state are only rolled back when they still match the imported backup.
+          </p>
+          <div className="dialog-actions">
+            {browserSummary ? (
+              <button
+                className="button ghost"
+                disabled={busyMode !== null}
+                onClick={() => void handleBrowserUndo()}
+                type="button"
+              >
+                {busyMode === 'undo-browser'
+                  ? 'Undoing...'
+                  : 'Undo with this browser data'}
+              </button>
+            ) : null}
+            <label className="button ghost file-button">
+              <span>
+                {busyMode === 'undo-file'
+                  ? 'Undoing...'
+                  : 'Undo with the same backup file'}
+              </span>
+              <input
+                accept="application/json,.json"
+                disabled={busyMode !== null}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) {
+                    void handleFileUndo(file);
+                  }
+                }}
+                type="file"
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
+
+      {importResult ? (
+        <p className="recovery-result">{recoveryResultLine(importResult)}</p>
+      ) : null}
+      {undoResult ? (
+        <p className="recovery-result">{undoResultLine(undoResult)}</p>
       ) : null}
       {feedback ? <p className="auth-feedback danger">{feedback}</p> : null}
     </Panel>

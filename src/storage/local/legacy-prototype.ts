@@ -10,11 +10,14 @@ import {
   DailyRecordSchema,
   ItemRecordSchema,
   MutationRecordSchema,
+  PrototypeRecoverySessionRecordSchema,
   RoutineRecordSchema,
   SettingsRecordSchema,
   type AttachmentKind,
   type DailyRecord,
   type ItemRecord,
+  type PrototypeRecoverySessionRecord,
+  type PrototypeRecoverySource,
   type Lane,
   type MutationRecord,
   type RoutineRecord,
@@ -139,6 +142,41 @@ export interface LegacyPrototypeImportResult {
   summary: LegacyPrototypeSummary;
   weeksCreated: number;
   weeksMerged: number;
+}
+
+export interface LegacyPrototypeUndoAvailability {
+  browserSummary: LegacyPrototypeSummary | null;
+  createdAt: string | null;
+  mode: 'none' | 'recorded' | 'retroactive';
+  source: PrototypeRecoverySource | null;
+  summary: LegacyPrototypeSummary | null;
+}
+
+export interface LegacyPrototypeUndoResult {
+  attachmentsDeleted: number;
+  daysRestored: number;
+  itemsDeleted: number;
+  partial: boolean;
+  routinesDeleted: number;
+  settingsRestored: boolean;
+  weeksRestored: number;
+}
+
+interface ResolvedLegacyPrototypeWorkspace {
+  attachmentIdsByLegacyKey: Map<
+    string,
+    {
+      attachmentId: string;
+      blobId: string;
+    }
+  >;
+  importedDailyRecords: Map<string, DailyRecord>;
+  importedSettings: Pick<SettingsRecord, 'direction' | 'standards' | 'why'>;
+  importedWeeklyRecords: Map<string, WeeklyRecord>;
+  itemIdByLegacyKey: Map<string, string>;
+  routineIdByLegacyKey: Map<string, string>;
+  summary: LegacyPrototypeSummary;
+  workspace: LegacyPrototypeWorkspace;
 }
 
 function isLane(value: unknown): value is Lane {
@@ -894,6 +932,135 @@ function summarizeWorkspace(
   };
 }
 
+function buildImportedDailyRecord(
+  legacyDay: LegacyPrototypeDay,
+  itemIdByLegacyKey: Map<string, string>,
+  routineIdByLegacyKey: Map<string, string>,
+): DailyRecord {
+  return DailyRecordSchema.parse({
+    date: legacyDay.date,
+    schemaVersion: SCHEMA_VERSION,
+    startedAt: legacyDay.startedAt,
+    closedAt: legacyDay.closedAt,
+    readiness: legacyDay.readiness,
+    focusItemIds: legacyDay.focusLegacyKeys
+      .map((legacyKey) => itemIdByLegacyKey.get(legacyKey) ?? null)
+      .filter((value): value is string => Boolean(value)),
+    launchNote: legacyDay.launchNote,
+    closeWin: legacyDay.closeWin,
+    closeCarry: legacyDay.closeCarry,
+    closeSeed: legacyDay.closeSeed,
+    closeNote: legacyDay.closeNote,
+    seededRoutineIds: legacyDay.seededRoutineLegacyKeys
+      .map((legacyKey) => routineIdByLegacyKey.get(legacyKey) ?? null)
+      .filter((value): value is string => Boolean(value)),
+    createdAt: legacyDay.createdAt,
+    updatedAt: legacyDay.updatedAt,
+    syncState: 'pending',
+  });
+}
+
+function buildImportedWeeklyRecord(legacyWeek: LegacyPrototypeWeek): WeeklyRecord {
+  return WeeklyRecordSchema.parse({
+    weekStart: legacyWeek.weekStart,
+    schemaVersion: SCHEMA_VERSION,
+    focus: legacyWeek.focus,
+    protect: legacyWeek.protect,
+    notes: legacyWeek.notes,
+    createdAt: legacyWeek.createdAt,
+    updatedAt: legacyWeek.updatedAt,
+    syncState: 'pending',
+  });
+}
+
+function buildImportedSettingsValues(
+  workspace: LegacyPrototypeWorkspace,
+): Pick<SettingsRecord, 'direction' | 'standards' | 'why'> {
+  return {
+    direction: workspace.settings.direction,
+    standards: workspace.settings.standards,
+    why: workspace.settings.why,
+  };
+}
+
+async function resolveLegacyPrototypeWorkspace(
+  raw: unknown,
+): Promise<ResolvedLegacyPrototypeWorkspace> {
+  const workspace = normalizeLegacyPrototypeWorkspace(raw);
+  const summary = summarizeWorkspace(workspace);
+  const routineIdByLegacyKey = new Map<string, string>();
+  const itemIdByLegacyKey = new Map<string, string>();
+  const attachmentIdsByLegacyKey = new Map<
+    string,
+    {
+      attachmentId: string;
+      blobId: string;
+    }
+  >();
+
+  for (const routine of workspace.settings.routines) {
+    routineIdByLegacyKey.set(
+      routine.legacyKey,
+      await deterministicId('prototype-routine', routine.legacyKey),
+    );
+  }
+
+  for (const item of workspace.items) {
+    itemIdByLegacyKey.set(
+      item.legacyKey,
+      await deterministicId('prototype-item', item.legacyKey),
+    );
+
+    for (const attachment of item.attachments) {
+      attachmentIdsByLegacyKey.set(`${item.legacyKey}:${attachment.legacyKey}`, {
+        attachmentId: await deterministicId(
+          'prototype-attachment',
+          `${item.legacyKey}:${attachment.legacyKey}`,
+        ),
+        blobId: await deterministicId(
+          'prototype-attachment-blob',
+          `${item.legacyKey}:${attachment.legacyKey}`,
+        ),
+      });
+    }
+  }
+
+  return {
+    attachmentIdsByLegacyKey,
+    importedDailyRecords: new Map(
+      Object.values(workspace.days).map((legacyDay) => [
+        legacyDay.date,
+        buildImportedDailyRecord(
+          legacyDay,
+          itemIdByLegacyKey,
+          routineIdByLegacyKey,
+        ),
+      ]),
+    ),
+    importedSettings: buildImportedSettingsValues(workspace),
+    importedWeeklyRecords: new Map(
+      Object.values(workspace.weeks).map((legacyWeek) => [
+        legacyWeek.weekStart,
+        buildImportedWeeklyRecord(legacyWeek),
+      ]),
+    ),
+    itemIdByLegacyKey,
+    routineIdByLegacyKey,
+    summary,
+    workspace,
+  };
+}
+
+function sameRecordContent<T extends { syncState: string }>(
+  current: T,
+  comparison: T,
+): boolean {
+  return (
+    JSON.stringify({ ...current, syncState: 'pending' }) ===
+    JSON.stringify({ ...comparison, syncState: 'pending' })
+  );
+}
+
 function mergeText(current: string, imported: string): string {
   return current.trim() ? current : imported;
 }
@@ -978,6 +1145,50 @@ function defaultSettingsRecord(): SettingsRecord {
   });
 }
 
+function defaultDailyRecordForUndo(date: string): DailyRecord {
+  const timestamp = nowIso();
+
+  return DailyRecordSchema.parse({
+    date,
+    schemaVersion: SCHEMA_VERSION,
+    startedAt: null,
+    closedAt: null,
+    readiness: {
+      water: false,
+      food: false,
+      supplements: false,
+      hygiene: false,
+      movement: false,
+      sleepSetup: false,
+    },
+    focusItemIds: [],
+    launchNote: '',
+    closeWin: '',
+    closeCarry: '',
+    closeSeed: '',
+    closeNote: '',
+    seededRoutineIds: [],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    syncState: 'pending',
+  });
+}
+
+function defaultWeeklyRecordForUndo(weekStart: string): WeeklyRecord {
+  const timestamp = nowIso();
+
+  return WeeklyRecordSchema.parse({
+    weekStart,
+    schemaVersion: SCHEMA_VERSION,
+    focus: '',
+    protect: '',
+    notes: '',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    syncState: 'pending',
+  });
+}
+
 function createMutationRecord(
   entity: MutationRecord['entity'],
   entityId: string,
@@ -1023,6 +1234,646 @@ async function deterministicId(
   ].join('-');
 }
 
+async function getLatestOpenPrototypeRecoverySession():
+  Promise<PrototypeRecoverySessionRecord | null> {
+  const sessions = await db.prototypeRecoverySessions
+    .orderBy('createdAt')
+    .reverse()
+    .toArray();
+
+  return (
+    sessions
+      .map((session) => PrototypeRecoverySessionRecordSchema.parse(session))
+      .find((session) => !session.undoneAt) ?? null
+  );
+}
+
+function buildRecoveryMutationTargetsFromSession(
+  session: PrototypeRecoverySessionRecord,
+): Partial<Record<MutationRecord['entity'], Set<string>>> {
+  return {
+    attachment: new Set(session.createdAttachmentIds),
+    dailyRecord: new Set([
+      ...session.createdDailyRecordDates,
+      ...session.previousDailyRecords.map((record) => record.date),
+    ]),
+    item: new Set(session.createdItemIds),
+    routine: new Set(session.createdRoutineIds),
+    settings: new Set([SETTINGS_ROW_ID]),
+    weeklyRecord: new Set([
+      ...session.createdWeeklyRecordDates,
+      ...session.previousWeeklyRecords.map((record) => record.weekStart),
+    ]),
+  };
+}
+
+function buildRecoveryMutationTargetsFromResolvedWorkspace(
+  resolved: ResolvedLegacyPrototypeWorkspace,
+): Partial<Record<MutationRecord['entity'], Set<string>>> {
+  return {
+    attachment: new Set(
+      Array.from(resolved.attachmentIdsByLegacyKey.values()).map(
+        ({ attachmentId }) => attachmentId,
+      ),
+    ),
+    dailyRecord: new Set(resolved.importedDailyRecords.keys()),
+    item: new Set(resolved.itemIdByLegacyKey.values()),
+    routine: new Set(resolved.routineIdByLegacyKey.values()),
+    settings: new Set([SETTINGS_ROW_ID]),
+    weeklyRecord: new Set(resolved.importedWeeklyRecords.keys()),
+  };
+}
+
+async function pruneRecoveryMutations(
+  targets: Partial<Record<MutationRecord['entity'], Set<string>>>,
+): Promise<void> {
+  const mutations = await db.mutationQueue.toArray();
+  const recoveryMutationIds = mutations
+    .filter((mutation) => mutation.type.endsWith('.recovered'))
+    .filter((mutation) =>
+      targets[mutation.entity]?.has(mutation.entityId) ?? false,
+    )
+    .map((mutation) => mutation.id);
+
+  if (recoveryMutationIds.length) {
+    await db.mutationQueue.bulkDelete(recoveryMutationIds);
+  }
+}
+
+function pendingDailyRecord(record: DailyRecord): DailyRecord {
+  return DailyRecordSchema.parse({
+    ...record,
+    updatedAt: nowIso(),
+    syncState: 'pending',
+  });
+}
+
+function pendingWeeklyRecord(record: WeeklyRecord): WeeklyRecord {
+  return WeeklyRecordSchema.parse({
+    ...record,
+    updatedAt: nowIso(),
+    syncState: 'pending',
+  });
+}
+
+function pendingSettingsRecord(record: SettingsRecord): SettingsRecord {
+  return SettingsRecordSchema.parse({
+    ...record,
+    updatedAt: nowIso(),
+    syncState: 'pending',
+  });
+}
+
+async function deleteAttachmentForUndo(attachmentId: string): Promise<boolean> {
+  const attachment = await db.attachments.get(attachmentId);
+  if (!attachment) {
+    return false;
+  }
+
+  await db.attachments.delete(attachmentId);
+  await db.attachmentBlobs.delete(attachment.blobId);
+  await db.mutationQueue.put(
+    createMutationRecord('attachment', attachmentId, 'attachment.deleted', {
+      attachmentId,
+    }),
+  );
+  return true;
+}
+
+async function removeItemFromFocusEverywhere(itemId: string): Promise<void> {
+  const records = await db.dailyRecords.toArray();
+  const updates = records
+    .filter((record) => record.focusItemIds.includes(itemId))
+    .map((record) =>
+      DailyRecordSchema.parse({
+        ...record,
+        focusItemIds: record.focusItemIds.filter((id) => id !== itemId),
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      }),
+    );
+
+  if (updates.length) {
+    await db.dailyRecords.bulkPut(updates);
+  }
+}
+
+async function deleteItemCascadeForUndo(
+  itemId: string,
+): Promise<{ attachmentsDeleted: number; itemDeleted: boolean }> {
+  const item = await db.items.get(itemId);
+  if (!item) {
+    return { attachmentsDeleted: 0, itemDeleted: false };
+  }
+
+  const attachments = await db.attachments.where('itemId').equals(itemId).toArray();
+  await db.items.delete(itemId);
+  await db.attachments.bulkDelete(attachments.map((attachment) => attachment.id));
+  await db.attachmentBlobs.bulkDelete(
+    attachments.map((attachment) => attachment.blobId),
+  );
+  await removeItemFromFocusEverywhere(itemId);
+  for (const attachment of attachments) {
+    await db.mutationQueue.put(
+      createMutationRecord(
+        'attachment',
+        attachment.id,
+        'attachment.deleted',
+        { attachmentId: attachment.id },
+      ),
+    );
+  }
+  await db.mutationQueue.put(
+    createMutationRecord('item', itemId, 'item.deleted', { itemId }),
+  );
+
+  return {
+    attachmentsDeleted: attachments.length,
+    itemDeleted: true,
+  };
+}
+
+async function deleteRoutineForUndo(routineId: string): Promise<boolean> {
+  const routine = await db.routines.get(routineId);
+  if (!routine) {
+    return false;
+  }
+
+  await db.routines.delete(routineId);
+  await db.mutationQueue.put(
+    createMutationRecord('routine', routineId, 'routine.deleted', {
+      routineId,
+    }),
+  );
+  return true;
+}
+
+async function restoreDailyRecordForUndo(
+  date: string,
+  previous: DailyRecord | null,
+): Promise<boolean> {
+  const next = previous
+    ? pendingDailyRecord(previous)
+    : defaultDailyRecordForUndo(date);
+  const current = await db.dailyRecords.get(date);
+
+  if (current && sameRecordContent(current, next)) {
+    return false;
+  }
+
+  await db.dailyRecords.put(next);
+  await db.mutationQueue.put(
+    createMutationRecord('dailyRecord', date, 'daily.recovery.undone', {
+      date,
+    }),
+  );
+  return true;
+}
+
+async function restoreWeeklyRecordForUndo(
+  weekStart: string,
+  previous: WeeklyRecord | null,
+): Promise<boolean> {
+  const next = previous
+    ? pendingWeeklyRecord(previous)
+    : defaultWeeklyRecordForUndo(weekStart);
+  const current = await db.weeklyRecords.get(weekStart);
+
+  if (current && sameRecordContent(current, next)) {
+    return false;
+  }
+
+  await db.weeklyRecords.put(next);
+  await db.mutationQueue.put(
+    createMutationRecord('weeklyRecord', weekStart, 'weekly.recovery.undone', {
+      weekStart,
+    }),
+  );
+  return true;
+}
+
+async function restoreSettingsForUndo(
+  previous: SettingsRecord | null,
+): Promise<boolean> {
+  const next = previous
+    ? pendingSettingsRecord(previous)
+    : defaultSettingsRecord();
+  const current = await db.settings.get(SETTINGS_ROW_ID);
+
+  if (current && sameRecordContent(current, next)) {
+    return false;
+  }
+
+  await db.settings.put(next);
+  await db.mutationQueue.put(
+    createMutationRecord(
+      'settings',
+      SETTINGS_ROW_ID,
+      'settings.recovery.undone',
+      { id: SETTINGS_ROW_ID },
+    ),
+  );
+  return true;
+}
+
+async function softlyUndoDailyRecordFromImportedState(
+  imported: DailyRecord,
+): Promise<boolean> {
+  const current = await db.dailyRecords.get(imported.date);
+  if (!current) {
+    return false;
+  }
+
+  const next = sameRecordContent(current, imported)
+    ? defaultDailyRecordForUndo(imported.date)
+    : DailyRecordSchema.parse({
+        ...current,
+        focusItemIds: current.focusItemIds.filter(
+          (itemId) => !imported.focusItemIds.includes(itemId),
+        ),
+        launchNote:
+          imported.launchNote && current.launchNote === imported.launchNote
+            ? ''
+            : current.launchNote,
+        closeWin:
+          imported.closeWin && current.closeWin === imported.closeWin
+            ? ''
+            : current.closeWin,
+        closeCarry:
+          imported.closeCarry && current.closeCarry === imported.closeCarry
+            ? ''
+            : current.closeCarry,
+        closeSeed:
+          imported.closeSeed && current.closeSeed === imported.closeSeed
+            ? ''
+            : current.closeSeed,
+        closeNote:
+          imported.closeNote && current.closeNote === imported.closeNote
+            ? ''
+            : current.closeNote,
+        seededRoutineIds: current.seededRoutineIds.filter(
+          (routineId) => !imported.seededRoutineIds.includes(routineId),
+        ),
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      });
+
+  if (sameRecordContent(current, next)) {
+    return false;
+  }
+
+  await db.dailyRecords.put(next);
+  await db.mutationQueue.put(
+    createMutationRecord('dailyRecord', imported.date, 'daily.recovery.undone', {
+      date: imported.date,
+    }),
+  );
+  return true;
+}
+
+async function softlyUndoWeeklyRecordFromImportedState(
+  imported: WeeklyRecord,
+): Promise<boolean> {
+  const current = await db.weeklyRecords.get(imported.weekStart);
+  if (!current) {
+    return false;
+  }
+
+  const next = sameRecordContent(current, imported)
+    ? defaultWeeklyRecordForUndo(imported.weekStart)
+    : WeeklyRecordSchema.parse({
+        ...current,
+        focus:
+          imported.focus && current.focus === imported.focus ? '' : current.focus,
+        protect:
+          imported.protect && current.protect === imported.protect
+            ? ''
+            : current.protect,
+        notes:
+          imported.notes && current.notes === imported.notes ? '' : current.notes,
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      });
+
+  if (sameRecordContent(current, next)) {
+    return false;
+  }
+
+  await db.weeklyRecords.put(next);
+  await db.mutationQueue.put(
+    createMutationRecord(
+      'weeklyRecord',
+      imported.weekStart,
+      'weekly.recovery.undone',
+      { weekStart: imported.weekStart },
+    ),
+  );
+  return true;
+}
+
+async function softlyUndoSettingsFromImportedState(
+  imported: Pick<SettingsRecord, 'direction' | 'standards' | 'why'>,
+): Promise<boolean> {
+  const current = (await db.settings.get(SETTINGS_ROW_ID)) ?? defaultSettingsRecord();
+  const importedRecord = SettingsRecordSchema.parse({
+    ...current,
+    direction: imported.direction,
+    standards: imported.standards,
+    why: imported.why,
+    syncState: 'pending',
+  });
+  const next = sameRecordContent(current, importedRecord)
+    ? defaultSettingsRecord()
+    : SettingsRecordSchema.parse({
+        ...current,
+        direction:
+          imported.direction && current.direction === imported.direction
+            ? ''
+            : current.direction,
+        standards:
+          imported.standards && current.standards === imported.standards
+            ? ''
+            : current.standards,
+        why: imported.why && current.why === imported.why ? '' : current.why,
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      });
+
+  if (sameRecordContent(current, next)) {
+    return false;
+  }
+
+  await db.settings.put(next);
+  await db.mutationQueue.put(
+    createMutationRecord(
+      'settings',
+      SETTINGS_ROW_ID,
+      'settings.recovery.undone',
+      { id: SETTINGS_ROW_ID },
+    ),
+  );
+  return true;
+}
+
+async function undoRecordedPrototypeRecovery(
+  session: PrototypeRecoverySessionRecord,
+): Promise<LegacyPrototypeUndoResult> {
+  const result: LegacyPrototypeUndoResult = {
+    attachmentsDeleted: 0,
+    daysRestored: 0,
+    itemsDeleted: 0,
+    partial: false,
+    routinesDeleted: 0,
+    settingsRestored: false,
+    weeksRestored: 0,
+  };
+
+  await db.transaction(
+    'rw',
+    [
+      db.items,
+      db.dailyRecords,
+      db.weeklyRecords,
+      db.routines,
+      db.settings,
+      db.attachments,
+      db.attachmentBlobs,
+      db.mutationQueue,
+      db.prototypeRecoverySessions,
+    ],
+    async () => {
+      const itemIdsToDelete = new Set(session.createdItemIds);
+
+      for (const attachmentId of session.createdAttachmentIds) {
+        const attachment = await db.attachments.get(attachmentId);
+        if (!attachment || itemIdsToDelete.has(attachment.itemId)) {
+          continue;
+        }
+        if (await deleteAttachmentForUndo(attachmentId)) {
+          result.attachmentsDeleted += 1;
+        }
+      }
+
+      for (const itemId of session.createdItemIds) {
+        const deleted = await deleteItemCascadeForUndo(itemId);
+        if (deleted.itemDeleted) {
+          result.itemsDeleted += 1;
+          result.attachmentsDeleted += deleted.attachmentsDeleted;
+        }
+      }
+
+      for (const routineId of session.createdRoutineIds) {
+        if (await deleteRoutineForUndo(routineId)) {
+          result.routinesDeleted += 1;
+        }
+      }
+
+      const previousDailyByDate = new Map(
+        session.previousDailyRecords.map((record) => [record.date, record]),
+      );
+      for (const date of new Set([
+        ...session.createdDailyRecordDates,
+        ...previousDailyByDate.keys(),
+      ])) {
+        if (
+          await restoreDailyRecordForUndo(date, previousDailyByDate.get(date) ?? null)
+        ) {
+          result.daysRestored += 1;
+        }
+      }
+
+      const previousWeeklyByStart = new Map(
+        session.previousWeeklyRecords.map((record) => [record.weekStart, record]),
+      );
+      for (const weekStart of new Set([
+        ...session.createdWeeklyRecordDates,
+        ...previousWeeklyByStart.keys(),
+      ])) {
+        if (
+          await restoreWeeklyRecordForUndo(
+            weekStart,
+            previousWeeklyByStart.get(weekStart) ?? null,
+          )
+        ) {
+          result.weeksRestored += 1;
+        }
+      }
+
+      result.settingsRestored = await restoreSettingsForUndo(
+        session.previousSettings,
+      );
+      await pruneRecoveryMutations(buildRecoveryMutationTargetsFromSession(session));
+      await db.prototypeRecoverySessions.put(
+        PrototypeRecoverySessionRecordSchema.parse({
+          ...session,
+          undoneAt: nowIso(),
+        }),
+      );
+    },
+  );
+
+  return result;
+}
+
+async function undoPrototypeRecoveryFromResolvedWorkspace(
+  resolved: ResolvedLegacyPrototypeWorkspace,
+): Promise<LegacyPrototypeUndoResult> {
+  const result: LegacyPrototypeUndoResult = {
+    attachmentsDeleted: 0,
+    daysRestored: 0,
+    itemsDeleted: 0,
+    partial: true,
+    routinesDeleted: 0,
+    settingsRestored: false,
+    weeksRestored: 0,
+  };
+
+  await db.transaction(
+    'rw',
+    [
+      db.items,
+      db.dailyRecords,
+      db.weeklyRecords,
+      db.routines,
+      db.settings,
+      db.attachments,
+      db.attachmentBlobs,
+      db.mutationQueue,
+    ],
+    async () => {
+      const itemIdsToDelete = new Set(resolved.itemIdByLegacyKey.values());
+
+      for (const { attachmentId } of resolved.attachmentIdsByLegacyKey.values()) {
+        const attachment = await db.attachments.get(attachmentId);
+        if (!attachment || itemIdsToDelete.has(attachment.itemId)) {
+          continue;
+        }
+        if (await deleteAttachmentForUndo(attachmentId)) {
+          result.attachmentsDeleted += 1;
+        }
+      }
+
+      for (const itemId of itemIdsToDelete) {
+        const deleted = await deleteItemCascadeForUndo(itemId);
+        if (deleted.itemDeleted) {
+          result.itemsDeleted += 1;
+          result.attachmentsDeleted += deleted.attachmentsDeleted;
+        }
+      }
+
+      for (const routineId of resolved.routineIdByLegacyKey.values()) {
+        if (await deleteRoutineForUndo(routineId)) {
+          result.routinesDeleted += 1;
+        }
+      }
+
+      for (const imported of resolved.importedDailyRecords.values()) {
+        if (await softlyUndoDailyRecordFromImportedState(imported)) {
+          result.daysRestored += 1;
+        }
+      }
+
+      for (const imported of resolved.importedWeeklyRecords.values()) {
+        if (await softlyUndoWeeklyRecordFromImportedState(imported)) {
+          result.weeksRestored += 1;
+        }
+      }
+
+      result.settingsRestored = await softlyUndoSettingsFromImportedState(
+        resolved.importedSettings,
+      );
+      await pruneRecoveryMutations(
+        buildRecoveryMutationTargetsFromResolvedWorkspace(resolved),
+      );
+    },
+  );
+
+  return result;
+}
+
+export async function getLegacyPrototypeUndoAvailability():
+  Promise<LegacyPrototypeUndoAvailability> {
+  const session = await getLatestOpenPrototypeRecoverySession();
+  const browserSummary = (() => {
+    try {
+      return getLegacyPrototypeBrowserSummary();
+    } catch {
+      return null;
+    }
+  })();
+
+  if (session) {
+    return {
+      browserSummary,
+      createdAt: session.createdAt,
+      mode: 'recorded',
+      source: session.source,
+      summary: session.summary,
+    };
+  }
+
+  const recoveredMutations = await db.mutationQueue
+    .toArray()
+    .then((rows) => rows.filter((mutation) => mutation.type.endsWith('.recovered')));
+
+  return {
+    browserSummary,
+    createdAt: recoveredMutations.length
+      ? recoveredMutations
+          .map((mutation) => mutation.createdAt)
+          .sort()
+          .at(-1) ?? null
+      : null,
+    mode: recoveredMutations.length ? 'retroactive' : 'none',
+    source: null,
+    summary: browserSummary,
+  };
+}
+
+export async function undoLastLegacyPrototypeRecovery():
+  Promise<LegacyPrototypeUndoResult> {
+  const session = await getLatestOpenPrototypeRecoverySession();
+  if (!session) {
+    throw new Error('No recovery with undo history was found yet.');
+  }
+
+  return undoRecordedPrototypeRecovery(session);
+}
+
+export async function undoLegacyPrototypeRecoveryData(
+  raw: unknown,
+): Promise<LegacyPrototypeUndoResult> {
+  return undoPrototypeRecoveryFromResolvedWorkspace(
+    await resolveLegacyPrototypeWorkspace(raw),
+  );
+}
+
+export async function undoLegacyPrototypeRecoveryFromBrowserStorage():
+  Promise<LegacyPrototypeUndoResult> {
+  const raw = readLegacyPrototypeBrowserRaw();
+  if (!raw) {
+    throw new Error(
+      'No earlier prototype data was found on this browser and origin.',
+    );
+  }
+
+  return undoLegacyPrototypeRecoveryData(
+    parseLegacyPrototypeJson(
+      raw,
+      'Earlier prototype data on this browser could not be read.',
+    ),
+  );
+}
+
+export async function undoLegacyPrototypeRecoveryFromBackupFile(
+  file: File,
+): Promise<LegacyPrototypeUndoResult> {
+  const text = await file.text();
+  return undoLegacyPrototypeRecoveryData(
+    parseLegacyPrototypeJson(text, 'That backup file could not be read.'),
+  );
+}
+
 function readLegacyPrototypeBrowserRaw(): string | null {
   if (typeof window === 'undefined') {
     return null;
@@ -1059,47 +1910,35 @@ export function getLegacyPrototypeBrowserSummary():
   return summarizeWorkspace(workspace);
 }
 
+function hasRecoverySessionChanges(
+  session: PrototypeRecoverySessionRecord,
+): boolean {
+  return Boolean(
+    session.createdItemIds.length ||
+      session.createdRoutineIds.length ||
+      session.createdAttachmentIds.length ||
+      session.createdDailyRecordDates.length ||
+      session.createdWeeklyRecordDates.length ||
+      session.previousDailyRecords.length ||
+      session.previousWeeklyRecords.length ||
+      session.previousSettings,
+  );
+}
+
 export async function importLegacyPrototypeData(
   raw: unknown,
+  options: {
+    source?: PrototypeRecoverySource;
+  } = {},
 ): Promise<LegacyPrototypeImportResult> {
-  const workspace = normalizeLegacyPrototypeWorkspace(raw);
-  const summary = summarizeWorkspace(workspace);
-  const routineIdByLegacyKey = new Map<string, string>();
-  const itemIdByLegacyKey = new Map<string, string>();
-  const attachmentIdsByLegacyKey = new Map<
-    string,
-    {
-      attachmentId: string;
-      blobId: string;
-    }
-  >();
-
-  for (const routine of workspace.settings.routines) {
-    routineIdByLegacyKey.set(
-      routine.legacyKey,
-      await deterministicId('prototype-routine', routine.legacyKey),
-    );
-  }
-
-  for (const item of workspace.items) {
-    itemIdByLegacyKey.set(
-      item.legacyKey,
-      await deterministicId('prototype-item', item.legacyKey),
-    );
-
-    for (const attachment of item.attachments) {
-      attachmentIdsByLegacyKey.set(`${item.legacyKey}:${attachment.legacyKey}`, {
-        attachmentId: await deterministicId(
-          'prototype-attachment',
-          `${item.legacyKey}:${attachment.legacyKey}`,
-        ),
-        blobId: await deterministicId(
-          'prototype-attachment-blob',
-          `${item.legacyKey}:${attachment.legacyKey}`,
-        ),
-      });
-    }
-  }
+  const {
+    attachmentIdsByLegacyKey,
+    importedDailyRecords,
+    itemIdByLegacyKey,
+    routineIdByLegacyKey,
+    summary,
+    workspace,
+  } = await resolveLegacyPrototypeWorkspace(raw);
 
   const result: LegacyPrototypeImportResult = {
     attachmentsImported: 0,
@@ -1115,6 +1954,23 @@ export async function importLegacyPrototypeData(
     weeksCreated: 0,
     weeksMerged: 0,
   };
+  const session = PrototypeRecoverySessionRecordSchema.parse({
+    id: crypto.randomUUID(),
+    schemaVersion: SCHEMA_VERSION,
+    source: options.source ?? 'file',
+    createdAt: nowIso(),
+    undoneAt: null,
+    summary,
+    createdItemIds: [],
+    createdRoutineIds: [],
+    createdAttachmentIds: [],
+    createdAttachmentBlobIds: [],
+    createdDailyRecordDates: [],
+    createdWeeklyRecordDates: [],
+    previousDailyRecords: [],
+    previousWeeklyRecords: [],
+    previousSettings: null,
+  });
 
   await db.transaction(
     'rw',
@@ -1127,6 +1983,7 @@ export async function importLegacyPrototypeData(
       db.attachments,
       db.attachmentBlobs,
       db.mutationQueue,
+      db.prototypeRecoverySessions,
       db.syncState,
     ],
     async () => {
@@ -1162,6 +2019,7 @@ export async function importLegacyPrototypeData(
         });
 
         await db.routines.put(record);
+        session.createdRoutineIds.push(record.id);
         await db.mutationQueue.put(
           createMutationRecord('routine', record.id, 'routine.recovered', {
             routineId: record.id,
@@ -1203,6 +2061,7 @@ export async function importLegacyPrototypeData(
           });
 
           await db.items.put(record);
+          session.createdItemIds.push(record.id);
           await db.mutationQueue.put(
             createMutationRecord('item', record.id, 'item.recovered', {
               itemId: record.id,
@@ -1232,6 +2091,7 @@ export async function importLegacyPrototypeData(
               createdAt: item.updatedAt,
             }),
           );
+          session.createdAttachmentBlobIds.push(blobId);
           await db.attachments.put(
             AttachmentRecordSchema.parse({
               id: attachmentId,
@@ -1248,6 +2108,7 @@ export async function importLegacyPrototypeData(
               syncState: 'pending',
             }),
           );
+          session.createdAttachmentIds.push(attachmentId);
           await db.mutationQueue.put(
             createMutationRecord(
               'attachment',
@@ -1264,31 +2125,12 @@ export async function importLegacyPrototypeData(
       }
 
       for (const legacyDay of Object.values(workspace.days)) {
-        const imported = DailyRecordSchema.parse({
-          date: legacyDay.date,
-          schemaVersion: SCHEMA_VERSION,
-          startedAt: legacyDay.startedAt,
-          closedAt: legacyDay.closedAt,
-          readiness: legacyDay.readiness,
-          focusItemIds: legacyDay.focusLegacyKeys
-            .map((legacyKey) => itemIdByLegacyKey.get(legacyKey) ?? null)
-            .filter((value): value is string => Boolean(value)),
-          launchNote: legacyDay.launchNote,
-          closeWin: legacyDay.closeWin,
-          closeCarry: legacyDay.closeCarry,
-          closeSeed: legacyDay.closeSeed,
-          closeNote: legacyDay.closeNote,
-          seededRoutineIds: legacyDay.seededRoutineLegacyKeys
-            .map((legacyKey) => routineIdByLegacyKey.get(legacyKey) ?? null)
-            .filter((value): value is string => Boolean(value)),
-          createdAt: legacyDay.createdAt,
-          updatedAt: legacyDay.updatedAt,
-          syncState: 'pending',
-        });
+        const imported = importedDailyRecords.get(legacyDay.date)!;
         const current = await db.dailyRecords.get(legacyDay.date);
 
         if (!current) {
           await db.dailyRecords.put(imported);
+          session.createdDailyRecordDates.push(imported.date);
           await db.mutationQueue.put(
             createMutationRecord(
               'dailyRecord',
@@ -1302,7 +2144,14 @@ export async function importLegacyPrototypeData(
         }
 
         const merged = mergeDailyRecord(current, imported);
-        if (JSON.stringify(merged) !== JSON.stringify(current)) {
+        if (!sameRecordContent(merged, current)) {
+          if (
+            !session.previousDailyRecords.some(
+              (record) => record.date === current.date,
+            )
+          ) {
+            session.previousDailyRecords.push(DailyRecordSchema.parse(current));
+          }
           await db.dailyRecords.put(merged);
           await db.mutationQueue.put(
             createMutationRecord(
@@ -1317,20 +2166,12 @@ export async function importLegacyPrototypeData(
       }
 
       for (const legacyWeek of Object.values(workspace.weeks)) {
-        const imported = WeeklyRecordSchema.parse({
-          weekStart: legacyWeek.weekStart,
-          schemaVersion: SCHEMA_VERSION,
-          focus: legacyWeek.focus,
-          protect: legacyWeek.protect,
-          notes: legacyWeek.notes,
-          createdAt: legacyWeek.createdAt,
-          updatedAt: legacyWeek.updatedAt,
-          syncState: 'pending',
-        });
+        const imported = buildImportedWeeklyRecord(legacyWeek);
         const current = await db.weeklyRecords.get(legacyWeek.weekStart);
 
         if (!current) {
           await db.weeklyRecords.put(imported);
+          session.createdWeeklyRecordDates.push(imported.weekStart);
           await db.mutationQueue.put(
             createMutationRecord(
               'weeklyRecord',
@@ -1344,7 +2185,16 @@ export async function importLegacyPrototypeData(
         }
 
         const merged = mergeWeeklyRecord(current, imported);
-        if (JSON.stringify(merged) !== JSON.stringify(current)) {
+        if (!sameRecordContent(merged, current)) {
+          if (
+            !session.previousWeeklyRecords.some(
+              (record) => record.weekStart === current.weekStart,
+            )
+          ) {
+            session.previousWeeklyRecords.push(
+              WeeklyRecordSchema.parse(current),
+            );
+          }
           await db.weeklyRecords.put(merged);
           await db.mutationQueue.put(
             createMutationRecord(
@@ -1358,8 +2208,8 @@ export async function importLegacyPrototypeData(
         }
       }
 
-      const currentSettings =
-        (await db.settings.get(SETTINGS_ROW_ID)) ?? defaultSettingsRecord();
+      const storedSettings = await db.settings.get(SETTINGS_ROW_ID);
+      const currentSettings = storedSettings ?? defaultSettingsRecord();
       const importedSettings = SettingsRecordSchema.parse({
         id: SETTINGS_ROW_ID,
         schemaVersion: SCHEMA_VERSION,
@@ -1375,7 +2225,10 @@ export async function importLegacyPrototypeData(
         importedSettings,
       );
 
-      if (JSON.stringify(mergedSettings) !== JSON.stringify(currentSettings)) {
+      if (!sameRecordContent(mergedSettings, currentSettings)) {
+        session.previousSettings = storedSettings
+          ? SettingsRecordSchema.parse(currentSettings)
+          : null;
         await db.settings.put(mergedSettings);
         await db.mutationQueue.put(
           createMutationRecord(
@@ -1386,8 +2239,12 @@ export async function importLegacyPrototypeData(
           ),
         );
         result.settingsUpdated = true;
-      } else if (!(await db.settings.get(SETTINGS_ROW_ID))) {
+      } else if (!storedSettings) {
         await db.settings.put(currentSettings);
+      }
+
+      if (hasRecoverySessionChanges(session)) {
+        await db.prototypeRecoverySessions.put(session);
       }
     },
   );
@@ -1408,6 +2265,7 @@ export async function importLegacyPrototypeFromBrowserStorage(): Promise<LegacyP
       raw,
       'Earlier prototype data on this browser could not be read.',
     ),
+    { source: 'browser' },
   );
 }
 
@@ -1420,5 +2278,6 @@ export async function importLegacyPrototypeBackupFile(
       text,
       'That backup file could not be read.',
     ),
+    { source: 'file' },
   );
 }

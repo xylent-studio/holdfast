@@ -59,6 +59,8 @@ The new app now includes a deliberate recovery path for earlier prototype data:
 - recover from the old browser cache when the app is running on the same origin
 - import a prototype backup JSON file when the earlier cache lives on another origin
 - merge imported items, routines, daily records, weekly records, settings, and attachments without wiping the current workspace
+- undo newer recoveries cleanly on-device through recorded recovery-session history
+- let older recoveries roll back from the same browser source or backup file, using a best-effort safety-first undo path when pre-undo snapshots do not exist
 
 General workspace export is still deferred.
 

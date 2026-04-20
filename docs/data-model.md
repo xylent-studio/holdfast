@@ -211,6 +211,30 @@ Notes:
 - `remoteUserId` keeps the last known signed-in owner on the device so a local workspace can reattach safely after sign-in
 - this is a device-level ownership marker, not the final per-record remote ownership model
 
+### PrototypeRecoverySessionRecord
+
+Local-only undo history for prototype recovery imports.
+
+Key fields:
+
+- `source`
+- `summary`
+- `createdItemIds`
+- `createdRoutineIds`
+- `createdAttachmentIds`
+- `createdDailyRecordDates`
+- `createdWeeklyRecordDates`
+- `previousDailyRecords`
+- `previousWeeklyRecords`
+- `previousSettings`
+- `undoneAt`
+
+Notes:
+
+- this table is intentionally local-only; it exists to make recovery reversible on the current device
+- newer recoveries can be undone cleanly from recorded snapshots
+- older recoveries that happened before undo support use a safer best-effort rollback path based on the same backup source
+
 ## Session Progression
 
 The current public auth path is:
@@ -247,6 +271,7 @@ Defined in [src/storage/local/db.ts](/C:/dev/GitHub/Holdfast/src/storage/local/d
 - `attachments`
 - `attachmentBlobs`
 - `mutationQueue`
+- `prototypeRecoverySessions`
 - `syncState`
 
 ## Remote Shape Foundation
