@@ -141,6 +141,29 @@ If real provider-backed auth is required on staging or preview, create that lane
 
 Until that exists, production remains the authoritative hosted auth path and staging should be treated as shell/offline/risky smoke only.
 
+Fastest repeatable setup path:
+
+1. Authenticate the Supabase CLI or set `SUPABASE_ACCESS_TOKEN`.
+2. Create a second Supabase project for staging.
+3. Use the repo helper to inspect or patch auth config:
+   - `npm run supabase:auth -- --project-ref <staging-ref> --show`
+   - `npm run supabase:auth -- --project-ref <staging-ref> --site-url https://holdfast-staging.pages.dev --redirect-url http://localhost:4173/auth/callback --redirect-url https://holdfast-staging.pages.dev/auth/callback`
+4. In Google OAuth, add:
+   - JavaScript origin: `https://holdfast-staging.pages.dev`
+   - Redirect URI: `https://<staging-ref>.supabase.co/auth/v1/callback`
+5. If staging will use Google sign-in immediately, patch the provider too:
+   - `npm run supabase:auth -- --project-ref <staging-ref> --enable-google --google-client-id <id> --google-client-secret <secret>`
+6. Add staging build-time env locally before running hosted auth smoke:
+   - `VITE_SUPABASE_URL=https://<staging-ref>.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY=<staging-publishable-key>`
+
+What still requires account access:
+
+- creating the second Supabase project
+- generating a Supabase personal access token
+- adding Google OAuth client origins and redirect URIs
+- copying the staging publishable key into local env
+
 Current repo/backend foundation already includes:
 
 - remote Postgres tables for Holdfast user data
@@ -212,6 +235,7 @@ Current repo/backend foundation already includes:
 - `npm run cf:pages:prod:auth-preflight`
 - `npm run cf:pages:prod:auth-smoke`
 - `npm run cf:pages:prod:sync-smoke`
+- `npm run supabase:auth -- --project-ref <ref> --show`
 - `npm run build`
 - `npm run test:e2e`
 - `npm run test:e2e:hosted -- --base-url https://holdfast-staging.pages.dev`

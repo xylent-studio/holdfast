@@ -197,6 +197,15 @@ Current hosted auth state:
 - the validation project remains useful for hosted shell, offline, and risky smoke, but production is now the authoritative hosted auth path
 - a second Supabase project or staging auth environment is still required before staging becomes a real provider-backed auth lane
 
+Once a staging project exists, use the repo helper instead of hand-editing auth URLs every time:
+
+- inspect current config:
+  - `npm run supabase:auth -- --project-ref <staging-ref> --show`
+- patch the staging auth URLs:
+  - `npm run supabase:auth -- --project-ref <staging-ref> --site-url https://holdfast-staging.pages.dev --redirect-url http://localhost:4173/auth/callback --redirect-url https://holdfast-staging.pages.dev/auth/callback`
+- enable Google when you have the staging OAuth values:
+  - `npm run supabase:auth -- --project-ref <staging-ref> --enable-google --google-client-id <id> --google-client-secret <secret>`
+
 Required Google OAuth basics:
 
 - Google OAuth client

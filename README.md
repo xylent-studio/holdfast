@@ -131,6 +131,7 @@ npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev
 npm run test:e2e:hosted -- --base-url https://holdfast.xylent.studio
 npm run supabase -- --version
 npm run supabase:link
+npm run supabase:auth -- --project-ref <ref> --show
 npm run supabase:status
 ```
 
