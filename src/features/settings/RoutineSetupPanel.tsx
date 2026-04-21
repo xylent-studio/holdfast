@@ -1,6 +1,5 @@
 import { useState } from 'react';
 
-import { LANES } from '@/domain/constants';
 import type { RoutineRecord } from '@/domain/schemas/records';
 import {
   createRoutine,
@@ -45,7 +44,6 @@ function sameWeekdays(left: number[], right: number[]): boolean {
 function isRoutineDirty(routine: RoutineRecord, draft: RoutineDraft): boolean {
   return (
     routine.title !== draft.title ||
-    routine.lane !== draft.lane ||
     routine.destination !== draft.destination ||
     !sameWeekdays(routine.weekdays, draft.weekdays) ||
     (routine.scheduledTime ?? '') !== draft.scheduledTime ||
@@ -106,25 +104,6 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
         />
       </label>
       <div className="grid two">
-        <label className="field-stack">
-          <span>Area</span>
-          <select
-            onChange={(event) => {
-              setSaveState('idle');
-              setDraft((current) => ({
-                ...current,
-                lane: event.target.value as (typeof LANES)[number]['key'],
-              }));
-            }}
-            value={draft.lane}
-          >
-            {LANES.map((lane) => (
-              <option key={lane.key} value={lane.key}>
-                {lane.label}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="field-stack">
           <span>Place</span>
           <select

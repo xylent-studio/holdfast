@@ -3,6 +3,8 @@ import { z } from 'zod';
 import {
   SCHEMA_VERSION,
   SETTINGS_ROW_ID,
+  SYNC_STATE_ROW_ID,
+  WORKSPACE_STATE_ROW_ID,
 } from '@/domain/constants';
 import { nowIso } from '@/domain/dates';
 import {
@@ -15,6 +17,7 @@ import {
   MutationRecordSchema,
   RoutineRecordSchema,
   SettingsRecordSchema,
+  SyncStateRecordSchema,
   type AttachmentRecord,
   type DailyRecord,
   type ItemRecord,
@@ -23,6 +26,7 @@ import {
   type MutationRecord,
   type RoutineRecord,
   type SettingsRecord,
+  WorkspaceStateRecordSchema,
   type WorkspaceBackupSummary as WorkspaceBackupSummaryRecord,
   WorkspaceRestoreSessionRecordSchema,
   WeeklyRecordSchema,
@@ -30,8 +34,14 @@ import {
 } from '@/domain/schemas/records';
 import { getAttachmentDownload } from '@/storage/local/api';
 import { db } from '@/storage/local/db';
+import { createDefaultWorkspaceState } from '@/storage/local/workspace-state';
+import { getSupabaseSyncStatus } from '@/storage/sync/supabase/config';
+import { createDefaultSyncState } from '@/storage/sync/state';
 
-type BackupRecord<T extends { syncState: unknown }> = Omit<T, 'syncState'>;
+type BackupRecord<T extends { syncState: unknown; remoteRevision: unknown }> = Omit<
+  T,
+  'remoteRevision' | 'syncState'
+>;
 type BackupItemRecord = BackupRecord<ItemRecord>;
 type BackupListRecord = BackupRecord<ListRecord>;
 type BackupListItemRecord = BackupRecord<ListItemRecord>;
@@ -94,15 +104,37 @@ export interface WorkspaceRestoreUndoAvailability {
 
 type AttachmentRestorePayloadState = 'embedded' | 'missing';
 
-const BackupItemRecordSchema = ItemRecordSchema.omit({ syncState: true });
-const BackupListRecordSchema = ListRecordSchema.omit({ syncState: true });
-const BackupListItemRecordSchema = ListItemRecordSchema.omit({ syncState: true });
-const BackupDailyRecordSchema = DailyRecordSchema.omit({ syncState: true });
-const BackupWeeklyRecordSchema = WeeklyRecordSchema.omit({ syncState: true });
-const BackupRoutineRecordSchema = RoutineRecordSchema.omit({ syncState: true });
-const BackupSettingsRecordSchema = SettingsRecordSchema.omit({ syncState: true });
+const BackupItemRecordSchema = ItemRecordSchema.omit({
+  syncState: true,
+  remoteRevision: true,
+});
+const BackupListRecordSchema = ListRecordSchema.omit({
+  syncState: true,
+  remoteRevision: true,
+});
+const BackupListItemRecordSchema = ListItemRecordSchema.omit({
+  syncState: true,
+  remoteRevision: true,
+});
+const BackupDailyRecordSchema = DailyRecordSchema.omit({
+  syncState: true,
+  remoteRevision: true,
+});
+const BackupWeeklyRecordSchema = WeeklyRecordSchema.omit({
+  syncState: true,
+  remoteRevision: true,
+});
+const BackupRoutineRecordSchema = RoutineRecordSchema.omit({
+  syncState: true,
+  remoteRevision: true,
+});
+const BackupSettingsRecordSchema = SettingsRecordSchema.omit({
+  syncState: true,
+  remoteRevision: true,
+});
 const BackupAttachmentRecordSchema = AttachmentRecordSchema.omit({
   syncState: true,
+  remoteRevision: true,
 });
 const WorkspaceBackupSummarySchema = z.object({
   attachmentCount: z.number().int().nonnegative(),
@@ -250,10 +282,11 @@ export function workspaceBackupFilename(exportedAt: string): string {
   return `holdfast-backup-${exportedAt.slice(0, 10)}.json`;
 }
 
-function stripSyncState<T extends { syncState: unknown }>(
+function stripSyncMetadata<T extends { remoteRevision: unknown; syncState: unknown }>(
   record: T,
-): Omit<T, 'syncState'> {
-  const { syncState, ...rest } = record;
+): Omit<T, 'remoteRevision' | 'syncState'> {
+  const { remoteRevision, syncState, ...rest } = record;
+  void remoteRevision;
   void syncState;
   return rest;
 }
@@ -336,6 +369,7 @@ function normalizeImportedItem(
     schemaVersion: SCHEMA_VERSION,
     updatedAt: restoredAt,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -348,6 +382,7 @@ function normalizeImportedList(
     schemaVersion: SCHEMA_VERSION,
     updatedAt: restoredAt,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -360,6 +395,7 @@ function normalizeImportedListItem(
     schemaVersion: SCHEMA_VERSION,
     updatedAt: restoredAt,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -372,6 +408,7 @@ function normalizeImportedRoutine(
     schemaVersion: SCHEMA_VERSION,
     updatedAt: restoredAt,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -384,6 +421,7 @@ function normalizeImportedDailyRecord(
     schemaVersion: SCHEMA_VERSION,
     updatedAt,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -396,6 +434,7 @@ function normalizeImportedWeeklyRecord(
     schemaVersion: SCHEMA_VERSION,
     updatedAt,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -412,6 +451,7 @@ function normalizeImportedSettings(
     createdAt: record?.createdAt ?? restoredAt,
     updatedAt: restoredAt,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -583,6 +623,7 @@ async function applyWorkspaceBackup(
         ...record,
         schemaVersion: SCHEMA_VERSION,
         syncState: 'pending',
+        remoteRevision: null,
       }),
     );
   const finalDailyRecords = mergeByDate(
@@ -603,6 +644,7 @@ async function applyWorkspaceBackup(
         ...record,
         schemaVersion: SCHEMA_VERSION,
         syncState: 'pending',
+        remoteRevision: null,
       }),
     );
   const finalWeeklyRecords = mergeByWeekStart(
@@ -817,6 +859,8 @@ async function applyWorkspaceBackup(
       db.attachmentBlobs,
       db.mutationQueue,
       db.workspaceRestoreSessions,
+      db.syncState,
+      db.workspaceState,
     ],
     async () => {
       await db.items.clear();
@@ -829,6 +873,8 @@ async function applyWorkspaceBackup(
       await db.attachments.clear();
       await db.attachmentBlobs.clear();
       await db.mutationQueue.clear();
+      await db.syncState.clear();
+      await db.workspaceState.clear();
 
       if (recordUndo && previousBackup) {
         await db.workspaceRestoreSessions.clear();
@@ -843,6 +889,29 @@ async function applyWorkspaceBackup(
           }),
         );
       }
+
+      await db.syncState.put(
+        SyncStateRecordSchema.parse({
+          ...createDefaultSyncState(getSupabaseSyncStatus()),
+          id: SYNC_STATE_ROW_ID,
+          schemaVersion: SCHEMA_VERSION,
+          lastSyncedAt: null,
+          updatedAt: restoredAt,
+        }),
+      );
+      await db.workspaceState.put(
+        WorkspaceStateRecordSchema.parse({
+          ...createDefaultWorkspaceState(),
+          authPromptState: 'none',
+          attachState: 'detached-restore',
+          boundUserId: null,
+          createdAt: restoredAt,
+          id: WORKSPACE_STATE_ROW_ID,
+          ownershipState: 'device-guest',
+          schemaVersion: SCHEMA_VERSION,
+          updatedAt: restoredAt,
+        }),
+      );
 
       if (finalItems.length) {
         await db.items.bulkPut(finalItems);
@@ -906,11 +975,11 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
   const items = itemRows
     .filter((item) => !item.deletedAt)
     .sort(compareByCreatedAt)
-    .map(stripSyncState);
+    .map(stripSyncMetadata);
   const lists = listRows
     .filter((list) => !list.deletedAt)
     .sort(compareByCreatedAt)
-    .map(stripSyncState);
+    .map(stripSyncMetadata);
   const activeItemIds = new Set(items.map((item) => item.id));
   const activeListIds = new Set(lists.map((list) => list.id));
   const listItems = listItemRows
@@ -918,11 +987,11 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
       (listItem) => !listItem.deletedAt && activeListIds.has(listItem.listId),
     )
     .sort(compareListItems)
-    .map(stripSyncState);
+    .map(stripSyncMetadata);
   const routines = routineRows
     .filter((routine) => !routine.deletedAt)
     .sort(compareByCreatedAt)
-    .map(stripSyncState);
+    .map(stripSyncMetadata);
   const activeAttachments = attachmentRows
     .filter(
       (attachment) =>
@@ -939,14 +1008,16 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
         ? await blobToDataUrl(payload.blob, attachment.mimeType)
         : null,
       payloadState: payload ? 'embedded' : 'missing',
-      record: stripSyncState(attachment),
+      record: stripSyncMetadata(attachment),
     });
   }
 
-  const sortedDailyRecords = dailyRecords.sort(compareByDate).map(stripSyncState);
+  const sortedDailyRecords = dailyRecords
+    .sort(compareByDate)
+    .map(stripSyncMetadata);
   const sortedWeeklyRecords = weeklyRecords
     .sort(compareByWeekStart)
-    .map(stripSyncState);
+    .map(stripSyncMetadata);
   const exportedAt = new Date().toISOString();
 
   return {
@@ -959,7 +1030,7 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
     listItems,
     lists,
     routines,
-    settings: settings ? stripSyncState(settings) : null,
+    settings: settings ? stripSyncMetadata(settings) : null,
     summary: buildBackupSummary(
       items,
       lists,

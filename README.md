@@ -1,12 +1,12 @@
 # Holdfast
 
-Holdfast is a personal operating system for daily control, capture, prioritization, and reflection.
+Holdfast is a calm place to catch, place, find, and keep the real-life things you do not want to lose.
 
 It is not a generic productivity suite. The core product spine is:
 
 - `Now`: the command view for the day
 - `Inbox`: fast capture before overthinking
-- `Upcoming`: planned, later, and waiting-on work
+- `Upcoming`: scheduled, undated, and waiting-on work
 - `Review`: retrieval, reflection, and repeated-loop visibility
 
 This repo contains:
@@ -71,13 +71,16 @@ npm run build
 ## Hosted State
 
 - validation smoke surface: [holdfast-validation.pages.dev](https://holdfast-validation.pages.dev)
+- staging shell surface: [holdfast-staging.pages.dev](https://holdfast-staging.pages.dev)
 - production Pages project: [holdfast-5oz.pages.dev](https://holdfast-5oz.pages.dev)
 - production hostname: [holdfast.xylent.studio](https://holdfast.xylent.studio)
 
 Current reality:
 
 - the production shell is live on `holdfast.xylent.studio`
+- a dedicated Cloudflare staging shell lane now exists at `holdfast-staging.pages.dev`
 - production Pages is currently a direct-upload project named `holdfast`
+- provider-backed staging auth still needs its own Supabase project or auth environment before staging becomes a real auth lane
 - hosted shell smoke passes on production
 - provider-backed production auth smoke passes on `holdfast.xylent.studio`
 - same-account hosted sync, attachment download, offline replay, and later-offline-edit catch-up smoke pass on `holdfast.xylent.studio`
@@ -111,12 +114,19 @@ npm run cf:pages:status
 npm run cf:pages:auth-preflight
 npm run cf:pages:auth-smoke
 npm run cf:pages:validate
+npm run cf:pages:staging:status
+npm run cf:pages:staging:deploy
+npm run cf:pages:staging:smoke
+npm run cf:pages:staging:auth-preflight
+npm run cf:pages:staging:auth-smoke
+npm run cf:pages:staging:sync-smoke
 npm run cf:pages:prod:status
 npm run cf:pages:prod:deploy
 npm run cf:pages:prod:smoke
 npm run cf:pages:prod:auth-preflight
 npm run cf:pages:prod:auth-smoke
 npm run cf:pages:prod:sync-smoke
+npm run test:e2e:hosted -- --base-url https://holdfast-staging.pages.dev
 npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev
 npm run test:e2e:hosted -- --base-url https://holdfast.xylent.studio
 npm run supabase -- --version

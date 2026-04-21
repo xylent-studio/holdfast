@@ -11,10 +11,12 @@ import {
   type MutationRecord,
   type RoutineRecord,
   type SettingsRecord,
-  type SyncRecordState,
+  type SyncPullCursor,
+  type SyncPullCursorMap,
   type WeeklyRecord,
 } from '@/domain/schemas/records';
 import {
+  getCurrentWorkspaceState,
   getCurrentSyncState,
   updateSyncState,
 } from '@/storage/local/api';
@@ -54,6 +56,17 @@ import {
 } from '@/storage/sync/supabase/schema';
 
 let activeSync: Promise<void> | null = null;
+const REMOTE_PULL_PAGE_SIZE = 200;
+
+type SyncableLocalRecord =
+  | ItemRecord
+  | ListRecord
+  | ListItemRecord
+  | DailyRecord
+  | WeeklyRecord
+  | RoutineRecord
+  | SettingsRecord
+  | AttachmentRecord;
 
 function syncErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -67,16 +80,53 @@ function isDeletedMutation(mutation: MutationRecord): boolean {
   return mutation.type.endsWith('.deleted');
 }
 
-function syncStateForRemoteWrite(
-  current: SyncRecordState,
-  expectedUpdatedAt: string,
-  rowUpdatedAt: string,
-): SyncRecordState {
-  if (current === 'conflict') {
-    return current;
+class SyncConflictError extends Error {
+  constructor() {
+    super('A newer version already exists in sync. Review it before sending this change again.');
+  }
+}
+
+function tupleAfterCursor(
+  candidate: SyncPullCursor,
+  cursor: SyncPullCursor,
+): boolean {
+  if (!cursor.updatedAt) {
+    return true;
   }
 
-  return expectedUpdatedAt === rowUpdatedAt ? 'synced' : current;
+  if (!candidate.updatedAt) {
+    return false;
+  }
+
+  if (candidate.updatedAt > cursor.updatedAt) {
+    return true;
+  }
+
+  if (candidate.updatedAt < cursor.updatedAt) {
+    return false;
+  }
+
+  if (!cursor.id) {
+    return true;
+  }
+
+  return (candidate.id ?? '') > cursor.id;
+}
+
+function remoteTupleMatchesLocalBase(
+  current: SyncableLocalRecord,
+  remoteRevision: string | null,
+): boolean {
+  return Boolean(remoteRevision && current.remoteRevision === remoteRevision);
+}
+
+function cursorFromRemoteRow<
+  T extends { server_updated_at?: string } & Record<string, unknown>,
+>(row: T, idField: keyof T): SyncPullCursor {
+  return {
+    updatedAt: row.server_updated_at ?? null,
+    id: row[idField] ? String(row[idField]) : null,
+  };
 }
 
 async function markMutationStatus(
@@ -171,14 +221,7 @@ async function getLocalEntityRecord(
   entity: MutationRecord['entity'],
   entityId: string,
 ): Promise<
-  | ItemRecord
-  | ListRecord
-  | ListItemRecord
-  | DailyRecord
-  | WeeklyRecord
-  | RoutineRecord
-  | SettingsRecord
-  | AttachmentRecord
+  | SyncableLocalRecord
   | undefined
 > {
   switch (entity) {
@@ -201,74 +244,69 @@ async function getLocalEntityRecord(
   }
 }
 
+async function putLocalEntityRecord(
+  entity: MutationRecord['entity'],
+  record: SyncableLocalRecord,
+): Promise<void> {
+  switch (entity) {
+    case 'item':
+      await db.items.put(record as ItemRecord);
+      return;
+    case 'list':
+      await db.lists.put(record as ListRecord);
+      return;
+    case 'listItem':
+      await db.listItems.put(record as ListItemRecord);
+      return;
+    case 'dailyRecord':
+      await db.dailyRecords.put(record as DailyRecord);
+      return;
+    case 'weeklyRecord':
+      await db.weeklyRecords.put(record as WeeklyRecord);
+      return;
+    case 'routine':
+      await db.routines.put(record as RoutineRecord);
+      return;
+    case 'settings':
+      await db.settings.put(record as SettingsRecord);
+      return;
+    case 'attachment':
+      await db.attachments.put(record as AttachmentRecord);
+  }
+}
+
 async function markLocalEntitySynced(
   entity: MutationRecord['entity'],
   entityId: string,
-  expectedUpdatedAt: string | null,
+  remoteRevision: string | null,
 ): Promise<void> {
   const current = await getLocalEntityRecord(entity, entityId);
   if (!current) {
     return;
   }
 
-  const nextSyncState =
-    expectedUpdatedAt && 'updatedAt' in current
-      ? syncStateForRemoteWrite(
-          current.syncState,
-          expectedUpdatedAt,
-          current.updatedAt,
-        )
-      : 'synced';
+  await putLocalEntityRecord(entity, {
+    ...current,
+    syncState: 'synced',
+    remoteRevision: remoteRevision ?? current.remoteRevision ?? null,
+  });
+}
 
-  switch (entity) {
-    case 'item':
-      await db.items.put({
-        ...current,
-        syncState: nextSyncState,
-      });
-      return;
-    case 'list':
-      await db.lists.put({
-        ...current,
-        syncState: nextSyncState,
-      });
-      return;
-    case 'listItem':
-      await db.listItems.put({
-        ...current,
-        syncState: nextSyncState,
-      });
-      return;
-    case 'dailyRecord':
-      await db.dailyRecords.put({
-        ...current,
-        syncState: nextSyncState,
-      });
-      return;
-    case 'weeklyRecord':
-      await db.weeklyRecords.put({
-        ...current,
-        syncState: nextSyncState,
-      });
-      return;
-    case 'routine':
-      await db.routines.put({
-        ...current,
-        syncState: nextSyncState,
-      });
-      return;
-    case 'settings':
-      await db.settings.put({
-        ...current,
-        syncState: nextSyncState,
-      });
-      return;
-    case 'attachment':
-      await db.attachments.put({
-        ...current,
-        syncState: nextSyncState,
-      });
+async function markLocalEntityConflict(
+  entity: MutationRecord['entity'],
+  entityId: string,
+  remoteRevision: string | null,
+): Promise<void> {
+  const current = await getLocalEntityRecord(entity, entityId);
+  if (!current) {
+    return;
   }
+
+  await putLocalEntityRecord(entity, {
+    ...current,
+    syncState: 'conflict',
+    remoteRevision: remoteRevision ?? current.remoteRevision ?? null,
+  });
 }
 
 async function upsertDeletedRecord(
@@ -318,102 +356,102 @@ async function fetchRemoteExisting(
   userId: string,
   entity: MutationRecord['entity'],
   entityId: string,
-): Promise<{ updatedAt: string } | null> {
+): Promise<{ serverUpdatedAt: string | null } | null> {
   switch (entity) {
     case 'item': {
       const { data, error } = await client
         .from('items')
-        .select('updated_at')
+        .select('server_updated_at')
         .eq('user_id', userId)
         .eq('id', entityId)
         .maybeSingle();
       if (error) {
         throw new Error("Couldn't read remote item state.");
       }
-      return data ? { updatedAt: String(data.updated_at) } : null;
+      return data ? { serverUpdatedAt: data.server_updated_at ?? null } : null;
     }
     case 'list': {
       const { data, error } = await client
         .from('lists')
-        .select('updated_at')
+        .select('server_updated_at')
         .eq('user_id', userId)
         .eq('id', entityId)
         .maybeSingle();
       if (error) {
         throw new Error("Couldn't read remote list state.");
       }
-      return data ? { updatedAt: String(data.updated_at) } : null;
+      return data ? { serverUpdatedAt: data.server_updated_at ?? null } : null;
     }
     case 'listItem': {
       const { data, error } = await client
         .from('list_items')
-        .select('updated_at')
+        .select('server_updated_at')
         .eq('user_id', userId)
         .eq('id', entityId)
         .maybeSingle();
       if (error) {
         throw new Error("Couldn't read remote list item state.");
       }
-      return data ? { updatedAt: String(data.updated_at) } : null;
+      return data ? { serverUpdatedAt: data.server_updated_at ?? null } : null;
     }
     case 'dailyRecord': {
       const { data, error } = await client
         .from('daily_records')
-        .select('updated_at')
+        .select('server_updated_at')
         .eq('user_id', userId)
         .eq('date', entityId)
         .maybeSingle();
       if (error) {
         throw new Error("Couldn't read remote day state.");
       }
-      return data ? { updatedAt: String(data.updated_at) } : null;
+      return data ? { serverUpdatedAt: data.server_updated_at ?? null } : null;
     }
     case 'weeklyRecord': {
       const { data, error } = await client
         .from('weekly_records')
-        .select('updated_at')
+        .select('server_updated_at')
         .eq('user_id', userId)
         .eq('week_start', entityId)
         .maybeSingle();
       if (error) {
         throw new Error("Couldn't read remote week state.");
       }
-      return data ? { updatedAt: String(data.updated_at) } : null;
+      return data ? { serverUpdatedAt: data.server_updated_at ?? null } : null;
     }
     case 'routine': {
       const { data, error } = await client
         .from('routines')
-        .select('updated_at')
+        .select('server_updated_at')
         .eq('user_id', userId)
         .eq('id', entityId)
         .maybeSingle();
       if (error) {
         throw new Error("Couldn't read remote routine state.");
       }
-      return data ? { updatedAt: String(data.updated_at) } : null;
+      return data ? { serverUpdatedAt: data.server_updated_at ?? null } : null;
     }
     case 'settings': {
       const { data, error } = await client
         .from('settings')
-        .select('updated_at')
+        .select('server_updated_at')
         .eq('user_id', userId)
         .maybeSingle();
       if (error) {
         throw new Error("Couldn't read remote settings.");
       }
-      return data ? { updatedAt: String(data.updated_at) } : null;
+      return data ? { serverUpdatedAt: data.server_updated_at ?? null } : null;
     }
     case 'attachment': {
       const { data, error } = await client
         .from('attachments')
-        .select('updated_at')
+        .select('server_updated_at')
         .eq('user_id', userId)
         .eq('id', entityId)
         .maybeSingle();
       if (error) {
         throw new Error("Couldn't read remote attachment state.");
       }
-      return data ? { updatedAt: String(data.updated_at) } : null;
+      return data ? { serverUpdatedAt: data.server_updated_at ?? null } : null;
     }
   }
 }
@@ -429,24 +467,31 @@ async function pushCurrentRecord(
     return;
   }
 
-  if ('updatedAt' in current) {
-    const remoteExisting = await fetchRemoteExisting(
-      client,
-      userId,
+  const remoteExisting = await fetchRemoteExisting(
+    client,
+    userId,
+    mutation.entity,
+    mutation.entityId,
+  );
+  if (
+    remoteExisting &&
+    !remoteTupleMatchesLocalBase(current, remoteExisting.serverUpdatedAt)
+  ) {
+    await markLocalEntityConflict(
       mutation.entity,
       mutation.entityId,
+      remoteExisting.serverUpdatedAt,
     );
-    if (remoteExisting && remoteExisting.updatedAt > current.updatedAt) {
-      await markLocalEntitySynced(mutation.entity, mutation.entityId, null);
-      return;
-    }
+    throw new SyncConflictError();
   }
 
   switch (mutation.entity) {
     case 'item': {
-      const { error } = await client
+      const { data, error } = await client
         .from('items')
-        .upsert(toRemoteItemRow(userId, current as ItemRecord));
+        .upsert(toRemoteItemRow(userId, current as ItemRecord))
+        .select('server_updated_at')
+        .single();
       if (error) {
         throw new Error("Couldn't sync the item yet.");
       }
@@ -454,14 +499,16 @@ async function pushCurrentRecord(
       await markLocalEntitySynced(
         mutation.entity,
         mutation.entityId,
-        current.updatedAt,
+        data?.server_updated_at ?? current.remoteRevision,
       );
       return;
     }
     case 'list': {
-      const { error } = await client
+      const { data, error } = await client
         .from('lists')
-        .upsert(toRemoteListRow(userId, current as ListRecord));
+        .upsert(toRemoteListRow(userId, current as ListRecord))
+        .select('server_updated_at')
+        .single();
       if (error) {
         throw new Error("Couldn't sync the list yet.");
       }
@@ -469,14 +516,16 @@ async function pushCurrentRecord(
       await markLocalEntitySynced(
         mutation.entity,
         mutation.entityId,
-        current.updatedAt,
+        data?.server_updated_at ?? current.remoteRevision,
       );
       return;
     }
     case 'listItem': {
-      const { error } = await client
+      const { data, error } = await client
         .from('list_items')
-        .upsert(toRemoteListItemRow(userId, current as ListItemRecord));
+        .upsert(toRemoteListItemRow(userId, current as ListItemRecord))
+        .select('server_updated_at')
+        .single();
       if (error) {
         throw new Error("Couldn't sync the list item yet.");
       }
@@ -484,16 +533,18 @@ async function pushCurrentRecord(
       await markLocalEntitySynced(
         mutation.entity,
         mutation.entityId,
-        current.updatedAt,
+        data?.server_updated_at ?? current.remoteRevision,
       );
       return;
     }
     case 'dailyRecord': {
-      const { error } = await client
+      const { data, error } = await client
         .from('daily_records')
         .upsert(toRemoteDailyRecordRow(userId, current as DailyRecord), {
           onConflict: 'user_id,date',
-        });
+        })
+        .select('server_updated_at')
+        .single();
       if (error) {
         throw new Error("Couldn't sync the day yet.");
       }
@@ -501,16 +552,18 @@ async function pushCurrentRecord(
       await markLocalEntitySynced(
         mutation.entity,
         mutation.entityId,
-        current.updatedAt,
+        data?.server_updated_at ?? current.remoteRevision,
       );
       return;
     }
     case 'weeklyRecord': {
-      const { error } = await client
+      const { data, error } = await client
         .from('weekly_records')
         .upsert(toRemoteWeeklyRecordRow(userId, current as WeeklyRecord), {
           onConflict: 'user_id,week_start',
-        });
+        })
+        .select('server_updated_at')
+        .single();
       if (error) {
         throw new Error("Couldn't sync the week yet.");
       }
@@ -518,14 +571,16 @@ async function pushCurrentRecord(
       await markLocalEntitySynced(
         mutation.entity,
         mutation.entityId,
-        current.updatedAt,
+        data?.server_updated_at ?? current.remoteRevision,
       );
       return;
     }
     case 'routine': {
-      const { error } = await client
+      const { data, error } = await client
         .from('routines')
-        .upsert(toRemoteRoutineRow(userId, current as RoutineRecord));
+        .upsert(toRemoteRoutineRow(userId, current as RoutineRecord))
+        .select('server_updated_at')
+        .single();
       if (error) {
         throw new Error("Couldn't sync the routine yet.");
       }
@@ -533,16 +588,18 @@ async function pushCurrentRecord(
       await markLocalEntitySynced(
         mutation.entity,
         mutation.entityId,
-        current.updatedAt,
+        data?.server_updated_at ?? current.remoteRevision,
       );
       return;
     }
     case 'settings': {
-      const { error } = await client
+      const { data, error } = await client
         .from('settings')
         .upsert(toRemoteSettingsRow(userId, current as SettingsRecord), {
           onConflict: 'user_id',
-        });
+        })
+        .select('server_updated_at')
+        .single();
       if (error) {
         throw new Error("Couldn't sync settings yet.");
       }
@@ -550,7 +607,7 @@ async function pushCurrentRecord(
       await markLocalEntitySynced(
         mutation.entity,
         mutation.entityId,
-        current.updatedAt,
+        data?.server_updated_at ?? current.remoteRevision,
       );
       return;
     }
@@ -574,9 +631,11 @@ async function pushCurrentRecord(
       } else if (payloadState !== 'missing') {
         throw new Error("Couldn't find the attachment file to sync.");
       }
-      const { error } = await client
+      const { data, error } = await client
         .from('attachments')
-        .upsert(toRemoteAttachmentRow(userId, attachment));
+        .upsert(toRemoteAttachmentRow(userId, attachment))
+        .select('server_updated_at')
+        .single();
       if (error) {
         throw new Error("Couldn't sync the attachment yet.");
       }
@@ -584,7 +643,7 @@ async function pushCurrentRecord(
       await markLocalEntitySynced(
         mutation.entity,
         mutation.entityId,
-        attachment.updatedAt,
+        data?.server_updated_at ?? attachment.remoteRevision,
       );
     }
   }
@@ -595,6 +654,26 @@ async function processDeletionMutation(
   userId: string,
   mutation: MutationRecord,
 ): Promise<void> {
+  const expectedRemoteRevision =
+    (
+      mutation.payload as {
+        remoteRevision?: string | null;
+      }
+    ).remoteRevision ?? null;
+  const remoteExisting = await fetchRemoteExisting(
+    client,
+    userId,
+    mutation.entity,
+    mutation.entityId,
+  );
+  if (
+    remoteExisting &&
+    expectedRemoteRevision &&
+    remoteExisting.serverUpdatedAt !== expectedRemoteRevision
+  ) {
+    throw new SyncConflictError();
+  }
+
   await upsertDeletedRecord(
     client,
     userId,
@@ -706,12 +785,41 @@ async function pushPendingMutations(
   }
 }
 
+async function shouldDeferToLocalPendingState(
+  entity: MutationRecord['entity'],
+  entityId: string,
+  current: SyncableLocalRecord | undefined,
+  remoteRevision: string | null,
+): Promise<boolean> {
+  if (!current) {
+    return false;
+  }
+
+  if (current.syncState === 'conflict') {
+    return true;
+  }
+
+  if (current.syncState === 'pending') {
+    if (!remoteRevision || remoteTupleMatchesLocalBase(current, remoteRevision)) {
+      return true;
+    }
+
+    await markLocalEntityConflict(entity, entityId, remoteRevision);
+    return true;
+  }
+
+  return false;
+}
+
 async function putRemoteAttachmentRow(row: RemoteAttachmentRow): Promise<void> {
   const current = await db.attachments.get(row.id);
   if (
-    current &&
-    current.syncState === 'pending' &&
-    current.updatedAt > row.updated_at
+    await shouldDeferToLocalPendingState(
+      'attachment',
+      row.id,
+      current,
+      row.server_updated_at ?? row.updated_at,
+    )
   ) {
     return;
   }
@@ -727,9 +835,12 @@ async function putRemoteAttachmentRow(row: RemoteAttachmentRow): Promise<void> {
 async function putRemoteItemRow(row: RemoteItemRow): Promise<void> {
   const current = await db.items.get(row.id);
   if (
-    current &&
-    current.syncState === 'pending' &&
-    current.updatedAt > row.updated_at
+    await shouldDeferToLocalPendingState(
+      'item',
+      row.id,
+      current,
+      row.server_updated_at ?? row.updated_at,
+    )
   ) {
     return;
   }
@@ -741,9 +852,12 @@ async function putRemoteItemRow(row: RemoteItemRow): Promise<void> {
 async function putRemoteListRow(row: RemoteListRow): Promise<void> {
   const current = await db.lists.get(row.id);
   if (
-    current &&
-    current.syncState === 'pending' &&
-    current.updatedAt > row.updated_at
+    await shouldDeferToLocalPendingState(
+      'list',
+      row.id,
+      current,
+      row.server_updated_at ?? row.updated_at,
+    )
   ) {
     return;
   }
@@ -755,9 +869,12 @@ async function putRemoteListRow(row: RemoteListRow): Promise<void> {
 async function putRemoteListItemRow(row: RemoteListItemRow): Promise<void> {
   const current = await db.listItems.get(row.id);
   if (
-    current &&
-    current.syncState === 'pending' &&
-    current.updatedAt > row.updated_at
+    await shouldDeferToLocalPendingState(
+      'listItem',
+      row.id,
+      current,
+      row.server_updated_at ?? row.updated_at,
+    )
   ) {
     return;
   }
@@ -769,9 +886,12 @@ async function putRemoteListItemRow(row: RemoteListItemRow): Promise<void> {
 async function putRemoteDailyRecordRow(row: RemoteDailyRecordRow): Promise<void> {
   const current = await db.dailyRecords.get(row.date);
   if (
-    current &&
-    current.syncState === 'pending' &&
-    current.updatedAt > row.updated_at
+    await shouldDeferToLocalPendingState(
+      'dailyRecord',
+      row.date,
+      current,
+      row.server_updated_at ?? row.updated_at,
+    )
   ) {
     return;
   }
@@ -785,9 +905,12 @@ async function putRemoteWeeklyRecordRow(
 ): Promise<void> {
   const current = await db.weeklyRecords.get(row.week_start);
   if (
-    current &&
-    current.syncState === 'pending' &&
-    current.updatedAt > row.updated_at
+    await shouldDeferToLocalPendingState(
+      'weeklyRecord',
+      row.week_start,
+      current,
+      row.server_updated_at ?? row.updated_at,
+    )
   ) {
     return;
   }
@@ -799,9 +922,12 @@ async function putRemoteWeeklyRecordRow(
 async function putRemoteRoutineRow(row: RemoteRoutineRow): Promise<void> {
   const current = await db.routines.get(row.id);
   if (
-    current &&
-    current.syncState === 'pending' &&
-    current.updatedAt > row.updated_at
+    await shouldDeferToLocalPendingState(
+      'routine',
+      row.id,
+      current,
+      row.server_updated_at ?? row.updated_at,
+    )
   ) {
     return;
   }
@@ -813,9 +939,12 @@ async function putRemoteRoutineRow(row: RemoteRoutineRow): Promise<void> {
 async function putRemoteSettingsRow(row: RemoteSettingsRow): Promise<void> {
   const current = await db.settings.get('settings');
   if (
-    current &&
-    current.syncState === 'pending' &&
-    current.updatedAt > row.updated_at
+    await shouldDeferToLocalPendingState(
+      'settings',
+      'settings',
+      current,
+      row.server_updated_at ?? row.updated_at,
+    )
   ) {
     return;
   }
@@ -833,9 +962,12 @@ async function applyRemoteDeletion(
     case 'item': {
       const current = await db.items.get(recordId);
       if (
-        current &&
-        current.syncState === 'pending' &&
-        current.updatedAt > deletedAt
+        await shouldDeferToLocalPendingState(
+          'item',
+          recordId,
+          current,
+          deletedAt,
+        )
       ) {
         return;
       }
@@ -847,9 +979,12 @@ async function applyRemoteDeletion(
     case 'list': {
       const current = await db.lists.get(recordId);
       if (
-        current &&
-        current.syncState === 'pending' &&
-        current.updatedAt > deletedAt
+        await shouldDeferToLocalPendingState(
+          'list',
+          recordId,
+          current,
+          deletedAt,
+        )
       ) {
         return;
       }
@@ -861,9 +996,12 @@ async function applyRemoteDeletion(
     case 'listItem': {
       const current = await db.listItems.get(recordId);
       if (
-        current &&
-        current.syncState === 'pending' &&
-        current.updatedAt > deletedAt
+        await shouldDeferToLocalPendingState(
+          'listItem',
+          recordId,
+          current,
+          deletedAt,
+        )
       ) {
         return;
       }
@@ -875,9 +1013,12 @@ async function applyRemoteDeletion(
     case 'routine': {
       const current = await db.routines.get(recordId);
       if (
-        current &&
-        current.syncState === 'pending' &&
-        current.updatedAt > deletedAt
+        await shouldDeferToLocalPendingState(
+          'routine',
+          recordId,
+          current,
+          deletedAt,
+        )
       ) {
         return;
       }
@@ -889,9 +1030,12 @@ async function applyRemoteDeletion(
     case 'attachment': {
       const current = await db.attachments.get(recordId);
       if (
-        current &&
-        current.syncState === 'pending' &&
-        current.updatedAt > deletedAt
+        await shouldDeferToLocalPendingState(
+          'attachment',
+          recordId,
+          current,
+          deletedAt,
+        )
       ) {
         return;
       }
@@ -907,30 +1051,59 @@ async function applyRemoteDeletion(
   }
 }
 
-async function fetchRemoteRows<T extends { server_updated_at?: string }>(
+async function fetchRemoteRowsByCursor<
+  T extends { server_updated_at?: string } & Record<string, unknown>,
+>(
   client: SupabaseClient,
   userId: string,
   table: string,
-  since: string | null,
-): Promise<T[]> {
-  let query = client
-    .from(table)
-    .select('*')
-    .eq('user_id', userId)
-    .order('server_updated_at', {
-      ascending: true,
-    });
+  cursor: SyncPullCursor,
+  idField: keyof T,
+): Promise<{ cursor: SyncPullCursor; rows: T[] }> {
+  const rows: T[] = [];
+  let nextCursor = { ...cursor };
+  let offset = 0;
 
-  if (since) {
-    query = query.gt('server_updated_at', since);
+  while (true) {
+    let query = client
+      .from(table)
+      .select('*')
+      .eq('user_id', userId)
+      .order('server_updated_at', {
+        ascending: true,
+      })
+      .order(String(idField), {
+        ascending: true,
+      })
+      .range(offset, offset + REMOTE_PULL_PAGE_SIZE - 1);
+
+    if (cursor.updatedAt) {
+      query = query.gte('server_updated_at', cursor.updatedAt);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error("Couldn't pull the latest changes yet.");
+    }
+
+    const page = (data ?? []) as T[];
+    const filtered = page.filter((row) =>
+      tupleAfterCursor(cursorFromRemoteRow(row, idField), cursor),
+    );
+
+    if (filtered.length) {
+      rows.push(...filtered);
+      nextCursor = cursorFromRemoteRow(filtered[filtered.length - 1]!, idField);
+    }
+
+    if (page.length < REMOTE_PULL_PAGE_SIZE) {
+      break;
+    }
+
+    offset += REMOTE_PULL_PAGE_SIZE;
   }
 
-  const { data, error } = await query;
-  if (error) {
-    throw new Error("Couldn't pull the latest changes yet.");
-  }
-
-  return (data ?? []) as T[];
+  return { cursor: nextCursor, rows };
 }
 
 function nextWatermark(
@@ -946,40 +1119,97 @@ function nextWatermark(
 async function pullRemoteChanges(
   client: SupabaseClient,
   userId: string,
-  lastSyncedAt: string | null,
-): Promise<string> {
-  const baseline = lastSyncedAt ?? nowIso();
+  currentSyncState: Awaited<ReturnType<typeof getCurrentSyncState>>,
+): Promise<{
+  lastSyncedAt: string;
+  pullCursorByStream: SyncPullCursorMap;
+}> {
+  const baseline = currentSyncState.lastSyncedAt ?? nowIso();
   const [
-    items,
-    lists,
-    listItems,
-    dailyRecords,
-    weeklyRecords,
-    routines,
-    settings,
-    attachments,
-    deletedRecords,
+    itemsResult,
+    listsResult,
+    listItemsResult,
+    dailyRecordsResult,
+    weeklyRecordsResult,
+    routinesResult,
+    settingsResult,
+    attachmentsResult,
+    deletedRecordsResult,
   ] = await Promise.all([
-    fetchRemoteRows<RemoteItemRow>(client, userId, 'items', lastSyncedAt),
-    fetchRemoteRows<RemoteListRow>(client, userId, 'lists', lastSyncedAt),
-    fetchRemoteRows<RemoteListItemRow>(client, userId, 'list_items', lastSyncedAt),
-    fetchRemoteRows<RemoteDailyRecordRow>(client, userId, 'daily_records', lastSyncedAt),
-    fetchRemoteRows<RemoteWeeklyRecordRow>(
+    fetchRemoteRowsByCursor<RemoteItemRow>(
+      client,
+      userId,
+      'items',
+      currentSyncState.pullCursorByStream.items,
+      'id',
+    ),
+    fetchRemoteRowsByCursor<RemoteListRow>(
+      client,
+      userId,
+      'lists',
+      currentSyncState.pullCursorByStream.lists,
+      'id',
+    ),
+    fetchRemoteRowsByCursor<RemoteListItemRow>(
+      client,
+      userId,
+      'list_items',
+      currentSyncState.pullCursorByStream.listItems,
+      'id',
+    ),
+    fetchRemoteRowsByCursor<RemoteDailyRecordRow>(
+      client,
+      userId,
+      'daily_records',
+      currentSyncState.pullCursorByStream.dailyRecords,
+      'date',
+    ),
+    fetchRemoteRowsByCursor<RemoteWeeklyRecordRow>(
       client,
       userId,
       'weekly_records',
-      lastSyncedAt,
+      currentSyncState.pullCursorByStream.weeklyRecords,
+      'week_start',
     ),
-    fetchRemoteRows<RemoteRoutineRow>(client, userId, 'routines', lastSyncedAt),
-    fetchRemoteRows<RemoteSettingsRow>(client, userId, 'settings', lastSyncedAt),
-    fetchRemoteRows<RemoteAttachmentRow>(client, userId, 'attachments', lastSyncedAt),
-    fetchRemoteRows<RemoteDeletedRecordRow>(
+    fetchRemoteRowsByCursor<RemoteRoutineRow>(
+      client,
+      userId,
+      'routines',
+      currentSyncState.pullCursorByStream.routines,
+      'id',
+    ),
+    fetchRemoteRowsByCursor<RemoteSettingsRow>(
+      client,
+      userId,
+      'settings',
+      currentSyncState.pullCursorByStream.settings,
+      'user_id',
+    ),
+    fetchRemoteRowsByCursor<RemoteAttachmentRow>(
+      client,
+      userId,
+      'attachments',
+      currentSyncState.pullCursorByStream.attachments,
+      'id',
+    ),
+    fetchRemoteRowsByCursor<RemoteDeletedRecordRow>(
       client,
       userId,
       'deleted_records',
-      lastSyncedAt,
+      currentSyncState.pullCursorByStream.deletedRecords,
+      'record_id',
     ),
   ]);
+
+  const items = itemsResult.rows;
+  const lists = listsResult.rows;
+  const listItems = listItemsResult.rows;
+  const dailyRecords = dailyRecordsResult.rows;
+  const weeklyRecords = weeklyRecordsResult.rows;
+  const routines = routinesResult.rows;
+  const settings = settingsResult.rows;
+  const attachments = attachmentsResult.rows;
+  const deletedRecords = deletedRecordsResult.rows;
 
   await db.transaction(
     'rw',
@@ -1030,17 +1260,30 @@ async function pullRemoteChanges(
     },
   );
 
-  return nextWatermark(baseline, [
-    ...items.map((row) => row.server_updated_at),
-    ...lists.map((row) => row.server_updated_at),
-    ...listItems.map((row) => row.server_updated_at),
-    ...dailyRecords.map((row) => row.server_updated_at),
-    ...weeklyRecords.map((row) => row.server_updated_at),
-    ...routines.map((row) => row.server_updated_at),
-    ...settings.map((row) => row.server_updated_at),
-    ...attachments.map((row) => row.server_updated_at),
-    ...deletedRecords.map((row) => row.server_updated_at),
-  ]);
+  return {
+    lastSyncedAt: nextWatermark(baseline, [
+      ...items.map((row) => row.server_updated_at),
+      ...lists.map((row) => row.server_updated_at),
+      ...listItems.map((row) => row.server_updated_at),
+      ...dailyRecords.map((row) => row.server_updated_at),
+      ...weeklyRecords.map((row) => row.server_updated_at),
+      ...routines.map((row) => row.server_updated_at),
+      ...settings.map((row) => row.server_updated_at),
+      ...attachments.map((row) => row.server_updated_at),
+      ...deletedRecords.map((row) => row.server_updated_at),
+    ]),
+    pullCursorByStream: {
+      items: itemsResult.cursor,
+      lists: listsResult.cursor,
+      listItems: listItemsResult.cursor,
+      dailyRecords: dailyRecordsResult.cursor,
+      weeklyRecords: weeklyRecordsResult.cursor,
+      routines: routinesResult.cursor,
+      settings: settingsResult.cursor,
+      attachments: attachmentsResult.cursor,
+      deletedRecords: deletedRecordsResult.cursor,
+    },
+  };
 }
 
 async function runSync(client: SupabaseClient, userId: string): Promise<void> {
@@ -1049,14 +1292,15 @@ async function runSync(client: SupabaseClient, userId: string): Promise<void> {
 
   try {
     await pushPendingMutations(client, userId);
-    const lastSyncedAt = await pullRemoteChanges(
+    const nextPullState = await pullRemoteChanges(
       client,
       userId,
-      syncState.lastSyncedAt,
+      syncState,
     );
     await updateSyncState({
-      lastSyncedAt,
+      lastSyncedAt: nextPullState.lastSyncedAt,
       mode: 'ready',
+      pullCursorByStream: nextPullState.pullCursorByStream,
     });
   } catch (error) {
     await updateSyncState({ mode: 'error' });
@@ -1075,6 +1319,18 @@ export async function syncHoldfastWithSupabase(): Promise<void> {
   } = await client.auth.getSession();
 
   if (!session?.user?.id) {
+    return;
+  }
+
+  const workspaceState = await getCurrentWorkspaceState();
+  if (workspaceState.attachState !== 'attached') {
+    return;
+  }
+  if (
+    workspaceState.ownershipState === 'member' &&
+    workspaceState.boundUserId &&
+    workspaceState.boundUserId !== session.user.id
+  ) {
     return;
   }
 

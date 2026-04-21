@@ -13,12 +13,12 @@ import type { HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
 import { Panel } from '@/shared/ui/Panel';
-import { StatCard } from '@/shared/ui/StatCard';
 
 interface ReviewViewProps {
   currentDate: DateKey;
   onJumpToDate: (date: DateKey) => void;
   onOpenItem: (itemId: string) => void;
+  onOpenList: (listId: string) => void;
   snapshot: HoldfastSnapshot;
 }
 
@@ -26,10 +26,10 @@ export function ReviewView({
   currentDate,
   onJumpToDate,
   onOpenItem,
+  onOpenList,
   snapshot,
 }: ReviewViewProps) {
   const [search, setSearch] = useState('');
-  const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const repeated = useMemo(
     () => repeatedOpenTitles(snapshot.items),
     [snapshot.items],
@@ -64,40 +64,13 @@ export function ReviewView({
     () => reviewListSummaries(snapshot.lists, snapshot.listItems),
     [snapshot.listItems, snapshot.lists],
   );
-  const selectedListSummary = selectedListId
-    ? listSummaries.find((entry) => entry.list.id === selectedListId) ?? null
-    : null;
-  const selectedListItems = useMemo(
-    () =>
-      selectedListId
-        ? snapshot.listItems
-            .filter(
-              (entry) =>
-                entry.listId === selectedListId &&
-                !entry.deletedAt &&
-                entry.status !== 'archived',
-            )
-            .sort((left, right) => left.position - right.position)
-        : [],
-    [selectedListId, snapshot.listItems],
-  );
-
-  const showList = (listId: string): void => {
-    setSelectedListId(listId);
-    setSearch('');
-  };
 
   return (
     <div className="stack">
       <Panel>
-        <div className="panel-header split">
-          <div>
-            <h1>Review</h1>
-            <p>
-              Find saved things again, catch repeats, and pull the right thing
-              back into view.
-            </p>
-          </div>
+        <div className="panel-header">
+          <h1>Review</h1>
+          <p>Find saved things again and pull the right thing back into view.</p>
         </div>
         <label className="field-stack">
           <span>Search</span>
@@ -108,20 +81,6 @@ export function ReviewView({
             value={search}
           />
         </label>
-        {selectedListSummary ? (
-          <div className="dialog-actions">
-            <span className="chip active">
-              Showing list | {selectedListSummary.list.title}
-            </span>
-            <button
-              className="button ghost small"
-              onClick={() => setSelectedListId(null)}
-              type="button"
-            >
-              Clear list
-            </button>
-          </div>
-        ) : null}
         {search.trim() ? (
           searchResults.length ? (
             <div className="item-list">
@@ -187,15 +146,15 @@ export function ReviewView({
                           ? `${result.doneCount} done item${
                               result.doneCount === 1 ? '' : 's'
                             } remembered here.`
-                          : 'Ready to refind without making lists a second app.'}
+                          : 'Ready to refind without adding another app inside Holdfast.'}
                       </p>
                       <div className="dialog-actions">
                         <button
                           className="button ghost small"
-                          onClick={() => showList(result.list.id)}
+                          onClick={() => onOpenList(result.list.id)}
                           type="button"
                         >
-                          Show list
+                          Open list
                         </button>
                       </div>
                     </div>
@@ -222,10 +181,10 @@ export function ReviewView({
                     <div className="dialog-actions">
                       <button
                         className="button ghost small"
-                        onClick={() => showList(result.list.id)}
+                        onClick={() => onOpenList(result.list.id)}
                         type="button"
                       >
-                        Show list
+                        Open list
                       </button>
                     </div>
                   </div>
@@ -244,94 +203,10 @@ export function ReviewView({
 
       <Panel>
         <div className="panel-header">
-          <h2>Needs attention</h2>
-          <p>The shortest path to what may deserve action next.</p>
+          <h2>Lists</h2>
+          <p>Pinned and active list surfaces you can return to quickly.</p>
         </div>
-        <div className="grid three">
-          <StatCard
-            detail="Items dated before today"
-            label="Overdue"
-            value={overdue.length}
-          />
-          <StatCard
-            detail="Open loops showing up more than once"
-            label="Repeating"
-            value={repeated.length}
-          />
-          <StatCard
-            detail="Pinned or active lists in view"
-            label="Lists"
-            value={listSummaries.length}
-          />
-        </div>
-      </Panel>
-
-      <Panel>
-        <div className="panel-header">
-          <h2>Lists worth revisiting</h2>
-          <p>List surfaces you can refind here without adding another nav tab.</p>
-        </div>
-        {selectedListSummary ? (
-          <div className="stack compact">
-            <div className="item-card day-result">
-              <div className="eyebrow">
-                {selectedListSummary.list.kind} list
-                {selectedListSummary.list.pinned ? ' | pinned' : ''}
-              </div>
-              <div className="item-title-row">
-                <h3>{selectedListSummary.list.title}</h3>
-                <span className="chip small">
-                  {selectedListSummary.openCount} open
-                </span>
-              </div>
-              <p>
-                {selectedListSummary.doneCount
-                  ? `${selectedListSummary.doneCount} done item${
-                      selectedListSummary.doneCount === 1 ? '' : 's'
-                    } kept in history.`
-                  : 'No done history in this list yet.'}
-              </p>
-              <div className="dialog-actions">
-                <button
-                  className="button ghost small"
-                  onClick={() => setSelectedListId(null)}
-                  type="button"
-                >
-                  Back to lists
-                </button>
-              </div>
-            </div>
-            {selectedListItems.length ? (
-              <div className="item-list">
-                {selectedListItems.map((entry) => (
-                  <div className="item-card day-result" key={entry.id}>
-                    <div className="eyebrow">List item</div>
-                    <div className="item-title-row">
-                      <h3>{entry.title}</h3>
-                      <span className="chip small">{entry.status}</span>
-                    </div>
-                    {entry.body.trim() ? (
-                      <p>{entry.body}</p>
-                    ) : (
-                      <p>Still attached to this list surface.</p>
-                    )}
-                    <div className="dialog-actions">
-                      <button
-                        className="button ghost small"
-                        onClick={() => setSearch(entry.title)}
-                        type="button"
-                      >
-                        Search matches
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState>No live list items here right now.</EmptyState>
-            )}
-          </div>
-        ) : listSummaries.length ? (
+        {listSummaries.length ? (
           <div className="grid two">
             {listSummaries.map((entry) => (
               <div className="item-card day-result" key={entry.list.id}>
@@ -351,10 +226,10 @@ export function ReviewView({
                 <div className="dialog-actions">
                   <button
                     className="button ghost small"
-                    onClick={() => showList(entry.list.id)}
+                    onClick={() => onOpenList(entry.list.id)}
                     type="button"
                   >
-                    Show list
+                    Open list
                   </button>
                 </div>
               </div>
@@ -368,7 +243,7 @@ export function ReviewView({
       <Panel>
         <div className="panel-header">
           <h2>Recent days</h2>
-          <p>A short read on what stayed alive, not how well you performed.</p>
+          <p>A short path back to what stayed alive.</p>
         </div>
         <div className="grid two">
           {recent.map((day) => (
@@ -387,16 +262,6 @@ export function ReviewView({
                   Seed | {day.closeSeed || '--'}
                 </span>
               </div>
-              <div className="meta-row">
-                <span className="meta-chip">
-                  Carry | {day.carryCount ? `${day.carryCount} kept alive` : '--'}
-                </span>
-              </div>
-              <div className="meta-row">
-                <span className="meta-chip">
-                  Closeout | {day.closed ? 'yes' : 'no'}
-                </span>
-              </div>
               <div className="dialog-actions">
                 <button
                   className="button ghost small"
@@ -413,57 +278,50 @@ export function ReviewView({
 
       <Panel>
         <div className="panel-header">
-          <h2>Repeating</h2>
-          <p>Things that keep staying open and probably deserve structure.</p>
+          <h2>Signals</h2>
+          <p>Secondary retrieval aids when something keeps showing up.</p>
         </div>
-        {repeated.length ? (
-          <div className="item-list">
-            {repeated.map(([title, count]) => (
-              <div className="item-card day-result" key={`${title}-${count}`}>
-                <div className="item-title-row">
-                  <h3>{title}</h3>
-                  <span className="chip small">{count}</span>
+        <div className="grid two">
+          <div className="stack compact">
+            <div className="eyebrow">Repeating</div>
+            {repeated.length ? (
+              repeated.map(([title, count]) => (
+                <div className="item-card day-result" key={`${title}-${count}`}>
+                  <div className="item-title-row">
+                    <h3>{title}</h3>
+                    <span className="chip small">{count}</span>
+                  </div>
+                  <div className="dialog-actions">
+                    <button
+                      className="button ghost small"
+                      onClick={() => setSearch(title)}
+                      type="button"
+                    >
+                      Show matches
+                    </button>
+                  </div>
                 </div>
-                <p>
-                  This title is still open across multiple items. Consider
-                  making it a routine or clarifying scope.
-                </p>
-                <div className="dialog-actions">
-                  <button
-                    className="button ghost small"
-                    onClick={() => setSearch(title)}
-                    type="button"
-                  >
-                    Show matches
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyState>No repeated open loops right now.</EmptyState>
+            )}
           </div>
-        ) : (
-          <EmptyState>No repeated open loops right now.</EmptyState>
-        )}
-      </Panel>
-
-      <Panel>
-        <div className="panel-header">
-          <h2>Overdue</h2>
-          <p>Anything with a date before today.</p>
+          <div className="stack compact">
+            <div className="eyebrow">Overdue</div>
+            {overdue.length ? (
+              overdue.map((item) => (
+                <ItemCard
+                  item={item}
+                  key={item.id}
+                  meta={itemMeta(item, currentDate, item.attachments)}
+                  onOpen={() => onOpenItem(item.id)}
+                />
+              ))
+            ) : (
+              <EmptyState>Nothing overdue.</EmptyState>
+            )}
+          </div>
         </div>
-        {overdue.length ? (
-          <div className="item-list">
-            {overdue.map((item) => (
-              <ItemCard
-                item={item}
-                key={item.id}
-                meta={itemMeta(item, currentDate, item.attachments)}
-                onOpen={() => onOpenItem(item.id)}
-              />
-            ))}
-          </div>
-        ) : (
-          <EmptyState>Nothing overdue.</EmptyState>
-        )}
       </Panel>
     </div>
   );

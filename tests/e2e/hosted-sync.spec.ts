@@ -78,7 +78,7 @@ test.describe('hosted sync smoke', () => {
         .first();
       await firstCard.getByRole('button', { name: 'Details' }).click();
       await expect(
-        firstPage.getByRole('heading', { name: 'Details' }),
+        firstPage.getByRole('dialog', { name: 'Item details' }),
       ).toBeVisible();
 
       await firstPage.locator('.file-button input[type="file"]').setInputFiles({

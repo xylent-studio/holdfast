@@ -37,14 +37,8 @@ export const MutationStatusSchema = z.enum([
   'acknowledged',
   'failed',
 ]);
-export const SyncAuthStateSchema = z.enum([
-  'signed-out',
-  'anonymous',
-  'signed-in',
-]);
-export const SyncIdentityStateSchema = z.enum([
+export const WorkspaceOwnershipStateSchema = z.enum([
   'device-guest',
-  'anonymous-user',
   'member',
 ]);
 export const SyncAuthPromptStateSchema = z.enum([
@@ -53,6 +47,25 @@ export const SyncAuthPromptStateSchema = z.enum([
   'signed-out-by-user',
   'account-mismatch',
 ]);
+export const WorkspaceAttachStateSchema = z.enum([
+  'attached',
+  'detached-restore',
+]);
+export const SyncPullCursorSchema = z.object({
+  updatedAt: z.string().nullable().default(null),
+  id: z.string().nullable().default(null),
+});
+export const SyncPullCursorMapSchema = z.object({
+  items: SyncPullCursorSchema,
+  lists: SyncPullCursorSchema,
+  listItems: SyncPullCursorSchema,
+  dailyRecords: SyncPullCursorSchema,
+  weeklyRecords: SyncPullCursorSchema,
+  routines: SyncPullCursorSchema,
+  settings: SyncPullCursorSchema,
+  attachments: SyncPullCursorSchema,
+  deletedRecords: SyncPullCursorSchema,
+});
 export const PrototypeRecoverySourceSchema = z.enum(['browser', 'file']);
 export const ReadinessKeySchema = z.enum([
   'water',
@@ -84,6 +97,7 @@ export const ItemRecordSchema = z.object({
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
   syncState: SyncRecordStateSchema,
+  remoteRevision: z.string().nullable().default(null),
 });
 
 export const ListRecordSchema = z.object({
@@ -99,6 +113,7 @@ export const ListRecordSchema = z.object({
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
   syncState: SyncRecordStateSchema,
+  remoteRevision: z.string().nullable().default(null),
 });
 
 export const ListItemRecordSchema = z.object({
@@ -117,6 +132,7 @@ export const ListItemRecordSchema = z.object({
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
   syncState: SyncRecordStateSchema,
+  remoteRevision: z.string().nullable().default(null),
 });
 
 export const DailyRecordSchema = z.object({
@@ -142,6 +158,7 @@ export const DailyRecordSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   syncState: SyncRecordStateSchema,
+  remoteRevision: z.string().nullable().default(null),
 });
 
 export const WeeklyRecordSchema = z.object({
@@ -153,6 +170,7 @@ export const WeeklyRecordSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   syncState: SyncRecordStateSchema,
+  remoteRevision: z.string().nullable().default(null),
 });
 
 export const RoutineRecordSchema = z.object({
@@ -169,6 +187,7 @@ export const RoutineRecordSchema = z.object({
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
   syncState: SyncRecordStateSchema,
+  remoteRevision: z.string().nullable().default(null),
 });
 
 export const SettingsRecordSchema = z.object({
@@ -180,6 +199,7 @@ export const SettingsRecordSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   syncState: SyncRecordStateSchema,
+  remoteRevision: z.string().nullable().default(null),
 });
 
 export const AttachmentRecordSchema = z.object({
@@ -195,6 +215,7 @@ export const AttachmentRecordSchema = z.object({
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
   syncState: SyncRecordStateSchema,
+  remoteRevision: z.string().nullable().default(null),
 });
 
 export const AttachmentBlobRecordSchema = z.object({
@@ -232,10 +253,18 @@ export const SyncStateRecordSchema = z.object({
   provider: z.enum(['supabase']),
   mode: z.enum(['disabled', 'ready', 'syncing', 'error']),
   lastSyncedAt: z.string().nullable(),
-  authState: SyncAuthStateSchema,
-  identityState: SyncIdentityStateSchema.default('device-guest'),
+  pullCursorByStream: SyncPullCursorMapSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const WorkspaceStateRecordSchema = z.object({
+  id: z.literal('workspace'),
+  schemaVersion,
+  ownershipState: WorkspaceOwnershipStateSchema.default('device-guest'),
+  boundUserId: z.string().uuid().nullable().default(null),
   authPromptState: SyncAuthPromptStateSchema.default('none'),
-  remoteUserId: z.string().uuid().nullable().default(null),
+  attachState: WorkspaceAttachStateSchema.default('attached'),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -296,9 +325,13 @@ export type ListKind = z.infer<typeof ListKindSchema>;
 export type ListItemStatus = z.infer<typeof ListItemStatusSchema>;
 export type AttachmentKind = z.infer<typeof AttachmentKindSchema>;
 export type SyncRecordState = z.infer<typeof SyncRecordStateSchema>;
-export type SyncAuthState = z.infer<typeof SyncAuthStateSchema>;
-export type SyncIdentityState = z.infer<typeof SyncIdentityStateSchema>;
+export type WorkspaceOwnershipState = z.infer<
+  typeof WorkspaceOwnershipStateSchema
+>;
 export type SyncAuthPromptState = z.infer<typeof SyncAuthPromptStateSchema>;
+export type WorkspaceAttachState = z.infer<typeof WorkspaceAttachStateSchema>;
+export type SyncPullCursor = z.infer<typeof SyncPullCursorSchema>;
+export type SyncPullCursorMap = z.infer<typeof SyncPullCursorMapSchema>;
 export type PrototypeRecoverySource = z.infer<
   typeof PrototypeRecoverySourceSchema
 >;
@@ -315,6 +348,7 @@ export type AttachmentRecord = z.infer<typeof AttachmentRecordSchema>;
 export type AttachmentBlobRecord = z.infer<typeof AttachmentBlobRecordSchema>;
 export type MutationRecord = z.infer<typeof MutationRecordSchema>;
 export type SyncStateRecord = z.infer<typeof SyncStateRecordSchema>;
+export type WorkspaceStateRecord = z.infer<typeof WorkspaceStateRecordSchema>;
 export type LegacyPrototypeSummary = z.infer<
   typeof LegacyPrototypeSummarySchema
 >;

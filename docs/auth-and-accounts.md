@@ -6,6 +6,7 @@ Auth should make Holdfast feel like a real modern app:
 
 - getting in is easy
 - staying signed in is natural
+- catching, placing, finding, and keeping things never feels blocked by account ceremony
 - devices can sync later without weirdness
 - offline work remains safe
 - account management stays out of the way
@@ -79,7 +80,7 @@ Not here yet:
 
 - delete account
 - remove local data from this device
-- storage or queue mechanics
+- storage or sync mechanics
 - provider internals
 
 ## Session Recovery
@@ -133,17 +134,17 @@ The repo and connected Supabase project now include:
 
 Local foundation for that direction remains:
 
-- `authState` tracks whether this device currently has an active backend session
-- `identityState` tracks whether the device is still a local guest workspace or a member-owned workspace
-- `authPromptState` tracks whether signed-out UI should stay calm, ask for recovery, or block the wrong-account path
-- `remoteUserId` keeps the last known signed-in owner on the device
+- `workspaceState.ownershipState` tracks whether this device is still a local guest workspace or a member-owned workspace
+- `workspaceState.boundUserId` keeps the account currently attached to this device workspace
+- `workspaceState.authPromptState` tracks whether signed-out UI should stay calm, ask for recovery, or block the wrong-account path
+- `workspaceState.attachState` tracks whether sync is actively attached or whether a restored workspace must stay local until the user explicitly re-attaches it
 
 Current safety guard:
 
 - Holdfast does not silently rebind a member-owned local workspace to a different signed-in account on the same device
 - if the wrong account signs in, the app signs back out and asks for the original account instead of risking cross-account sync
 
-That local marker is not a full replacement for per-record remote ownership.
+That local workspace marker is not a full replacement for per-record remote ownership.
 Per-record `user_id` scoping now exists remotely, but richer conflict handling and hosted-provider setup still need to be finished before broad public use.
 
 ## Redirect And Provider Setup
@@ -158,6 +159,19 @@ Required allow-list targets:
 - `https://holdfast-validation.pages.dev/auth/callback`
 - `https://holdfast.xylent.studio/auth/callback`
 - preview callback URLs for hosted previews before public testing
+
+## Staging Auth Lane Requirement
+
+Provider-backed staging auth is not automatic.
+
+If Holdfast needs real auth on a staging or preview hostname, create that lane on purpose:
+
+- use a stable staging hostname
+- allow-list that callback in Supabase Auth
+- allow-list that origin and redirect URI in Google OAuth
+- give staging its own auth preflight and smoke target
+
+Do not assume preview or validation auth should work while Auth URL configuration is pinned to production.
 
 Before hosted auth smoke on the validation project, use the repo preflight:
 
@@ -174,11 +188,14 @@ Those hosted auth checks use server-side generated magic links to verify the hos
 
 Current hosted auth state:
 
+- `holdfast-staging.pages.dev` now exists as a dedicated staging shell lane on Cloudflare Pages
 - `holdfast.xylent.studio` is live on Cloudflare Pages
 - provider-backed production auth smoke passes on the production hostname
 - same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path now pass on the production hostname
 - validation auth preflight now intentionally fails when Supabase Auth URL configuration is pinned to production
+- a deliberate staging auth lane does not exist yet
 - the validation project remains useful for hosted shell, offline, and risky smoke, but production is now the authoritative hosted auth path
+- a second Supabase project or staging auth environment is still required before staging becomes a real provider-backed auth lane
 
 Required Google OAuth basics:
 

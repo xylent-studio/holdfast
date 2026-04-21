@@ -9,8 +9,10 @@ import {
   MutationRecordSchema,
   RoutineRecordSchema,
   SettingsRecordSchema,
+  WorkspaceStateRecordSchema,
   WeeklyRecordSchema,
 } from '@/domain/schemas/records';
+import { normalizeWorkspaceStateRecord } from '@/storage/local/workspace-state';
 import { normalizeSyncStateRecord } from '@/storage/sync/state';
 import { HoldfastDatabase } from '@/storage/local/db';
 
@@ -39,7 +41,7 @@ afterEach(async () => {
 });
 
 describe('HoldfastDatabase migration', () => {
-  it('upgrades v1 local data to schema v2 without dropping records', async () => {
+  it('upgrades v1 local data to the current schema without dropping records', async () => {
     const name = `holdfast-migration-${crypto.randomUUID()}`;
     dbNames.push(name);
 
@@ -219,6 +221,7 @@ describe('HoldfastDatabase migration', () => {
     expect(await upgraded.attachmentBlobs.count()).toBe(1);
     expect(await upgraded.mutationQueue.count()).toBe(1);
     expect(await upgraded.syncState.count()).toBe(1);
+    expect(await upgraded.workspaceState.count()).toBe(0);
 
     const migratedTask = ItemRecordSchema.parse(
       items.find((item) => item.id === itemId),
@@ -268,8 +271,24 @@ describe('HoldfastDatabase migration', () => {
       normalizeSyncStateRecord(await upgraded.syncState.get('sync')),
     ).toMatchObject({
       schemaVersion: SCHEMA_VERSION,
-      identityState: 'device-guest',
-      remoteUserId: null,
+      mode: 'ready',
+    });
+    expect(
+      normalizeWorkspaceStateRecord(
+        WorkspaceStateRecordSchema.parse({
+          id: 'workspace',
+          schemaVersion: SCHEMA_VERSION,
+          ownershipState: 'device-guest',
+          boundUserId: null,
+          authPromptState: 'none',
+          attachState: 'attached',
+          createdAt: '2026-04-18T08:00:00.000Z',
+          updatedAt: '2026-04-18T08:00:00.000Z',
+        }),
+      ),
+    ).toMatchObject({
+      ownershipState: 'device-guest',
+      boundUserId: null,
     });
 
     upgraded.close();

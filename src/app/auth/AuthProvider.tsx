@@ -14,7 +14,10 @@ import {
   signedInAuthPatch,
   signedOutAuthPatch,
 } from '@/app/auth/sync-state';
-import { getCurrentSyncState, updateSyncState } from '@/storage/local/api';
+import {
+  getCurrentWorkspaceState,
+  updateWorkspaceState,
+} from '@/storage/local/api';
 import {
   authDisplayName,
   authEmail,
@@ -40,12 +43,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const syncSessionToLocal = useEffectEvent(
     async (nextSession: Session | null) => {
-      const current = await getCurrentSyncState();
+      const current = await getCurrentWorkspaceState();
 
       if (nextSession?.user?.id) {
         if (hasAuthOwnerMismatch(current, nextSession.user.id)) {
           pendingSignedOutPromptRef.current = 'account-mismatch';
-          await updateSyncState(signedOutAuthPatch(current, 'account-mismatch'));
+          await updateWorkspaceState(
+            signedOutAuthPatch(current, 'account-mismatch'),
+          );
           setError(
             "This device is still holding another account's workspace. Sign back into that account to keep syncing here.",
           );
@@ -57,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return null;
         }
 
-        await updateSyncState(signedInAuthPatch(nextSession.user.id));
+        await updateWorkspaceState(signedInAuthPatch(nextSession.user.id));
         return nextSession;
       }
 
@@ -66,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         pendingSignedOutPromptRef.current,
       );
       pendingSignedOutPromptRef.current = null;
-      await updateSyncState(signedOutAuthPatch(current, promptState));
+      await updateWorkspaceState(signedOutAuthPatch(current, promptState));
       return null;
     },
   );

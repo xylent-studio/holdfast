@@ -5,6 +5,7 @@ import {
   SCHEMA_VERSION,
   SETTINGS_ROW_ID,
   SYNC_STATE_ROW_ID,
+  WORKSPACE_STATE_ROW_ID,
 } from '@/domain/constants';
 import { addDays, nowIso, startOfWeek } from '@/domain/dates';
 import type { DateKey } from '@/domain/dates';
@@ -20,6 +21,7 @@ import {
   RoutineRecordSchema,
   SettingsRecordSchema,
   SyncStateRecordSchema,
+  WorkspaceStateRecordSchema,
   WeeklyRecordSchema,
   type AttachmentKind,
   type AttachmentRecord,
@@ -36,12 +38,19 @@ import {
   type RoutineRecord,
   type SettingsRecord,
   type SyncStateRecord,
+  type WorkspaceStateRecord,
   type WeeklyRecord,
 } from '@/domain/schemas/records';
 import { db } from '@/storage/local/db';
+import {
+  createDefaultWorkspaceState,
+  normalizeWorkspaceStateRecord,
+} from '@/storage/local/workspace-state';
 import { downloadAttachmentBlob } from '@/storage/sync/supabase/attachments';
+import { getSupabaseBrowserClient } from '@/storage/sync/supabase/client';
 import { getSupabaseSyncStatus } from '@/storage/sync/supabase/config';
 import {
+  createDefaultSyncPullCursorMap,
   createDefaultSyncState,
   normalizeSyncStateRecord,
 } from '@/storage/sync/state';
@@ -61,6 +70,7 @@ export interface HoldfastSnapshot {
   settings: SettingsRecord;
   routines: RoutineRecord[];
   syncState: SyncStateRecord;
+  workspaceState: WorkspaceStateRecord;
 }
 
 export interface CreateItemInput {
@@ -147,6 +157,7 @@ function defaultDailyRecord(date: string): DailyRecord {
     createdAt: timestamp,
     updatedAt: timestamp,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -161,6 +172,7 @@ function defaultWeeklyRecord(weekStart: string): WeeklyRecord {
     createdAt: timestamp,
     updatedAt: timestamp,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -175,6 +187,7 @@ function defaultSettings(): SettingsRecord {
     createdAt: timestamp,
     updatedAt: timestamp,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -221,6 +234,7 @@ function createItemRecord(input: CreateItemInput): ItemRecord {
     updatedAt: timestamp,
     deletedAt: null,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -239,6 +253,7 @@ function createListRecord(input: CreateListInput): ListRecord {
     updatedAt: timestamp,
     deletedAt: null,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -263,6 +278,7 @@ function createListItemRecord(
     updatedAt: timestamp,
     deletedAt: null,
     syncState: 'pending',
+    remoteRevision: null,
   });
 }
 
@@ -279,6 +295,7 @@ function attachmentKindForFile(file: File): AttachmentKind {
 async function ensureSettingsAndSync(): Promise<{
   settings: SettingsRecord;
   syncState: SyncStateRecord;
+  workspaceState: WorkspaceStateRecord;
 }> {
   let settings = await db.settings.get(SETTINGS_ROW_ID);
   if (!settings) {
@@ -302,7 +319,21 @@ async function ensureSettingsAndSync(): Promise<{
     }
   }
 
-  return { settings, syncState };
+  let workspaceState = await db.workspaceState.get(WORKSPACE_STATE_ROW_ID);
+  if (!workspaceState) {
+    workspaceState = createDefaultWorkspaceState();
+    await db.workspaceState.put(workspaceState);
+  } else {
+    const normalized = normalizeWorkspaceStateRecord(workspaceState);
+    if (JSON.stringify(normalized) !== JSON.stringify(workspaceState)) {
+      workspaceState = normalized;
+      await db.workspaceState.put(workspaceState);
+    } else {
+      workspaceState = normalized;
+    }
+  }
+
+  return { settings, syncState, workspaceState };
 }
 
 async function ensureDailyRecord(date: string): Promise<DailyRecord> {
@@ -330,10 +361,12 @@ async function ensureWeeklyRecord(weekStart: string): Promise<WeeklyRecord> {
 async function readSettingsAndSyncSnapshot(): Promise<{
   settings: SettingsRecord;
   syncState: SyncStateRecord;
+  workspaceState: WorkspaceStateRecord;
 }> {
-  const [settings, syncState] = await Promise.all([
+  const [settings, syncState, workspaceState] = await Promise.all([
     db.settings.get(SETTINGS_ROW_ID),
     db.syncState.get(SYNC_STATE_ROW_ID),
+    db.workspaceState.get(WORKSPACE_STATE_ROW_ID),
   ]);
 
   return {
@@ -343,6 +376,9 @@ async function readSettingsAndSyncSnapshot(): Promise<{
     syncState: syncState
       ? normalizeSyncStateRecord(syncState)
       : createDefaultSyncState(getSupabaseSyncStatus()),
+    workspaceState: workspaceState
+      ? normalizeWorkspaceStateRecord(workspaceState)
+      : createDefaultWorkspaceState(),
   };
 }
 
@@ -366,7 +402,10 @@ async function queueMutation(record: MutationRecord): Promise<void> {
   await db.mutationQueue.put(record);
 }
 
-async function removeItemFromFocusEverywhere(itemId: string): Promise<void> {
+async function removeItemFromFocusEverywhere(
+  itemId: string,
+  options?: { queueMutations?: boolean },
+): Promise<DailyRecord[]> {
   const records = await db.dailyRecords.toArray();
   const updates = records
     .filter((record) => record.focusItemIds.includes(itemId))
@@ -376,18 +415,41 @@ async function removeItemFromFocusEverywhere(itemId: string): Promise<void> {
         focusItemIds: record.focusItemIds.filter((id) => id !== itemId),
         updatedAt: nowIso(),
         syncState: 'pending',
+        remoteRevision: record.remoteRevision ?? null,
       }),
     );
 
   if (updates.length) {
     await db.dailyRecords.bulkPut(updates);
+    if (options?.queueMutations) {
+      for (const updated of updates) {
+        await queueMutation(
+          createMutationRecord(
+            'dailyRecord',
+            updated.date,
+            'daily.focus.changed',
+            {
+              dailyRecord: updated,
+            },
+          ),
+        );
+      }
+    }
   }
+
+  return updates;
 }
 
 export async function bootstrapHoldfast(): Promise<void> {
-  await db.transaction('rw', db.settings, db.syncState, async () => {
+  await db.transaction(
+    'rw',
+    db.settings,
+    db.syncState,
+    db.workspaceState,
+    async () => {
     await ensureSettingsAndSync();
-  });
+    },
+  );
 }
 
 export async function getCurrentSyncState(): Promise<SyncStateRecord> {
@@ -395,17 +457,14 @@ export async function getCurrentSyncState(): Promise<SyncStateRecord> {
   return syncState;
 }
 
+export async function getCurrentWorkspaceState(): Promise<WorkspaceStateRecord> {
+  const { workspaceState } = await ensureSettingsAndSync();
+  return workspaceState;
+}
+
 export async function updateSyncState(
   patch: Partial<
-    Pick<
-      SyncStateRecord,
-      | 'mode'
-      | 'lastSyncedAt'
-      | 'authState'
-      | 'identityState'
-      | 'authPromptState'
-      | 'remoteUserId'
-    >
+    Pick<SyncStateRecord, 'mode' | 'lastSyncedAt' | 'pullCursorByStream'>
   >,
 ): Promise<SyncStateRecord> {
   return db.transaction('rw', db.syncState, async () => {
@@ -423,12 +482,59 @@ export async function updateSyncState(
   });
 }
 
+export async function updateWorkspaceState(
+  patch: Partial<
+    Pick<
+      WorkspaceStateRecord,
+      'ownershipState' | 'boundUserId' | 'authPromptState' | 'attachState'
+    >
+  >,
+): Promise<WorkspaceStateRecord> {
+  return db.transaction('rw', db.workspaceState, async () => {
+    const current =
+      (await db.workspaceState.get(WORKSPACE_STATE_ROW_ID)) ??
+      createDefaultWorkspaceState();
+    const updated = WorkspaceStateRecordSchema.parse({
+      ...current,
+      ...patch,
+      updatedAt: nowIso(),
+    });
+
+    await db.workspaceState.put(updated);
+    return updated;
+  });
+}
+
+export async function detachWorkspaceAfterRestore(): Promise<WorkspaceStateRecord> {
+  return updateWorkspaceState({
+    ownershipState: 'device-guest',
+    boundUserId: null,
+    authPromptState: 'none',
+    attachState: 'detached-restore',
+  });
+}
+
+export async function attachWorkspaceToAccount(
+  userId: string,
+): Promise<WorkspaceStateRecord> {
+  await updateSyncState({
+    lastSyncedAt: null,
+    pullCursorByStream: createDefaultSyncPullCursorMap(),
+  });
+  return updateWorkspaceState({
+    ownershipState: 'member',
+    boundUserId: userId,
+    authPromptState: 'none',
+    attachState: 'attached',
+  });
+}
+
 export async function getHoldfastSnapshot(
   currentDate: DateKey,
 ): Promise<HoldfastSnapshot> {
   const weekStart = startOfWeek(currentDate);
   const [
-    { settings, syncState },
+    { settings, syncState, workspaceState },
     currentDay,
     weeklyRecord,
     items,
@@ -496,6 +602,7 @@ export async function getHoldfastSnapshot(
     routines: routines.filter((routine) => !routine.deletedAt),
     settings,
     syncState,
+    workspaceState,
     weeklyRecord,
   };
 }
@@ -573,7 +680,7 @@ export async function saveItem(
 
       await db.items.put(updated);
       if (nextStatus !== 'today') {
-        await removeItemFromFocusEverywhere(itemId);
+        await removeItemFromFocusEverywhere(itemId, { queueMutations: true });
       }
 
       await queueMutation(
@@ -594,10 +701,14 @@ export async function deleteItem(itemId: string): Promise<void> {
       db.mutationQueue,
     ],
     async () => {
-      const attachments = await db.attachments
-        .where('itemId')
-        .equals(itemId)
-        .toArray();
+      const [current, attachments] = await Promise.all([
+        db.items.get(itemId),
+        db.attachments.where('itemId').equals(itemId).toArray(),
+      ]);
+      if (!current) {
+        return;
+      }
+
       await db.items.delete(itemId);
       await db.attachments.bulkDelete(
         attachments.map((attachment) => attachment.id),
@@ -605,7 +716,7 @@ export async function deleteItem(itemId: string): Promise<void> {
       await db.attachmentBlobs.bulkDelete(
         attachments.map((attachment) => attachment.blobId),
       );
-      await removeItemFromFocusEverywhere(itemId);
+      await removeItemFromFocusEverywhere(itemId, { queueMutations: true });
       for (const attachment of attachments) {
         await queueMutation(
           createMutationRecord(
@@ -614,12 +725,16 @@ export async function deleteItem(itemId: string): Promise<void> {
             'attachment.deleted',
             {
               attachmentId: attachment.id,
+              remoteRevision: attachment.remoteRevision,
             },
           ),
         );
       }
       await queueMutation(
-        createMutationRecord('item', itemId, 'item.deleted', { itemId }),
+        createMutationRecord('item', itemId, 'item.deleted', {
+          itemId,
+          remoteRevision: current.remoteRevision,
+        }),
       );
     },
   );
@@ -654,7 +769,7 @@ export async function toggleTaskDone(
 
       await db.items.put(updated);
       if (!isDone) {
-        await removeItemFromFocusEverywhere(itemId);
+        await removeItemFromFocusEverywhere(itemId, { queueMutations: true });
       }
       await queueMutation(
         createMutationRecord('item', itemId, 'item.status.changed', {
@@ -712,10 +827,16 @@ export async function toggleFocus(
 
       await queueMutation(
         createMutationRecord('dailyRecord', date, 'daily.focus.changed', {
-          date,
-          focusItemIds: updatedDay.focusItemIds,
+          dailyRecord: updatedDay,
         }),
       );
+      if (updatedItem !== item) {
+        await queueMutation(
+          createMutationRecord('item', itemId, 'item.updated', {
+            item: updatedItem,
+          }),
+        );
+      }
     },
   );
 }
@@ -814,11 +935,14 @@ export async function startDay(date: DateKey): Promise<void> {
       await db.dailyRecords.put(updatedDay);
       await queueMutation(
         createMutationRecord('dailyRecord', date, 'daily.started', {
-          date,
-          seededRoutineIds: updatedDay.seededRoutineIds,
-          createdItemIds: itemsToCreate.map((item) => item.id),
+          dailyRecord: updatedDay,
         }),
       );
+      for (const item of itemsToCreate) {
+        await queueMutation(
+          createMutationRecord('item', item.id, 'item.created', { item }),
+        );
+      }
     },
   );
 }
@@ -872,14 +996,14 @@ export async function closeDay(
 
       await queueMutation(
         createMutationRecord('dailyRecord', date, 'daily.closed', {
-          date,
-          closeWin: input.closeWin,
-          closeCarry: input.closeCarry,
-          closeSeed: input.closeSeed,
-          closeNote: input.closeNote,
-          carryItemIds: carryItems.map((item) => item.id),
+          dailyRecord: updatedDay,
         }),
       );
+      for (const item of carryItems) {
+        await queueMutation(
+          createMutationRecord('item', item.id, 'item.created', { item }),
+        );
+      }
     },
   );
 }
@@ -1105,13 +1229,17 @@ export async function deleteList(listId: string): Promise<void> {
         await db.listItems.bulkPut(deletedListItems);
       }
       await queueMutation(
-        createMutationRecord('list', listId, 'list.deleted', { listId }),
+        createMutationRecord('list', listId, 'list.deleted', {
+          listId,
+          remoteRevision: current.remoteRevision,
+        }),
       );
       for (const listItem of deletedListItems) {
         await queueMutation(
           createMutationRecord('listItem', listItem.id, 'list-item.deleted', {
             listItemId: listItem.id,
             listId,
+            remoteRevision: listItem.remoteRevision,
           }),
         );
       }
@@ -1162,6 +1290,61 @@ export async function updateListItem(
   });
 }
 
+export async function promoteListItemToNow(
+  listItemId: string,
+  currentDate: DateKey,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.lists,
+    db.listItems,
+    db.items,
+    db.mutationQueue,
+    async () => {
+      const current = await db.listItems.get(listItemId);
+      if (!current || current.deletedAt || current.promotedItemId) {
+        return;
+      }
+
+      const list = await db.lists.get(current.listId);
+      if (!list || list.deletedAt) {
+        return;
+      }
+
+      const item = createItemRecord({
+        title: current.title,
+        kind: 'task',
+        lane: list.lane,
+        status: 'today',
+        body: current.body,
+        sourceText: [current.title, current.body].filter(Boolean).join('\n\n'),
+        sourceItemId: current.id,
+        captureMode: 'context',
+        sourceDate: currentDate,
+        scheduledDate: currentDate,
+        scheduledTime: null,
+      });
+      const updatedListItem = ListItemRecordSchema.parse({
+        ...current,
+        promotedItemId: item.id,
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      });
+
+      await db.items.add(item);
+      await db.listItems.put(updatedListItem);
+      await queueMutation(
+        createMutationRecord('item', item.id, 'item.created', { item }),
+      );
+      await queueMutation(
+        createMutationRecord('listItem', updatedListItem.id, 'list-item.updated', {
+          listItem: updatedListItem,
+        }),
+      );
+    },
+  );
+}
+
 export async function deleteListItem(listItemId: string): Promise<void> {
   await db.transaction('rw', db.listItems, db.mutationQueue, async () => {
     const current = await db.listItems.get(listItemId);
@@ -1182,6 +1365,7 @@ export async function deleteListItem(listItemId: string): Promise<void> {
       createMutationRecord('listItem', listItemId, 'list-item.deleted', {
         listItemId,
         listId: current.listId,
+        remoteRevision: current.remoteRevision,
       }),
     );
   });
@@ -1243,6 +1427,7 @@ export async function deleteRoutine(routineId: string): Promise<void> {
     await queueMutation(
       createMutationRecord('routine', routineId, 'routine.deleted', {
         routineId,
+        remoteRevision: current.remoteRevision,
       }),
     );
   });
@@ -1323,6 +1508,7 @@ export async function removeAttachment(attachmentId: string): Promise<void> {
       await queueMutation(
         createMutationRecord('attachment', attachmentId, 'attachment.deleted', {
           attachmentId,
+          remoteRevision: attachment.remoteRevision,
         }),
       );
     },
@@ -1339,13 +1525,26 @@ export async function getAttachmentDownload(
 
   const blobRow = await db.attachmentBlobs.get(attachment.blobId);
   if (!blobRow) {
-    const syncState = await getCurrentSyncState();
-    if (syncState.authState !== 'signed-in' || !syncState.remoteUserId) {
+    const workspaceState = await getCurrentWorkspaceState();
+    const client = getSupabaseBrowserClient();
+    if (
+      workspaceState.ownershipState !== 'member' ||
+      workspaceState.attachState !== 'attached' ||
+      !workspaceState.boundUserId ||
+      !client
+    ) {
+      return null;
+    }
+
+    const {
+      data: { session },
+    } = await client.auth.getSession();
+    if (!session?.user?.id || session.user.id !== workspaceState.boundUserId) {
       return null;
     }
 
     const blob = await downloadAttachmentBlob(
-      syncState.remoteUserId,
+      workspaceState.boundUserId,
       attachmentId,
     ).catch(() => null);
     if (!blob) {

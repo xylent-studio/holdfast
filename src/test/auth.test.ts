@@ -12,6 +12,7 @@ import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { SCHEMA_VERSION } from '@/domain/constants';
 import { normalizeAuthNextPath } from '@/storage/sync/supabase/auth';
 import type { HoldfastSnapshot } from '@/storage/local/api';
+import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
 function makeSnapshot(): HoldfastSnapshot {
   return {
@@ -43,6 +44,7 @@ function makeSnapshot(): HoldfastSnapshot {
         createdAt: '2026-04-19T08:00:00.000Z',
         updatedAt: '2026-04-19T08:00:00.000Z',
         syncState: 'pending',
+        remoteRevision: null,
       },
     ],
     weeklyRecord: {
@@ -54,6 +56,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-13T08:00:00.000Z',
       updatedAt: '2026-04-19T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     currentDay: {
       date: '2026-04-19',
@@ -78,6 +81,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-19T08:00:00.000Z',
       updatedAt: '2026-04-19T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     settings: {
       id: 'settings',
@@ -88,6 +92,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-19T08:00:00.000Z',
       updatedAt: '2026-04-19T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     routines: [],
     syncState: {
@@ -96,10 +101,17 @@ function makeSnapshot(): HoldfastSnapshot {
       provider: 'supabase',
       mode: 'ready',
       lastSyncedAt: null,
-      authState: 'signed-out',
-      identityState: 'device-guest',
+      pullCursorByStream: createDefaultSyncPullCursorMap(),
+      createdAt: '2026-04-19T08:00:00.000Z',
+      updatedAt: '2026-04-19T08:00:00.000Z',
+    },
+    workspaceState: {
+      id: 'workspace',
+      schemaVersion: SCHEMA_VERSION,
+      ownershipState: 'device-guest',
+      boundUserId: null,
       authPromptState: 'none',
-      remoteUserId: null,
+      attachState: 'attached',
       createdAt: '2026-04-19T08:00:00.000Z',
       updatedAt: '2026-04-19T08:00:00.000Z',
     },
@@ -135,21 +147,21 @@ describe('hasMeaningfulLocalState', () => {
 describe('auth sync state guards', () => {
   it('flags member workspaces that sign into a different account', () => {
     const snapshot = makeSnapshot();
-    snapshot.syncState = {
-      ...snapshot.syncState,
-      identityState: 'member',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
     };
 
     expect(
       hasAuthOwnerMismatch(
-        snapshot.syncState,
+        snapshot.workspaceState,
         '22222222-2222-4222-8222-222222222222',
       ),
     ).toBe(true);
     expect(
       hasAuthOwnerMismatch(
-        snapshot.syncState,
+        snapshot.workspaceState,
         '11111111-1111-4111-8111-111111111111',
       ),
     ).toBe(false);
@@ -157,68 +169,68 @@ describe('auth sync state guards', () => {
 
   it('builds signed-in and signed-out auth patches without touching sync mode', () => {
     const snapshot = makeSnapshot();
-    snapshot.syncState = {
-      ...snapshot.syncState,
-      identityState: 'member',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
     };
 
     expect(
       signedInAuthPatch('33333333-3333-4333-8333-333333333333'),
     ).toMatchObject({
-      authState: 'signed-in',
-      identityState: 'member',
+      ownershipState: 'member',
       authPromptState: 'none',
-      remoteUserId: '33333333-3333-4333-8333-333333333333',
+      boundUserId: '33333333-3333-4333-8333-333333333333',
+      attachState: 'attached',
     });
     expect(
-      signedOutAuthPatch(snapshot.syncState, 'signed-out-by-user'),
+      signedOutAuthPatch(snapshot.workspaceState, 'signed-out-by-user'),
     ).toMatchObject({
-      authState: 'signed-out',
-      identityState: 'member',
+      ownershipState: 'member',
       authPromptState: 'signed-out-by-user',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+      attachState: 'attached',
     });
   });
 
   it('keeps member prompt states sticky across later signed-out sync passes', () => {
     const snapshot = makeSnapshot();
-    snapshot.syncState = {
-      ...snapshot.syncState,
-      identityState: 'member',
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
       authPromptState: 'account-mismatch',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
     };
 
-    expect(resolveSignedOutAuthPromptState(snapshot.syncState, null)).toBe(
+    expect(resolveSignedOutAuthPromptState(snapshot.workspaceState, null)).toBe(
       'account-mismatch',
     );
 
-    snapshot.syncState = {
-      ...snapshot.syncState,
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
       authPromptState: 'signed-out-by-user',
     };
 
-    expect(resolveSignedOutAuthPromptState(snapshot.syncState, null)).toBe(
+    expect(resolveSignedOutAuthPromptState(snapshot.workspaceState, null)).toBe(
       'signed-out-by-user',
     );
   });
 
   it('falls back to session-expired when a member workspace loses session state without a prior prompt', () => {
     const snapshot = makeSnapshot();
-    snapshot.syncState = {
-      ...snapshot.syncState,
-      identityState: 'member',
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
       authPromptState: 'none',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
     };
 
-    expect(resolveSignedOutAuthPromptState(snapshot.syncState, null)).toBe(
+    expect(resolveSignedOutAuthPromptState(snapshot.workspaceState, null)).toBe(
       'session-expired',
     );
     expect(
       resolveSignedOutAuthPromptState(
-        snapshot.syncState,
+        snapshot.workspaceState,
         'account-mismatch',
       ),
     ).toBe('account-mismatch');
@@ -228,27 +240,33 @@ describe('auth sync state guards', () => {
 describe('shouldShowSessionRecovery', () => {
   it('suppresses the recovery panel after an explicit sign-out', () => {
     const snapshot = makeSnapshot();
-    snapshot.syncState = {
-      ...snapshot.syncState,
-      identityState: 'member',
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
       authPromptState: 'signed-out-by-user',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
     };
 
-    expect(shouldShowSessionRecovery(snapshot.syncState, false)).toBe(false);
+    expect(shouldShowSessionRecovery(snapshot.workspaceState, false)).toBe(
+      false,
+    );
   });
 
   it('shows recovery when member-owned local work loses its session', () => {
     const snapshot = makeSnapshot();
-    snapshot.syncState = {
-      ...snapshot.syncState,
-      identityState: 'member',
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
       authPromptState: 'session-expired',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
     };
 
-    expect(shouldShowSessionRecovery(snapshot.syncState, false)).toBe(true);
-    expect(shouldShowSessionRecovery(snapshot.syncState, true)).toBe(false);
+    expect(shouldShowSessionRecovery(snapshot.workspaceState, false)).toBe(
+      true,
+    );
+    expect(shouldShowSessionRecovery(snapshot.workspaceState, true)).toBe(
+      false,
+    );
   });
 });
 

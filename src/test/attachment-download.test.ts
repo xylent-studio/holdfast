@@ -6,9 +6,27 @@ const { downloadAttachmentBlob } = vi.hoisted(() => ({
     (userId: string, attachmentId: string) => Promise<Blob | null>
   >(),
 }));
+const mockGetSession = vi.hoisted(() =>
+  vi.fn(async () => ({
+    data: {
+      session: {
+        user: {
+          id: '11111111-1111-4111-8111-111111111111',
+        },
+      },
+    },
+  })),
+);
 
 vi.mock('@/storage/sync/supabase/attachments', () => ({
   downloadAttachmentBlob,
+}));
+vi.mock('@/storage/sync/supabase/client', () => ({
+  getSupabaseBrowserClient: () => ({
+    auth: {
+      getSession: mockGetSession,
+    },
+  }),
 }));
 
 import type { DateKey } from '@/domain/dates';
@@ -17,7 +35,7 @@ import {
   bootstrapHoldfast,
   createItem,
   getAttachmentDownload,
-  updateSyncState,
+  updateWorkspaceState,
 } from '@/storage/local/api';
 import { HOLDFAST_DB_NAME, db } from '@/storage/local/db';
 
@@ -31,6 +49,7 @@ async function resetLocalDatabase(): Promise<void> {
 
 beforeEach(async () => {
   downloadAttachmentBlob.mockReset();
+  mockGetSession.mockClear();
   await resetLocalDatabase();
 });
 
@@ -42,10 +61,11 @@ afterEach(async () => {
 describe('attachment download fallback', () => {
   it('downloads and caches the remote blob when the local cache is missing', async () => {
     await bootstrapHoldfast();
-    await updateSyncState({
-      authState: 'signed-in',
-      identityState: 'member',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+    await updateWorkspaceState({
+      ownershipState: 'member',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+      authPromptState: 'none',
+      attachState: 'attached',
     });
 
     await createItem({

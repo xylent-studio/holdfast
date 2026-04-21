@@ -7,6 +7,7 @@ import type {
   HoldfastSnapshot,
   ItemWithAttachments,
 } from '@/storage/local/api';
+import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
 function makeCaptureItem(): ItemWithAttachments {
   return {
@@ -30,6 +31,7 @@ function makeCaptureItem(): ItemWithAttachments {
     updatedAt: '2026-04-19T08:00:00.000Z',
     deletedAt: null,
     syncState: 'pending',
+    remoteRevision: null,
     attachments: [],
   };
 }
@@ -64,6 +66,7 @@ function makeSnapshot(item: ItemWithAttachments): HoldfastSnapshot {
         createdAt: '2026-04-19T08:00:00.000Z',
         updatedAt: '2026-04-19T08:00:00.000Z',
         syncState: 'pending',
+        remoteRevision: null,
       },
     ],
     weeklyRecord: {
@@ -75,6 +78,7 @@ function makeSnapshot(item: ItemWithAttachments): HoldfastSnapshot {
       createdAt: '2026-04-13T08:00:00.000Z',
       updatedAt: '2026-04-19T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     currentDay: {
       date: '2026-04-19',
@@ -99,6 +103,7 @@ function makeSnapshot(item: ItemWithAttachments): HoldfastSnapshot {
       createdAt: '2026-04-19T08:00:00.000Z',
       updatedAt: '2026-04-19T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     settings: {
       id: 'settings',
@@ -109,6 +114,7 @@ function makeSnapshot(item: ItemWithAttachments): HoldfastSnapshot {
       createdAt: '2026-04-19T08:00:00.000Z',
       updatedAt: '2026-04-19T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     routines: [],
     syncState: {
@@ -117,9 +123,17 @@ function makeSnapshot(item: ItemWithAttachments): HoldfastSnapshot {
       provider: 'supabase',
       mode: 'ready',
       lastSyncedAt: null,
-      authState: 'signed-out',
-      identityState: 'device-guest',
-      remoteUserId: null,
+      pullCursorByStream: createDefaultSyncPullCursorMap(),
+      createdAt: '2026-04-19T08:00:00.000Z',
+      updatedAt: '2026-04-19T08:00:00.000Z',
+    },
+    workspaceState: {
+      id: 'workspace',
+      schemaVersion: SCHEMA_VERSION,
+      ownershipState: 'device-guest',
+      boundUserId: null,
+      authPromptState: 'none',
+      attachState: 'attached',
       createdAt: '2026-04-19T08:00:00.000Z',
       updatedAt: '2026-04-19T08:00:00.000Z',
     },

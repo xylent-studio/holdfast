@@ -4,15 +4,16 @@ This file translates the governing control docs into an implementation-friendly 
 
 ## Product Identity
 
-Holdfast is a personal operating system for staying in command of real life day by day.
+Holdfast is a calm personal tool for catching, placing, finding, and keeping what matters in real life.
 
 It exists to help the user:
 
 - catch something immediately
 - place something directly when the destination is already obvious
+- find it again later
+- keep things worth preserving even when they are not tasks
 - decide what matters now
 - park things for later without losing them
-- keep things worth preserving even when they are not tasks
 - pick back up without a cold start
 - pick back up on any device without friction
 - trust that nothing important quietly vanished
@@ -48,9 +49,9 @@ The lightest place in the app. It should catch uncertain captures before they di
 
 The place for things that are alive but not for now. It must keep three distinct outcomes clear:
 
-- planned
-- queue
-- waiting on
+- Scheduled
+- Undated
+- Waiting on
 
 ### Review
 
@@ -98,6 +99,7 @@ Holdfast is not:
 ## What Must Stay True
 
 - the four core areas stay purposeful and distinct
+- catch, place, find, and keep stay clearer than productivity-system language
 - capture stays faster than organization
 - direct placement works when the destination is already obvious
 - routines and day support stay quiet unless the user wants them

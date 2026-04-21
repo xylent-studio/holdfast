@@ -1,12 +1,12 @@
-import type { SyncStateRecord } from '@/domain/schemas/records';
+import type { WorkspaceStateRecord } from '@/domain/schemas/records';
 
 export function shouldShowSessionRecovery(
-  syncState: SyncStateRecord,
+  workspaceState: WorkspaceStateRecord,
   hasSession: boolean,
 ): boolean {
   return (
     !hasSession &&
-    syncState.identityState === 'member' &&
-    syncState.authPromptState !== 'signed-out-by-user'
+    workspaceState.ownershipState === 'member' &&
+    workspaceState.authPromptState !== 'signed-out-by-user'
   );
 }

@@ -6,6 +6,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useParams,
 } from 'react-router-dom';
 
 import { AuthCallbackView } from '@/app/auth/AuthCallbackView';
@@ -41,6 +42,11 @@ const ReviewView = lazy(async () =>
     default: module.ReviewView,
   })),
 );
+const ListView = lazy(async () =>
+  import('@/features/lists/ListView').then((module) => ({
+    default: module.ListView,
+  })),
+);
 const SettingsView = lazy(async () =>
   import('@/features/settings/SettingsView').then((module) => ({
     default: module.SettingsView,
@@ -65,6 +71,38 @@ function quickAddPlacementForPath(
   return null;
 }
 
+function quickAddListIdForPath(pathname: string): string | null {
+  if (!pathname.startsWith('/lists/')) {
+    return null;
+  }
+
+  return pathname.slice('/lists/'.length) || null;
+}
+
+function RoutedListView({
+  currentDate,
+  onOpenItem,
+  snapshot,
+}: {
+  currentDate: string;
+  onOpenItem: (itemId: string) => void;
+  snapshot: NonNullable<ReturnType<typeof useHoldfastSnapshot>>;
+}) {
+  const params = useParams<{ listId: string }>();
+  if (!params.listId) {
+    return <Navigate replace to="/review" />;
+  }
+
+  return (
+    <ListView
+      currentDate={currentDate}
+      listId={params.listId}
+      onOpenItem={onOpenItem}
+      snapshot={snapshot}
+    />
+  );
+}
+
 function AppRoutes() {
   const [currentDate, setCurrentDate] = useState(todayDateKey());
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -86,6 +124,7 @@ function AppRoutes() {
     () => snapshot?.items.find((item) => item.id === selectedItemId) ?? null,
     [selectedItemId, snapshot?.items],
   );
+  const currentListId = quickAddListIdForPath(location.pathname);
   const hasLocalData = snapshot ? hasMeaningfulLocalState(snapshot) : false;
   const shouldWaitForAuthGate =
     Boolean(snapshot) && auth.configured && !auth.isReady && !hasLocalData;
@@ -93,7 +132,7 @@ function AppRoutes() {
     Boolean(snapshot) &&
     auth.configured &&
     auth.isReady &&
-    shouldShowRecoveryPanel(snapshot.syncState, Boolean(auth.session));
+    shouldShowRecoveryPanel(snapshot.workspaceState, Boolean(auth.session));
   const shouldShowLanding = shouldShowAuthLanding({
     authConfigured: auth.configured,
     authReady: auth.isReady,
@@ -121,21 +160,21 @@ function AppRoutes() {
 
   return (
     <>
-      <AppShell
-        currentDate={currentDate}
-        onAdd={() => setQuickAddOpen(true)}
-        onChangeDate={setCurrentDate}
-        onOpenSettings={() => navigate('/settings')}
-        openCount={openItems(snapshot.items).length}
-        showDateControls={
-          location.pathname !== '/inbox' && location.pathname !== '/settings'
-        }
-        viewPath={location.pathname}
-      >
+        <AppShell
+          currentDate={currentDate}
+          onAdd={() => setQuickAddOpen(true)}
+          onChangeDate={setCurrentDate}
+          onOpenSettings={() => navigate('/settings')}
+          openCount={openItems(snapshot.items).length}
+          showDateControls={
+            location.pathname === '/now' || location.pathname === '/upcoming'
+          }
+          viewPath={location.pathname}
+        >
         {shouldShowSessionRecovery && location.pathname !== '/settings' ? (
           <AuthRecoveryPanel
             nextPath={location.pathname}
-            reason={snapshot.syncState.authPromptState}
+            reason={snapshot.workspaceState.authPromptState}
           />
         ) : null}
         <Suspense fallback={<LoadingPanel />}>
@@ -182,6 +221,17 @@ function AppRoutes() {
                     navigate('/now');
                   }}
                   onOpenItem={setSelectedItemId}
+                  onOpenList={(listId) => navigate(`/lists/${listId}`)}
+                  snapshot={snapshot}
+                />
+              }
+            />
+            <Route
+              path="/lists/:listId"
+              element={
+                <RoutedListView
+                  currentDate={currentDate}
+                  onOpenItem={setSelectedItemId}
                   snapshot={snapshot}
                 />
               }
@@ -198,7 +248,9 @@ function AppRoutes() {
       <QuickAddDialog
         currentDate={currentDate}
         isOpen={quickAddOpen}
+        lists={snapshot.lists}
         onClose={() => setQuickAddOpen(false)}
+        preferredListId={currentListId}
         preferredPlacement={quickAddPlacementForPath(location.pathname)}
       />
       {selectedItem ? (
@@ -210,7 +262,7 @@ function AppRoutes() {
             )}
             item={selectedItem}
             isOpen
-            key={selectedItem.id}
+            key={`${selectedItem.id}-${selectedItem.updatedAt}`}
             onClose={() => setSelectedItemId(null)}
           />
         </Suspense>

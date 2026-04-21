@@ -178,6 +178,10 @@ export function attachmentStoragePath(
   return `${userId}/${attachmentId}`;
 }
 
+function remoteRevision(row: { server_updated_at?: string; updated_at?: string }): string | null {
+  return row.server_updated_at ?? row.updated_at ?? null;
+}
+
 export function toRemoteItemRow(
   userId: string,
   item: ItemRecord,
@@ -228,6 +232,7 @@ export function fromRemoteItemRow(row: RemoteItemRow): ItemRecord {
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
     syncState: 'synced',
+    remoteRevision: remoteRevision(row),
   });
 }
 
@@ -265,6 +270,7 @@ export function fromRemoteListRow(row: RemoteListRow): ListRecord {
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
     syncState: 'synced',
+    remoteRevision: remoteRevision(row),
   });
 }
 
@@ -310,6 +316,7 @@ export function fromRemoteListItemRow(
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
     syncState: 'synced',
+    remoteRevision: remoteRevision(row),
   });
 }
 
@@ -355,6 +362,7 @@ export function fromRemoteDailyRecordRow(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     syncState: 'synced',
+    remoteRevision: remoteRevision(row),
   });
 }
 
@@ -386,6 +394,7 @@ export function fromRemoteWeeklyRecordRow(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     syncState: 'synced',
+    remoteRevision: remoteRevision(row),
   });
 }
 
@@ -425,6 +434,7 @@ export function fromRemoteRoutineRow(row: RemoteRoutineRow): RoutineRecord {
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
     syncState: 'synced',
+    remoteRevision: remoteRevision(row),
   });
 }
 
@@ -453,6 +463,7 @@ export function fromRemoteSettingsRow(row: RemoteSettingsRow): SettingsRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     syncState: 'synced',
+    remoteRevision: remoteRevision(row),
   });
 }
 
@@ -492,5 +503,6 @@ export function fromRemoteAttachmentRow(
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
     syncState: 'synced',
+    remoteRevision: remoteRevision(row),
   });
 }

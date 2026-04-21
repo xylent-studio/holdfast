@@ -1,13 +1,13 @@
-import type { SyncStateRecord } from '@/domain/schemas/records';
+import type { WorkspaceStateRecord } from '@/domain/schemas/records';
 import { AuthAccessActions } from '@/app/auth/AuthAccessActions';
 import { Panel } from '@/shared/ui/Panel';
 
 interface AuthRecoveryPanelProps {
   nextPath?: string;
-  reason: SyncStateRecord['authPromptState'];
+  reason: WorkspaceStateRecord['authPromptState'];
 }
 
-function recoveryCopy(reason: SyncStateRecord['authPromptState']): {
+function recoveryCopy(reason: WorkspaceStateRecord['authPromptState']): {
   body: string;
   title: string;
 } {

@@ -17,7 +17,7 @@ import type {
 } from '@/domain/schemas/records';
 
 export type InboxFilter = 'unsorted' | 'open' | 'archived';
-export type UpcomingFilter = 'planned' | 'queue' | 'waiting';
+export type UpcomingFilter = 'scheduled' | 'undated' | 'waiting';
 export type PlanSpan = 'day' | 'week' | 'month';
 export type ReviewableItem = ItemRecord & {
   attachments?: AttachmentRecord[];
@@ -157,7 +157,7 @@ export function scheduledUpcomingItems<T extends ItemRecord>(
     );
 }
 
-export function queuedUpcomingItems<T extends ItemRecord>(items: T[]): T[] {
+export function undatedUpcomingItems<T extends ItemRecord>(items: T[]): T[] {
   return items.filter(
     (item) =>
       !item.deletedAt &&
@@ -166,6 +166,8 @@ export function queuedUpcomingItems<T extends ItemRecord>(items: T[]): T[] {
       !item.scheduledDate,
   );
 }
+
+export const queuedUpcomingItems = undatedUpcomingItems;
 
 export function waitingItems<T extends ItemRecord>(items: T[]): T[] {
   return items.filter(
@@ -293,7 +295,6 @@ export function searchWorkspace<T extends ReviewableItem>(
           item.body,
           item.sourceText ?? '',
           ...(item.attachments ?? []).map((attachment) => attachment.name),
-          item.lane,
           ITEM_STATUS_LABELS[item.status] ?? item.status,
         ].join(' | '),
       ).includes(needle),
@@ -334,9 +335,7 @@ export function searchWorkspace<T extends ReviewableItem>(
 
   const listResults = activeLists
     .filter((list) =>
-      normalizedText([list.title, list.kind, list.lane].join(' | ')).includes(
-        needle,
-      ),
+      normalizedText([list.title, list.kind].join(' | ')).includes(needle),
     )
     .map((list) => {
       const relatedItems = itemsByListId.get(list.id) ?? [];
@@ -517,15 +516,14 @@ export function itemMeta(
     return parts;
   }
 
-  const lane = LANES.find((entry) => entry.key === item.lane)?.label ?? 'Admin';
   const status =
     item.status === 'upcoming'
       ? item.scheduledDate
-        ? 'Planned'
-        : 'Queued'
+        ? 'Scheduled'
+        : 'Undated'
       : (ITEM_STATUS_LABELS[item.status] ?? item.status);
 
-  const parts = [lane, status, niceDate(item.sourceDate)];
+  const parts = [status, niceDate(item.sourceDate)];
   if (item.scheduledDate) {
     if (item.status === 'upcoming' && item.scheduledDate < currentDate) {
       parts.push('Overdue');

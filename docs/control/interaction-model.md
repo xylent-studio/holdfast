@@ -5,6 +5,7 @@ This file defines how the app should behave at the screen and action level so th
 
 ## Global interaction rules
 - Fast capture should beat perfect categorization.
+- The product should keep coming back to four verbs: catch, place, find, keep.
 - The user should spend more time deciding what matters than managing the app.
 - The app should reveal complexity only when necessary.
 - Every major action should feel calm and obvious.
@@ -28,7 +29,7 @@ Use for the actions that truly move the product forward:
 Use for utility, recovery, or lower-frequency moves:
 - Archive
 - Retry
-- Move to today
+- Move to Now
 - Plan for later
 - Finish day
 - Add photo
@@ -49,12 +50,12 @@ Now is the command view for the day.
 
 It should answer:
 - What matters now?
-- What is active today?
+- What is active now?
 - What should I act on next?
 - What am I carrying into or out of the day?
 
 Now should prioritize:
-- today's active items
+- current active items
 - focused items
 - quick movement, completion, and schedule actions
 - day context only when it reduces cold start or carry friction
@@ -82,7 +83,7 @@ It should answer:
 Inbox should prioritize:
 - low-friction uncertain capture
 - quick edits after capture
-- moving something to today, upcoming, a list surface, or archive
+- moving something to Now, Upcoming, a list surface, or archive
 - minimal required decisions
 
 Inbox should avoid:
@@ -96,20 +97,26 @@ Inbox is the fallback for uncertainty, not the mandatory funnel for every add.
 Upcoming is where things stay alive without crowding now.
 
 It should answer:
-- What is not for now, but not lost?
 - What is scheduled?
+- What is kept alive without a date?
 - What am I waiting on?
 
 Upcoming should prioritize:
-- planned timing
-- later items
+- scheduled items
+- undated items
 - waiting-on items
 - calm scanning
+
+User-facing sections inside Upcoming should be:
+- Scheduled
+- Undated
+- Waiting on
 
 Upcoming should avoid:
 - pretending to be a full planner
 - showing implementation states
 - exposing too much scheduling machinery
+- using `queue` as product language
 - forcing the user to think in backend terms
 
 Do not add a duplicate fuzzy `Later` state if Upcoming already covers the real need.
@@ -215,9 +222,10 @@ These preserved things should:
 Scheduling should feel like deciding an outcome, not filling a form.
 
 Preferred framing:
-- today
-- plan for later
-- waiting on
+- Now
+- Scheduled
+- Undated
+- Waiting on
 - specific date/time only when useful
 
 Avoid turning scheduling into:

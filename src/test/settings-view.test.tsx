@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SCHEMA_VERSION } from '@/domain/constants';
 import { SettingsView } from '@/features/settings/SettingsView';
 import type { HoldfastSnapshot } from '@/storage/local/api';
+import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
 const retrySyncMock = vi.fn();
 const signOutMock = vi.fn();
@@ -77,6 +78,7 @@ function makeSnapshot(): HoldfastSnapshot {
         createdAt: '2026-04-20T08:00:00.000Z',
         updatedAt: '2026-04-20T08:00:00.000Z',
         syncState: 'pending',
+        remoteRevision: null,
       },
     ],
     weeklyRecord: {
@@ -88,6 +90,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     currentDay: {
       date: '2026-04-20',
@@ -112,6 +115,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     settings: {
       id: 'settings',
@@ -122,6 +126,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     routines: [],
     syncState: {
@@ -130,10 +135,17 @@ function makeSnapshot(): HoldfastSnapshot {
       provider: 'supabase',
       mode: 'ready',
       lastSyncedAt: null,
-      authState: 'signed-in',
-      identityState: 'member',
+      pullCursorByStream: createDefaultSyncPullCursorMap(),
+      createdAt: '2026-04-20T08:00:00.000Z',
+      updatedAt: '2026-04-20T08:00:00.000Z',
+    },
+    workspaceState: {
+      id: 'workspace',
+      schemaVersion: SCHEMA_VERSION,
+      ownershipState: 'member',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
       authPromptState: 'none',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+      attachState: 'attached',
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
     },
@@ -175,7 +187,7 @@ describe('SettingsView', () => {
 
     expect(updateSettingsMock).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
     expect(updateSettingsMock).toHaveBeenCalledWith({
       direction: 'Build the trustworthy version.',
       standards: '',
@@ -189,9 +201,8 @@ describe('SettingsView', () => {
     mockedDisplayName = null;
     mockedProviderLabel = null;
     const snapshot = makeSnapshot();
-    snapshot.syncState = {
-      ...snapshot.syncState,
-      authState: 'signed-out',
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
       authPromptState: 'session-expired',
     };
 
@@ -212,9 +223,8 @@ describe('SettingsView', () => {
     mockedDisplayName = null;
     mockedProviderLabel = null;
     const snapshot = makeSnapshot();
-    snapshot.syncState = {
-      ...snapshot.syncState,
-      authState: 'signed-out',
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
       authPromptState: 'account-mismatch',
     };
 

@@ -4,14 +4,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuickAddDialog } from '@/features/capture/QuickAddDialog';
 
 const createItemMock = vi.fn();
+const createListItemMock = vi.fn();
 
 vi.mock('@/storage/local/api', () => ({
   createItem: (...args: unknown[]) => createItemMock(...args),
+  createListItem: (...args: unknown[]) => createListItemMock(...args),
 }));
 
 describe('QuickAddDialog', () => {
   beforeEach(() => {
     createItemMock.mockReset();
+    createListItemMock.mockReset();
   });
 
   it('defaults to current-context placement in Now', () => {
@@ -19,13 +22,14 @@ describe('QuickAddDialog', () => {
       <QuickAddDialog
         currentDate="2026-04-20"
         isOpen
+        lists={[]}
         onClose={vi.fn()}
         preferredPlacement="today"
       />,
     );
 
     expect(
-      screen.getByRole('button', { name: 'Place in Now' }),
+      screen.getByRole('button', { name: 'Place now' }),
     ).toHaveClass('active');
     expect(screen.getByRole('button', { name: 'Now' })).toHaveClass('active');
   });
@@ -35,6 +39,7 @@ describe('QuickAddDialog', () => {
       <QuickAddDialog
         currentDate="2026-04-20"
         isOpen
+        lists={[]}
         onClose={vi.fn()}
         preferredPlacement="upcoming"
       />,

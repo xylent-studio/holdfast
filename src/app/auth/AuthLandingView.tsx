@@ -10,10 +10,10 @@ export function AuthLandingView({ nextPath }: AuthLandingViewProps) {
       <section className="panel auth-card">
         <div className="auth-copy">
           <div className="eyebrow">Holdfast</div>
-          <h1>Stay in command of real life.</h1>
+          <h1>Keep the real-life things you need close.</h1>
           <p>
-            Keep what matters, pick it back up anywhere, and keep moving without
-            ceremony.
+            Catch notes, lists, receipts, screenshots, and loose thoughts, then
+            find them again without turning your day into a system.
           </p>
         </div>
         <AuthAccessActions nextPath={nextPath} />

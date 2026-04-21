@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SCHEMA_VERSION } from '@/domain/constants';
 import { ReviewView } from '@/features/review/ReviewView';
 import type { HoldfastSnapshot } from '@/storage/local/api';
+import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
 function makeSnapshot(): HoldfastSnapshot {
   return {
@@ -30,6 +31,7 @@ function makeSnapshot(): HoldfastSnapshot {
         updatedAt: '2026-04-20T08:00:00.000Z',
         deletedAt: null,
         syncState: 'pending',
+        remoteRevision: null,
         attachments: [],
       },
     ],
@@ -47,6 +49,7 @@ function makeSnapshot(): HoldfastSnapshot {
         updatedAt: '2026-04-20T09:00:00.000Z',
         deletedAt: null,
         syncState: 'pending',
+        remoteRevision: null,
       },
     ],
     listItems: [
@@ -66,6 +69,7 @@ function makeSnapshot(): HoldfastSnapshot {
         updatedAt: '2026-04-20T10:00:00.000Z',
         deletedAt: null,
         syncState: 'pending',
+        remoteRevision: null,
       },
     ],
     dailyRecords: [
@@ -92,6 +96,7 @@ function makeSnapshot(): HoldfastSnapshot {
         createdAt: '2026-04-19T08:00:00.000Z',
         updatedAt: '2026-04-19T20:00:00.000Z',
         syncState: 'pending',
+        remoteRevision: null,
       },
       {
         date: '2026-04-20',
@@ -116,6 +121,7 @@ function makeSnapshot(): HoldfastSnapshot {
         createdAt: '2026-04-20T08:00:00.000Z',
         updatedAt: '2026-04-20T08:00:00.000Z',
         syncState: 'pending',
+        remoteRevision: null,
       },
     ],
     weeklyRecord: {
@@ -127,6 +133,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     currentDay: {
       date: '2026-04-20',
@@ -151,6 +158,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     settings: {
       id: 'settings',
@@ -161,6 +169,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     routines: [],
     syncState: {
@@ -169,10 +178,17 @@ function makeSnapshot(): HoldfastSnapshot {
       provider: 'supabase',
       mode: 'ready',
       lastSyncedAt: null,
-      authState: 'signed-out',
-      identityState: 'device-guest',
+      pullCursorByStream: createDefaultSyncPullCursorMap(),
+      createdAt: '2026-04-20T08:00:00.000Z',
+      updatedAt: '2026-04-20T08:00:00.000Z',
+    },
+    workspaceState: {
+      id: 'workspace',
+      schemaVersion: SCHEMA_VERSION,
+      ownershipState: 'device-guest',
+      boundUserId: null,
       authPromptState: 'none',
-      remoteUserId: null,
+      attachState: 'attached',
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
     },
@@ -183,11 +199,13 @@ describe('ReviewView', () => {
   it('opens item matches and lets day matches jump back into Now', () => {
     const onOpenItem = vi.fn();
     const onJumpToDate = vi.fn();
+    const onOpenList = vi.fn();
 
     render(
       <ReviewView
         currentDate="2026-04-20"
         onJumpToDate={onJumpToDate}
+        onOpenList={onOpenList}
         onOpenItem={onOpenItem}
         snapshot={makeSnapshot()}
       />,
@@ -219,6 +237,7 @@ describe('ReviewView', () => {
       <ReviewView
         currentDate="2026-04-20"
         onJumpToDate={vi.fn()}
+        onOpenList={vi.fn()}
         onOpenItem={vi.fn()}
         snapshot={snapshot}
       />,
@@ -228,11 +247,14 @@ describe('ReviewView', () => {
     expect(screen.getByRole('searchbox')).toHaveValue('Buy coffee');
   });
 
-  it('surfaces lists in review and lets the user drill into a list without new nav', () => {
+  it('surfaces lists in review and lets the user open the real list surface', () => {
+    const onOpenList = vi.fn();
+
     render(
       <ReviewView
         currentDate="2026-04-20"
         onJumpToDate={vi.fn()}
+        onOpenList={onOpenList}
         onOpenItem={vi.fn()}
         snapshot={makeSnapshot()}
       />,
@@ -241,9 +263,8 @@ describe('ReviewView', () => {
     fireEvent.change(screen.getByRole('searchbox'), {
       target: { value: 'groceries' },
     });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Show list' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open list' })[0]);
 
-    expect(screen.getByText('Showing list | Groceries')).toBeInTheDocument();
-    expect(screen.getByText('Eggs')).toBeInTheDocument();
+    expect(onOpenList).toHaveBeenCalledWith('list-1');
   });
 });

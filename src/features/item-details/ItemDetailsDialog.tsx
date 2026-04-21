@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import { ITEM_KIND_LABELS, LANES } from '@/domain/constants';
-import { todayDateKey, type DateKey } from '@/domain/dates';
+import { ITEM_KIND_LABELS } from '@/domain/constants';
+import type { DateKey } from '@/domain/dates';
 import type { ItemKind, ItemStatus } from '@/domain/schemas/records';
 import {
   addFilesToItem,
@@ -38,6 +38,14 @@ function formatBytes(value: number): string {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function editablePlacement(item: ItemWithAttachments): ItemStatus {
+  if (item.kind === 'capture') {
+    return item.status === 'archived' ? 'archived' : 'inbox';
+  }
+
+  return item.status;
+}
+
 export function ItemDetailsDialog({
   currentDate,
   isFocused,
@@ -48,38 +56,40 @@ export function ItemDetailsDialog({
   const [title, setTitle] = useState(item.title);
   const [body, setBody] = useState(item.body);
   const [kind, setKind] = useState<ItemKind>(item.kind);
-  const [lane, setLane] = useState<(typeof LANES)[number]['key']>(item.lane);
-  const [status, setStatus] = useState<ItemStatus>(item.status);
+  const [status, setStatus] = useState<ItemStatus>(editablePlacement(item));
   const [scheduledDate, setScheduledDate] = useState(item.scheduledDate ?? '');
   const [scheduledTime, setScheduledTime] = useState(item.scheduledTime ?? '');
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<
     string | null
   >(null);
-  const moveToCurrentDayLabel =
-    currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
-  const normalizedStatus =
-    kind === 'capture'
-      ? status === 'archived'
-        ? 'archived'
-        : 'inbox'
-      : status;
+
+  const canPlaceActively = kind !== 'capture';
 
   const handleSave = async (): Promise<void> => {
+    const nextStatus =
+      kind === 'capture'
+        ? status === 'archived'
+          ? 'archived'
+          : 'inbox'
+        : status;
     const nextScheduledDate =
-      normalizedStatus === 'today'
+      nextStatus === 'today'
         ? currentDate
-        : normalizedStatus === 'upcoming'
+        : nextStatus === 'upcoming'
           ? scheduledDate || null
           : null;
-    const nextScheduledTime = nextScheduledDate ? scheduledTime || null : null;
+    const nextScheduledTime =
+      nextStatus === 'upcoming' && nextScheduledDate
+        ? scheduledTime || null
+        : null;
 
     await saveItem(item.id, {
       title,
       body,
       kind,
-      lane,
-      status: normalizedStatus,
+      lane: item.lane,
+      status: nextStatus,
       scheduledDate: nextScheduledDate,
       scheduledTime: nextScheduledTime,
     });
@@ -122,8 +132,8 @@ export function ItemDetailsDialog({
         <div className="dialog-header">
           <div>
             <div className="eyebrow">{ITEM_KIND_LABELS[kind]}</div>
-            <h2>Details</h2>
-            <p>Keep it clear and in the right place.</p>
+            <h2>Keep it clear and in the right place.</h2>
+            <p>Placement first. Shape only when you need to.</p>
           </div>
           {kind !== 'capture' ? (
             <button
@@ -131,14 +141,15 @@ export function ItemDetailsDialog({
               onClick={() => void toggleFocus(currentDate, item.id)}
               type="button"
             >
-              {normalizedStatus === 'today'
+              {status === 'today'
                 ? isFocused
                   ? 'Remove focus'
                   : 'Add focus'
-                : `${moveToCurrentDayLabel} + focus`}
+                : 'Move to Now + focus'}
             </button>
           ) : null}
         </div>
+
         <label className="field-stack">
           <span>Title</span>
           <input
@@ -147,64 +158,77 @@ export function ItemDetailsDialog({
             value={title}
           />
         </label>
-        <div className="grid two">
-          <label className="field-stack">
-            <span>Type</span>
-            <select
-              onChange={(event) => setKind(event.target.value as ItemKind)}
-              value={kind}
-            >
-              <option value="capture">Capture</option>
-              <option value="task">Task</option>
-              <option value="note">Note</option>
-            </select>
-          </label>
-          {kind !== 'capture' ? (
-            <label className="field-stack">
-              <span>Area</span>
-              <select
-                onChange={(event) =>
-                  setLane(event.target.value as (typeof LANES)[number]['key'])
-                }
-                value={lane}
-              >
-                {LANES.map((entry) => (
-                  <option key={entry.key} value={entry.key}>
-                    {entry.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-        </div>
+
         <label className="field-stack">
-          <span>Status</span>
-          <select
-            onChange={(event) => setStatus(event.target.value as ItemStatus)}
-            value={normalizedStatus}
-          >
-            <option value="inbox">Inbox</option>
-            {kind !== 'capture' ? <option value="today">Now</option> : null}
-            {kind !== 'capture' ? (
-              <option value="upcoming">Upcoming</option>
-            ) : null}
-            {kind !== 'capture' ? (
-              <option value="waiting">Waiting on</option>
-            ) : null}
-            {kind === 'task' ? <option value="done">Done</option> : null}
-            <option value="archived">Archived</option>
-          </select>
+          <span>Notes</span>
+          <textarea
+            onChange={(event) => setBody(event.target.value)}
+            rows={6}
+            value={body}
+          />
         </label>
-        {normalizedStatus === 'today' || normalizedStatus === 'upcoming' ? (
+
+        <div className="field-stack">
+          <span>Placement</span>
+          <div className="chip-row">
+            <button
+              className={`chip ${status === 'inbox' ? 'active' : ''}`}
+              onClick={() => setStatus('inbox')}
+              type="button"
+            >
+              Keep in Inbox
+            </button>
+            <button
+              className={`chip ${status === 'today' ? 'active' : ''}`}
+              disabled={!canPlaceActively}
+              onClick={() => setStatus('today')}
+              type="button"
+            >
+              Move to Now
+            </button>
+            <button
+              className={`chip ${status === 'upcoming' ? 'active' : ''}`}
+              disabled={!canPlaceActively}
+              onClick={() => setStatus('upcoming')}
+              type="button"
+            >
+              Plan
+            </button>
+            <button
+              className={`chip ${status === 'waiting' ? 'active' : ''}`}
+              disabled={!canPlaceActively}
+              onClick={() => setStatus('waiting')}
+              type="button"
+            >
+              Waiting on
+            </button>
+            {kind === 'task' ? (
+              <button
+                className={`chip ${status === 'done' ? 'active' : ''}`}
+                onClick={() => setStatus('done')}
+                type="button"
+              >
+                Done
+              </button>
+            ) : null}
+            <button
+              className={`chip ${status === 'archived' ? 'active' : ''}`}
+              onClick={() => setStatus('archived')}
+              type="button"
+            >
+              Archive
+            </button>
+          </div>
+        </div>
+
+        {status === 'upcoming' ? (
           <div className="grid two">
             <label className="field-stack">
               <span>Date</span>
               <input
                 onChange={(event) => setScheduledDate(event.target.value)}
                 type="date"
-                value={
-                  normalizedStatus === 'today' ? currentDate : scheduledDate
-                }
+                value={scheduledDate}
               />
             </label>
             <label className="field-stack">
@@ -217,20 +241,44 @@ export function ItemDetailsDialog({
             </label>
           </div>
         ) : null}
-        <label className="field-stack">
-          <span>
-            {kind === 'note'
-              ? 'Notes'
-              : kind === 'capture'
-                ? 'Details'
-                : 'Instructions'}
-          </span>
-          <textarea
-            onChange={(event) => setBody(event.target.value)}
-            rows={6}
-            value={body}
-          />
-        </label>
+
+        <div className="field-stack">
+          <span>Shape as</span>
+          <div className="chip-row">
+            <button
+              className={`chip ${kind === 'capture' ? 'active' : ''}`}
+              onClick={() => {
+                setKind('capture');
+                if (status !== 'archived') {
+                  setStatus('inbox');
+                }
+              }}
+              type="button"
+            >
+              Capture
+            </button>
+            <button
+              className={`chip ${kind === 'task' ? 'active' : ''}`}
+              onClick={() => setKind('task')}
+              type="button"
+            >
+              Task
+            </button>
+            <button
+              className={`chip ${kind === 'note' ? 'active' : ''}`}
+              onClick={() => {
+                setKind('note');
+                if (status === 'done') {
+                  setStatus('inbox');
+                }
+              }}
+              type="button"
+            >
+              Note
+            </button>
+          </div>
+        </div>
+
         <div className="field-stack">
           <span>Attachments</span>
           {item.attachments.length ? (
@@ -285,6 +333,7 @@ export function ItemDetailsDialog({
             Add files
           </label>
         </div>
+
         <div className="dialog-actions spread">
           <button
             className="button danger"

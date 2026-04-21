@@ -1,62 +1,67 @@
 # Roadmap
 
-## Phase 1: Foundation
+## Phase 1: Core Backbone
+
+Status: complete
+
+- archive the prototype
+- establish the repo structure and control-doc contract
+- build the React + TypeScript + Vite shell
+- move local state to IndexedDB
+- preserve the `Now / Inbox / Upcoming / Review` spine
+- add CI, lint, typecheck, tests, and build
+- land backup export, prototype recovery, and undo support
+
+## Phase 2: Auth, Sync, And Hosting Foundation
 
 Status: mostly complete
 
-- archive the prototype
-- establish repo structure
-- add docs and agent guidance
-- build the React + TypeScript + Vite shell
-- move to IndexedDB
-- preserve the `Now / Inbox / Upcoming / Review` structure
-- add CI, lint, typecheck, tests, and build
-- merge the manager control docs into the real docs tree
+- Supabase Auth is wired with Google and magic-link paths
+- callback handoff and session recovery are in place
+- remote tables, RLS, mutation logging, and the browser sync engine exist
+- Cloudflare Pages production hosting is live at `holdfast.xylent.studio`
+- provider-backed production auth smoke passes
+- same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path pass on production
 
-## Phase 2: Parity And Product Gaps
+Still open in this lane:
 
-- port voice memo recording
-- port dictation
-- port richer attachment preview
-- tighten focus behavior
-- improve finish-day ergonomics
+- broader multi-device validation on real accounts
+- richer conflict handling and merge behavior
+- attachment upload lifecycle hardening
+- remove-device-data and delete-account flows
+- a second Supabase project or auth environment so `holdfast-staging.pages.dev` can become a real provider-backed staging auth lane
 
-## Phase 3: Auth And Sync
+## Phase 3: Product Realignment
 
-- create the Supabase project
-- add Google OAuth
-- add email magic link fallback
-- finish auth flow and callback handoff
-- add remote tables and row-level security
-- define local-to-account attach behavior and merge rules
-- implement mutation upload worker
-- implement pull reconciliation
-- add attachment upload pipeline
-- add quiet, product-native sync status UI
+Status: in progress
 
-## Phase 4: Offline Hardening
+- keep centering the product on `catch / place / find / keep`
+- remove leftover personal-system framing
+- keep capture lighter than administration
+- align Upcoming to `Scheduled / Undated / Waiting on`
+- demote hand-holdy day structure so `Now` stays a command view
+- make list surfaces real without creating a second top-level app
+- strengthen Review and retrieval so saved things are easy to refind
 
-- background retry strategy
-- conflict handling for problematic records
-- attachment cache lifecycle
-- explicit migration runner
-- PWA cache/version invalidation refinement
+## Phase 4: Trust And Recovery Hardening
 
-## Phase 5: Launch And Hosting
+- broader cross-device sync and offline replay validation
+- attachment upload/download parity and cache lifecycle refinement
+- current-workspace restore/import
+- background retry strategy for problematic records
+- explicit migration and version-invalidation refinement where needed
 
-- authenticate Cloudflare tooling and MCP access
-- keep using the disposable Pages validation project for hosted smoke
-- production Pages project exists and `holdfast.xylent.studio` is live
-- run provider-backed auth smoke on production
-- run same-account hosted sync, attachment, offline replay, and common later-offline-edit smoke on production
-- keep production as the authoritative hosted auth path while Supabase Auth URL configuration is pinned there
+## Phase 5: Rich Context And Remaining Parity
+
+- voice memo recording
+- dictation
+- richer attachment preview
+- better preserved-context surfaces for files, screenshots, receipts, and media
+- mobile fit and restraint polish
+
+## Phase 6: Posture Before Public V1
+
 - decide whether to keep or redirect the `*.pages.dev` hostname
-- run broader multi-device and offline smoke tests against the hosted build
-
-## Phase 6: Product Refinement
-
-- stronger review heuristics
-- tighter upcoming scheduling interactions
-- better daily and weekly transitions
-- mobile polish
-- cross-device trust and resilience testing
+- finish privacy-policy and account-management essentials
+- validate the product on real repeated use, not just smoke passes
+- keep cutting workflow theater, settings sprawl, and hand-holdy day rituals

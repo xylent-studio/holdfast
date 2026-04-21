@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SCHEMA_VERSION } from '@/domain/constants';
 import { NowView } from '@/features/now/NowView';
 import type { HoldfastSnapshot } from '@/storage/local/api';
+import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
 const startDayMock = vi.fn();
 const seedLaunchFromYesterdayMock = vi.fn();
@@ -57,6 +58,7 @@ function makeSnapshot(): HoldfastSnapshot {
         createdAt: '2026-04-19T08:00:00.000Z',
         updatedAt: '2026-04-19T20:00:00.000Z',
         syncState: 'pending',
+        remoteRevision: null,
       },
       {
         date: '2026-04-20',
@@ -81,6 +83,7 @@ function makeSnapshot(): HoldfastSnapshot {
         createdAt: '2026-04-20T08:00:00.000Z',
         updatedAt: '2026-04-20T08:00:00.000Z',
         syncState: 'pending',
+        remoteRevision: null,
       },
     ],
     weeklyRecord: {
@@ -92,6 +95,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     currentDay: {
       date: '2026-04-20',
@@ -116,6 +120,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     settings: {
       id: 'settings',
@@ -126,6 +131,7 @@ function makeSnapshot(): HoldfastSnapshot {
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
       syncState: 'pending',
+      remoteRevision: null,
     },
     routines: [],
     syncState: {
@@ -134,10 +140,17 @@ function makeSnapshot(): HoldfastSnapshot {
       provider: 'supabase',
       mode: 'ready',
       lastSyncedAt: null,
-      authState: 'signed-out',
-      identityState: 'device-guest',
+      pullCursorByStream: createDefaultSyncPullCursorMap(),
+      createdAt: '2026-04-20T08:00:00.000Z',
+      updatedAt: '2026-04-20T08:00:00.000Z',
+    },
+    workspaceState: {
+      id: 'workspace',
+      schemaVersion: SCHEMA_VERSION,
+      ownershipState: 'device-guest',
+      boundUserId: null,
       authPromptState: 'none',
-      remoteUserId: null,
+      attachState: 'attached',
       createdAt: '2026-04-20T08:00:00.000Z',
       updatedAt: '2026-04-20T08:00:00.000Z',
     },
@@ -158,7 +171,7 @@ describe('NowView', () => {
     expect(screen.queryByText('Buy batteries')).not.toBeInTheDocument();
     expect(screen.queryByText('Water')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open day tools' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Day tools' }));
 
     expect(screen.getByText('Water')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start day' })).toBeInTheDocument();

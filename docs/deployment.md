@@ -10,6 +10,7 @@ As of April 20, 2026:
 
 - local Cloudflare CLI auth is working
 - a disposable validation project exists at `https://holdfast-validation.pages.dev`
+- a dedicated staging shell project exists at `https://holdfast-staging.pages.dev`
 - a production direct-upload Pages project exists at `https://holdfast-5oz.pages.dev`
 - the custom hostname `https://holdfast.xylent.studio` is attached and serving
 - hosted shell smoke passes on the production hostname
@@ -75,7 +76,26 @@ Rules:
 - do not attach `holdfast.xylent.studio` to the validation project
 - do not treat the validation project as launch proof by itself
 - do not assume validation auth smoke will pass while Supabase Auth URL configuration is pinned to production
+- do not treat staging auth as available until a deliberate staging auth lane exists
 - keep production release gates tied to trust, not to the existence of a hosted URL
+
+## Staging Shell Track
+
+Holdfast now also has a dedicated Cloudflare staging shell surface:
+
+- staging project: `holdfast-staging`
+- staging origin: `https://holdfast-staging.pages.dev`
+
+Current use:
+
+- hosted shell smoke
+- service-worker and offline shell checks
+- risky UI and release checks that should not touch production
+
+Current limitation:
+
+- provider-backed staging auth is still not real yet
+- a second Supabase project or staging auth environment is required before staging can carry auth or sync truth
 
 ## Repo Baseline
 
@@ -109,6 +129,18 @@ The repo now includes:
   - `https://holdfast.xylent.studio/auth/callback`
   - preview callback URLs before public preview testing
 
+### Staging auth lane
+
+If real provider-backed auth is required on staging or preview, create that lane intentionally:
+
+- use a stable staging hostname
+- provision a separate staging Supabase project or auth environment
+- allow-list the staging callback in Supabase Auth
+- allow-list the staging origin and redirect URI in Google OAuth
+- add a staging auth preflight and smoke target before trusting the lane
+
+Until that exists, production remains the authoritative hosted auth path and staging should be treated as shell/offline/risky smoke only.
+
 Current repo/backend foundation already includes:
 
 - remote Postgres tables for Holdfast user data
@@ -119,7 +151,7 @@ Current repo/backend foundation already includes:
 ### Google OAuth
 
 - create the Google OAuth client
-- add authorized JavaScript origins for localhost, validation, and production
+- add authorized JavaScript origins for localhost, production, and any deliberate staging lane
 - add authorized redirect URIs for the callback route
 - set app name, support email, and branding basics
 - publish a privacy policy URL before public rollout
@@ -136,24 +168,28 @@ Current repo/backend foundation already includes:
 ## Release Sequence
 
 1. Keep using the disposable validation project for risky hosted smoke.
-2. Keep the production project deployed from the repo helper: `npm run cf:pages:prod:deploy`.
-3. Run hosted smoke tests across validation and production hostnames.
-4. Treat production as the authoritative provider-backed auth surface while Supabase Auth URL configuration stays pinned to production.
-5. Verify service-worker install/update and offline shell behavior on the hosted build.
-6. Run broader multi-device sync, offline, and attachment smoke on real accounts.
-7. Decide whether to keep or redirect the `*.pages.dev` hostname.
-8. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
+2. Use the staging shell project for hosted shell and offline smoke that should not touch production.
+3. Keep the production project deployed from the repo helper: `npm run cf:pages:prod:deploy`.
+4. Run hosted smoke tests across staging, validation, and production hostnames as appropriate.
+5. Treat production as the authoritative provider-backed auth surface until a deliberate staging auth lane exists.
+6. Verify service-worker install/update and offline shell behavior on the hosted build.
+7. Run broader multi-device sync, offline, and attachment smoke on real accounts.
+8. Decide whether to keep or redirect the `*.pages.dev` hostnames.
+9. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
 
 ## Current Hosted State
 
 - local Wrangler access is working in the current dev environment
 - a disposable validation project exists at `holdfast-validation.pages.dev`
+- a dedicated staging shell project exists at `holdfast-staging.pages.dev`
 - a production Pages project exists at `holdfast-5oz.pages.dev`
 - `holdfast.xylent.studio` is attached and currently serves the app
 - hosted shell smoke passes on the production hostname
+- hosted shell smoke now passes on the staging shell hostname
 - provider-backed production auth smoke passes on `holdfast.xylent.studio`
 - same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path pass on `holdfast.xylent.studio`
-- validation auth preflight and auth smoke now fail because Supabase generates magic-link redirects to the production origin while the Auth URL configuration is pinned there
+- provider-backed staging auth is still blocked because there is no separate staging Supabase auth environment yet
+- validation auth preflight and auth smoke still resolve to production because Supabase Auth URL configuration is pinned there
 - public launch quality is now blocked by auth/sync trust work, not by Cloudflare project setup
 
 ## Useful Checks
@@ -164,6 +200,12 @@ Current repo/backend foundation already includes:
 - `npm run cf:pages:auth-preflight`
 - `npm run cf:pages:auth-smoke`
 - `npm run cf:pages:validate`
+- `npm run cf:pages:staging:status`
+- `npm run cf:pages:staging:deploy`
+- `npm run cf:pages:staging:smoke`
+- `npm run cf:pages:staging:auth-preflight`
+- `npm run cf:pages:staging:auth-smoke`
+- `npm run cf:pages:staging:sync-smoke`
 - `npm run cf:pages:prod:status`
 - `npm run cf:pages:prod:deploy`
 - `npm run cf:pages:prod:smoke`
@@ -172,5 +214,6 @@ Current repo/backend foundation already includes:
 - `npm run cf:pages:prod:sync-smoke`
 - `npm run build`
 - `npm run test:e2e`
+- `npm run test:e2e:hosted -- --base-url https://holdfast-staging.pages.dev`
 - `npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev`
 - `npm run test:e2e:hosted -- --base-url https://holdfast.xylent.studio`

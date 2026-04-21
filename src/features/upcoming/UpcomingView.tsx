@@ -1,7 +1,13 @@
 import { useState } from 'react';
 
 import type { DateKey } from '@/domain/dates';
-import { groupScheduledItems, itemMeta, queuedUpcomingItems, scheduledUpcomingItems, waitingItems } from '@/domain/logic/selectors';
+import {
+  groupScheduledItems,
+  itemMeta,
+  scheduledUpcomingItems,
+  undatedUpcomingItems,
+  waitingItems,
+} from '@/domain/logic/selectors';
 import type { PlanSpan } from '@/domain/logic/selectors';
 import type { HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -15,10 +21,12 @@ interface UpcomingViewProps {
 }
 
 export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingViewProps) {
-  const [filter, setFilter] = useState<'planned' | 'queue' | 'waiting'>('planned');
+  const [filter, setFilter] = useState<'scheduled' | 'undated' | 'waiting'>(
+    'scheduled',
+  );
   const [planSpan, setPlanSpan] = useState<PlanSpan>('week');
-  const planned = scheduledUpcomingItems(snapshot.items, currentDate, planSpan);
-  const queue = queuedUpcomingItems(snapshot.items);
+  const scheduled = scheduledUpcomingItems(snapshot.items, currentDate, planSpan);
+  const undated = undatedUpcomingItems(snapshot.items);
   const waiting = waitingItems(snapshot.items);
 
   return (
@@ -27,9 +35,9 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
         <div className="panel-header split">
           <div>
             <h1>Upcoming</h1>
-            <p>What is planned, queued, or waiting on someone else.</p>
+            <p>What is scheduled, left undated, or waiting on someone else.</p>
           </div>
-          {filter === 'planned' ? (
+          {filter === 'scheduled' ? (
             <div className="chip-row">
               {(['day', 'week', 'month'] as const).map((span) => (
                 <button className={`chip ${planSpan === span ? 'active' : ''}`} key={span} onClick={() => setPlanSpan(span)} type="button">
@@ -41,20 +49,20 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
           ) : null}
         </div>
         <div className="chip-row">
-          <button className={`chip ${filter === 'planned' ? 'active' : ''}`} onClick={() => setFilter('planned')} type="button">
-            Planned {planned.length ? `(${planned.length})` : ''}
+          <button className={`chip ${filter === 'scheduled' ? 'active' : ''}`} onClick={() => setFilter('scheduled')} type="button">
+            Scheduled {scheduled.length ? `(${scheduled.length})` : ''}
           </button>
-          <button className={`chip ${filter === 'queue' ? 'active' : ''}`} onClick={() => setFilter('queue')} type="button">
-            Queue {queue.length ? `(${queue.length})` : ''}
+          <button className={`chip ${filter === 'undated' ? 'active' : ''}`} onClick={() => setFilter('undated')} type="button">
+            Undated {undated.length ? `(${undated.length})` : ''}
           </button>
           <button className={`chip ${filter === 'waiting' ? 'active' : ''}`} onClick={() => setFilter('waiting')} type="button">
             Waiting on {waiting.length ? `(${waiting.length})` : ''}
           </button>
         </div>
-        {filter === 'planned' ? (
-          groupScheduledItems(planned).length ? (
+        {filter === 'scheduled' ? (
+          groupScheduledItems(scheduled).length ? (
             <div className="stack">
-              {groupScheduledItems(planned).map((group) => (
+              {groupScheduledItems(scheduled).map((group) => (
                 <div className="stack compact" key={group.date}>
                   <div className="eyebrow">{group.date}</div>
                   <div className="item-list">
@@ -71,13 +79,13 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
               ))}
             </div>
           ) : (
-            <EmptyState>Nothing planned for this view.</EmptyState>
+            <EmptyState>Nothing scheduled for this view.</EmptyState>
           )
         ) : null}
-        {filter === 'queue' ? (
-          queue.length ? (
+        {filter === 'undated' ? (
+          undated.length ? (
             <div className="item-list">
-              {queue.map((item) => (
+              {undated.map((item) => (
                 <ItemCard
                   item={item}
                   key={item.id}
@@ -87,7 +95,7 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
               ))}
             </div>
           ) : (
-            <EmptyState>Nothing parked in the queue right now.</EmptyState>
+            <EmptyState>Nothing is being kept undated right now.</EmptyState>
           )
         ) : null}
         {filter === 'waiting' ? (

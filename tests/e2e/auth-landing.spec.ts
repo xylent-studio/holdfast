@@ -4,7 +4,9 @@ test('shows the signed-out landing on a clean browser', async ({ page }) => {
   await page.goto('/');
 
   await expect(
-    page.getByRole('heading', { name: 'Stay in command of real life.' }),
+    page.getByRole('heading', {
+      name: 'Keep the real-life things you need close.',
+    }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Continue with Google' }),

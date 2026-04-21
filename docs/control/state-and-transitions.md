@@ -4,6 +4,8 @@
 
 This file defines the product truth for item states and transitions so implementation details do not distort the model.
 
+User-facing language should say `Now`, not `today`, and should describe `Upcoming` through the sections `Scheduled`, `Undated`, and `Waiting on` rather than leaking queue-style wording.
+
 ## Core Objects
 
 - Capture
@@ -94,6 +96,7 @@ Meaning:
 Meaning:
 
 - not now, but intentionally not lost
+- in UI, this is usually surfaced as `Scheduled` or `Undated`
 
 ### Waiting on
 
@@ -120,6 +123,7 @@ Meaning:
 - Avoid state explosion.
 - Do not create near-duplicate states just because the implementation can.
 - Never use status naming that feels like internal workflow plumbing.
+- Do not leak `today` or `queue` wording into the product UI.
 
 ## Allowed Transitions
 
@@ -183,11 +187,17 @@ A scheduled item typically lives in:
 - Upcoming before the relevant day
 - Now when it becomes current
 
+Upcoming should be surfaced as:
+
+- `Scheduled` when the item has a date
+- `Undated` when it is alive without a date
+- `Waiting on` when the user is blocked
+
 The UI should favor outcome language such as:
 
 - Schedule
 - Plan for later
-- Move to today
+- Move to Now
 
 It should avoid exposing raw timing structures as the primary user concept.
 

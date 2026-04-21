@@ -1,7 +1,7 @@
 # Holdfast Product Charter
 
 ## One-line definition
-Holdfast is a personal operating system for staying in command of real life without turning life into project management.
+Holdfast is a calm place to catch, place, find, and keep the real-life things you do not want to lose.
 
 ## Product thesis
 People do not usually lose control because they cannot create enough tasks. They lose control because capture is too slow, the day has no command view, deferral becomes disappearance, and continuity across devices is not trustworthy enough to relax.
@@ -56,7 +56,7 @@ Holdfast is not:
 
 ## Core promise
 Holdfast should make the user feel:
-- I know what matters today.
+- I know what matters now.
 - I am not carrying everything in my head.
 - What I capture will still be there later.
 - I can trust this app on any device.

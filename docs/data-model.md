@@ -15,6 +15,7 @@ Holdfast is centered on a small set of explicit entities:
 - attachment blob
 - mutation record
 - sync state
+- workspace state
 
 ## User-Facing State Model
 
@@ -59,6 +60,7 @@ Key fields:
 - `archivedAt`
 - `deletedAt`
 - `syncState`
+- `remoteRevision`
 
 Notes:
 
@@ -82,6 +84,7 @@ Key fields:
 - `archivedAt`
 - `deletedAt`
 - `syncState`
+- `remoteRevision`
 
 List kinds should cover:
 
@@ -108,6 +111,7 @@ Key fields:
 - `archivedAt`
 - `deletedAt`
 - `syncState`
+- `remoteRevision`
 
 ### DailyRecord
 
@@ -126,6 +130,7 @@ Key fields:
 - `closeSeed`
 - `closeNote`
 - `seededRoutineIds`
+- `remoteRevision`
 
 ### WeeklyRecord
 
@@ -137,6 +142,7 @@ Key fields:
 - `focus`
 - `protect`
 - `notes`
+- `remoteRevision`
 
 ### RoutineRecord
 
@@ -151,6 +157,7 @@ Key fields:
 - `scheduledTime`
 - `notes`
 - `active`
+- `remoteRevision`
 
 ### SettingsRecord
 
@@ -161,6 +168,7 @@ Key fields:
 - `direction`
 - `standards`
 - `why`
+- `remoteRevision`
 
 ### AttachmentRecord
 
@@ -174,6 +182,7 @@ Key fields:
 - `name`
 - `mimeType`
 - `size`
+- `remoteRevision`
 
 ### AttachmentBlobRecord
 
@@ -195,21 +204,36 @@ Key fields:
 
 ### SyncStateRecord
 
-Tracks provider mode and auth state for the device.
+Tracks sync transport state for the device.
 
 Key fields:
 
 - `provider`
 - `mode`
-- `authState`
-- `identityState`
-- `remoteUserId`
 - `lastSyncedAt`
+- `pullCursorByStream`
 
 Notes:
 
-- `remoteUserId` keeps the last known signed-in owner on the device so a local workspace can reattach safely after sign-in
-- this is a device-level ownership marker, not the final per-record remote ownership model
+- `pullCursorByStream` keeps a stable `(server_updated_at, primary key)` cursor per remote stream so tied timestamps do not get skipped on later pulls
+- `lastSyncedAt` remains a transport watermark for status and legacy compatibility, not the only pull boundary anymore
+
+### WorkspaceStateRecord
+
+Tracks workspace ownership and attachment semantics on the current device.
+
+Key fields:
+
+- `ownershipState`
+- `boundUserId`
+- `authPromptState`
+- `attachState`
+
+Notes:
+
+- workspace ownership is intentionally separate from sync transport health
+- wrong-account protection and signed-out recovery are driven from this record, not from `syncState`
+- a restored backup now detaches the workspace locally until the user explicitly re-attaches it to an account again
 
 ### PrototypeRecoverySessionRecord
 
@@ -235,16 +259,14 @@ Notes:
 - newer recoveries can be undone cleanly from recorded snapshots
 - older recoveries that happened before undo support use a safer best-effort rollback path based on the same backup source
 
-## Session Progression
+## Workspace Progression
 
 The current public auth path is:
 
 1. `device-guest`
 2. `member`
 
-`authState` tracks whether there is an authenticated backend session. `identityState` tracks what kind of workspace owner the device is currently attached to.
-
-`authPromptState` is internal sync-adjacent state that lets the app distinguish:
+`workspaceState.authPromptState` lets the app distinguish:
 
 - calm signed-out state after explicit sign-out
 - session-loss recovery
@@ -278,7 +300,9 @@ Defined in [src/storage/local/db.ts](/C:/dev/GitHub/Holdfast/src/storage/local/d
 - `attachmentBlobs`
 - `mutationQueue`
 - `prototypeRecoverySessions`
+- `workspaceRestoreSessions`
 - `syncState`
+- `workspaceState`
 
 ## Remote Shape Foundation
 
@@ -343,6 +367,7 @@ Current restore behavior is deliberate:
 - the last restore records an on-device undo snapshot so the user can reverse it cleanly
 - the mutation queue is rebuilt from the final restored state so signed-in sync can catch up honestly
 - pre-existing non-acknowledged deletions that still matter stay queued instead of being erased by the rebuild
+- restore clears remote pull cursors and detaches the workspace locally until the user explicitly re-attaches it again
 
 Attachment behavior during restore:
 

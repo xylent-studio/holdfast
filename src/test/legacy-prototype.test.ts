@@ -1,6 +1,7 @@
 import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { SCHEMA_VERSION } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import {
   DailyRecordSchema,
@@ -361,7 +362,7 @@ describe('legacy prototype recovery', () => {
     await db.dailyRecords.put(
       DailyRecordSchema.parse({
         date: '2026-04-19',
-        schemaVersion: 2,
+        schemaVersion: SCHEMA_VERSION,
         startedAt: null,
         closedAt: null,
         readiness: {
@@ -387,7 +388,7 @@ describe('legacy prototype recovery', () => {
     await db.weeklyRecords.put(
       WeeklyRecordSchema.parse({
         weekStart: '2026-04-13',
-        schemaVersion: 2,
+        schemaVersion: SCHEMA_VERSION,
         focus: '',
         protect: 'Keep Sunday open.',
         notes: '',
@@ -399,7 +400,7 @@ describe('legacy prototype recovery', () => {
     await db.settings.put(
       SettingsRecordSchema.parse({
         id: 'settings',
-        schemaVersion: 2,
+        schemaVersion: SCHEMA_VERSION,
         direction: '',
         standards: 'Keep the basics handled.',
         why: '',

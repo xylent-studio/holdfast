@@ -3,8 +3,8 @@
 ## Purpose
 This file exists to prevent the product from sounding like a developer tool, an AI narrator, or a settings panel.
 
-The standard is not “clear enough.”
-The standard is “sounds like a real polished app people trust.”
+The standard is not "clear enough."
+The standard is "sounds like a real polished app people trust."
 
 ## Voice
 Holdfast should sound:
@@ -25,6 +25,7 @@ Holdfast should not sound:
 
 ## Core writing rules
 - Name the user outcome, not the implementation mechanic.
+- Keep returning to the product verbs: catch, place, find, keep.
 - Prefer fewer words when the action is already clear.
 - Hide system vocabulary whenever possible.
 - Do not explain obvious controls.
@@ -48,7 +49,7 @@ Prefer:
 - Done
 - Archive
 - Schedule
-- Move to today
+- Move to Now
 - Plan for later
 - Waiting on
 - Finish day
@@ -68,6 +69,8 @@ Avoid unless genuinely unavoidable:
 - Resolve conflict
 - Destination
 - Workflow handling
+- Queue
+- Today
 - Queue state
 - Rehydrate
 - Metadata
@@ -131,7 +134,7 @@ Avoid:
 - Local persistence active
 - Synchronization state mismatch
 - Conflict resolution required
-- Attachment queue stalled
+- Attachment upload stalled
 
 ### Dialogs
 Prefer:
@@ -193,6 +196,7 @@ Language should be:
 - calm
 - structured
 - not planner-ish
+- centered on `Scheduled`, `Undated`, and `Waiting on`
 
 ## Review
 Language should be:

@@ -23,6 +23,7 @@ export function TopBar({
   const today = todayDateKey();
   const delta =
     (new Date(`${currentDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86_400_000;
+  const openLabel = `${openCount} ${openCount === 1 ? 'thing' : 'things'} in play`;
 
   const dateState =
     delta === 0 ? 'Today' : delta > 0 ? `${delta} day${delta === 1 ? '' : 's'} ahead` : `${Math.abs(delta)} day${Math.abs(delta) === 1 ? '' : 's'} back`;
@@ -30,45 +31,47 @@ export function TopBar({
   return (
     <header className="topbar">
       <div className="topbar-copy">
-        <div className="eyebrow">Holdfast</div>
-        <div className="topbar-date">{niceDate(currentDate)}</div>
+        <div className="eyebrow">In view</div>
+        <div className="topbar-heading-row">
+          <div className="topbar-date">{niceDate(currentDate)}</div>
+          <span className="topbar-count">{openLabel}</span>
+        </div>
         <div className="topbar-meta">
           <span>{dateState}</span>
-          <span>{openCount} open</span>
         </div>
       </div>
       <div className="topbar-actions">
         {showDateControls ? (
-          <>
+          <div className="topbar-tools">
             <div className="date-controls">
               <button
-                className="button ghost"
+                className="button ghost small"
                 onClick={() => onChangeDate(addDays(currentDate, -1))}
                 type="button"
               >
-                Prev
+                Back
               </button>
               <button
-                className={`button ${currentDate === today ? 'accent' : 'ghost'}`}
+                className={`button small ${currentDate === today ? 'accent' : 'ghost'}`}
                 onClick={() => onChangeDate(today)}
                 type="button"
               >
                 Today
               </button>
               <button
-                className="button ghost"
+                className="button ghost small"
                 onClick={() => onChangeDate(addDays(currentDate, 1))}
                 type="button"
               >
-                Next
+                Ahead
               </button>
             </div>
             <button
-              className={`button ghost ${showDateJump ? 'active-toggle' : ''}`}
+              className={`button ghost small ${showDateJump ? 'active-toggle' : ''}`}
               onClick={() => setShowDateJump((current) => !current)}
               type="button"
             >
-              Jump to date
+              Choose date
             </button>
             {showDateJump ? (
               <input
@@ -78,14 +81,20 @@ export function TopBar({
                 value={currentDate}
               />
             ) : null}
-          </>
+          </div>
         ) : null}
-        <button className="button accent" onClick={onAdd} type="button">
-          Add
-        </button>
-        <button className="button ghost" onClick={onOpenSettings} type="button">
-          Settings
-        </button>
+        <div className="topbar-primary-actions">
+          <button className="button accent" onClick={onAdd} type="button">
+            Add
+          </button>
+          <button
+            className="button ghost small"
+            onClick={onOpenSettings}
+            type="button"
+          >
+            Settings
+          </button>
+        </div>
       </div>
     </header>
   );

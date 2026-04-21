@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import { READINESS_CHECKS } from '@/domain/constants';
-import { todayDateKey, type DateKey } from '@/domain/dates';
+import type { DateKey } from '@/domain/dates';
 import {
   carrySuggestions,
   getFocusItems,
@@ -35,8 +35,6 @@ interface NowViewProps {
 export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
   const [closeDayOpen, setCloseDayOpen] = useState(false);
   const [dayToolsOpen, setDayToolsOpen] = useState(false);
-  const moveToCurrentDayLabel =
-    currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
 
   const focusItems = useMemo(
     () => getFocusItems(snapshot.currentDay, snapshot.items),
@@ -90,7 +88,7 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
               onClick={() => setDayToolsOpen((value) => !value)}
               type="button"
             >
-              {dayToolsOpen ? 'Hide day tools' : 'Open day tools'}
+              {dayToolsOpen ? 'Hide day tools' : 'Day tools'}
             </button>
           </div>
         </div>
@@ -127,6 +125,67 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
             </div>
           </div>
         ) : null}
+        <div className="chip-row">
+          <span className="chip">
+            {snapshot.currentDay.startedAt ? 'Day started' : 'Not started'}
+          </span>
+          <span className={`chip ${readinessComplete ? 'active' : ''}`}>
+            Basics {readinessCount}/{READINESS_CHECKS.length}
+          </span>
+          {pendingRoutineCount ? (
+            <span className="chip">
+              {pendingRoutineCount} routine
+              {pendingRoutineCount === 1 ? '' : 's'} ready
+            </span>
+          ) : null}
+          {snapshot.currentDay.closedAt ? (
+            <span className="chip">Closeout saved</span>
+          ) : null}
+        </div>
+        {dayToolsOpen ? (
+          <div className="stack compact">
+            <div className="button-row">
+              {!snapshot.currentDay.startedAt || pendingRoutineCount ? (
+                <button
+                  className="button accent"
+                  onClick={() => void startDay(currentDate)}
+                  type="button"
+                >
+                  {!snapshot.currentDay.startedAt
+                    ? 'Start day'
+                    : `Add ${pendingRoutineCount} routine${pendingRoutineCount === 1 ? '' : 's'}`}
+                </button>
+              ) : null}
+              <button
+                className="button ghost"
+                onClick={() => setCloseDayOpen(true)}
+                type="button"
+              >
+                Finish day
+              </button>
+            </div>
+            <div className="field-stack">
+              <span>Basics</span>
+              <div className="grid two">
+                {READINESS_CHECKS.map((entry) => (
+                  <button
+                    className={`toggle ${snapshot.currentDay.readiness[entry.key] ? 'active' : ''}`}
+                    key={entry.key}
+                    onClick={() => void toggleReadiness(currentDate, entry.key)}
+                    type="button"
+                  >
+                    <span>{entry.label}</span>
+                    <span>
+                      {snapshot.currentDay.readiness[entry.key] ? 'Done' : 'Open'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="empty-inline">{dayToolsSummary}</div>
+        )}
       </Panel>
 
       <Panel>
@@ -215,7 +274,7 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
                     ? () => void toggleTaskDone(item.id, currentDate)
                     : undefined
                 }
-                primaryActionLabel={moveToCurrentDayLabel}
+                primaryActionLabel="Move to Now"
               />
             ))}
           </div>
@@ -242,84 +301,6 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
           </div>
         ) : (
           <EmptyState>Nothing scheduled after this date right now.</EmptyState>
-        )}
-      </Panel>
-
-      <Panel>
-        <div className="panel-header split">
-          <div>
-            <h2>Day tools</h2>
-            <p>Optional setup and closeout when it actually helps.</p>
-          </div>
-          <button
-            aria-expanded={dayToolsOpen}
-            className="button ghost small"
-            onClick={() => setDayToolsOpen((value) => !value)}
-            type="button"
-          >
-            {dayToolsOpen ? 'Hide tools' : 'Open tools'}
-          </button>
-        </div>
-        {dayToolsOpen ? (
-          <div className="stack compact">
-            <div className="chip-row">
-              <span className="chip">
-                {snapshot.currentDay.startedAt ? 'Day started' : 'Not started'}
-              </span>
-              <span className={`chip ${readinessComplete ? 'active' : ''}`}>
-                Basics {readinessCount}/{READINESS_CHECKS.length}
-              </span>
-              {pendingRoutineCount ? (
-                <span className="chip">
-                  {pendingRoutineCount} routine
-                  {pendingRoutineCount === 1 ? '' : 's'} ready
-                </span>
-              ) : null}
-              {snapshot.currentDay.closedAt ? (
-                <span className="chip">Closeout saved</span>
-              ) : null}
-            </div>
-            <div className="button-row">
-              {!snapshot.currentDay.startedAt || pendingRoutineCount ? (
-                <button
-                  className="button accent"
-                  onClick={() => void startDay(currentDate)}
-                  type="button"
-                >
-                  {!snapshot.currentDay.startedAt
-                    ? 'Start day'
-                    : `Add ${pendingRoutineCount} routine${pendingRoutineCount === 1 ? '' : 's'}`}
-                </button>
-              ) : null}
-              <button
-                className="button ghost"
-                onClick={() => setCloseDayOpen(true)}
-                type="button"
-              >
-                Finish day
-              </button>
-            </div>
-            <div className="field-stack">
-              <span>Basics</span>
-              <div className="grid two">
-                {READINESS_CHECKS.map((entry) => (
-                  <button
-                    className={`toggle ${snapshot.currentDay.readiness[entry.key] ? 'active' : ''}`}
-                    key={entry.key}
-                    onClick={() => void toggleReadiness(currentDate, entry.key)}
-                    type="button"
-                  >
-                    <span>{entry.label}</span>
-                    <span>
-                      {snapshot.currentDay.readiness[entry.key] ? 'Done' : 'Open'}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="empty-inline">{dayToolsSummary}</div>
         )}
       </Panel>
 

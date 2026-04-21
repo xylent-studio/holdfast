@@ -41,7 +41,9 @@ test.describe('hosted auth smoke', () => {
 
     await page.goto('/');
     await expect(
-      page.getByRole('heading', { name: 'Stay in command of real life.' }),
+      page.getByRole('heading', {
+        name: 'Keep the real-life things you need close.',
+      }),
     ).toBeVisible();
 
     await consumeMagicLink(link.actionLink, page);

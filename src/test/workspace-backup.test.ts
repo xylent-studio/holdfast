@@ -5,9 +5,27 @@ const { downloadAttachmentBlob } = vi.hoisted(() => ({
   downloadAttachmentBlob:
     vi.fn<(userId: string, attachmentId: string) => Promise<Blob>>(),
 }));
+const mockGetSession = vi.hoisted(() =>
+  vi.fn(async () => ({
+    data: {
+      session: {
+        user: {
+          id: '11111111-1111-4111-8111-111111111111',
+        },
+      },
+    },
+  })),
+);
 
 vi.mock('@/storage/sync/supabase/attachments', () => ({
   downloadAttachmentBlob,
+}));
+vi.mock('@/storage/sync/supabase/client', () => ({
+  getSupabaseBrowserClient: () => ({
+    auth: {
+      getSession: mockGetSession,
+    },
+  }),
 }));
 
 import type { DateKey } from '@/domain/dates';
@@ -21,7 +39,7 @@ import {
   toggleReadiness,
   updateRoutine,
   updateSettings,
-  updateSyncState,
+  updateWorkspaceState,
   updateWeeklyRecord,
 } from '@/storage/local/api';
 import { HOLDFAST_DB_NAME, db } from '@/storage/local/db';
@@ -44,6 +62,7 @@ async function resetLocalDatabase(): Promise<void> {
 
 beforeEach(async () => {
   downloadAttachmentBlob.mockReset();
+  mockGetSession.mockClear();
   await resetLocalDatabase();
 });
 
@@ -178,10 +197,11 @@ describe('workspace backup export', () => {
   });
 
   it('fills backup attachments from sync when the local blob cache is missing', async () => {
-    await updateSyncState({
-      authState: 'signed-in',
-      identityState: 'member',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+    await updateWorkspaceState({
+      ownershipState: 'member',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+      authPromptState: 'none',
+      attachState: 'attached',
     });
 
     await createItem({
@@ -223,11 +243,17 @@ describe('workspace backup export', () => {
   });
 
   it('keeps exporting when a signed-out member workspace is missing a local attachment blob', async () => {
-    await updateSyncState({
-      authState: 'signed-out',
-      identityState: 'member',
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: null,
+      },
+    });
+
+    await updateWorkspaceState({
+      ownershipState: 'member',
       authPromptState: 'signed-out-by-user',
-      remoteUserId: '11111111-1111-4111-8111-111111111111',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+      attachState: 'attached',
     });
 
     await createItem({

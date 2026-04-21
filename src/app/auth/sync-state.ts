@@ -1,56 +1,57 @@
 import type {
   SyncAuthPromptState,
-  SyncStateRecord,
+  WorkspaceStateRecord,
 } from '@/domain/schemas/records';
 
 type AuthSyncPatch = Pick<
-  SyncStateRecord,
-  'authState' | 'identityState' | 'authPromptState' | 'remoteUserId'
+  WorkspaceStateRecord,
+  'ownershipState' | 'boundUserId' | 'authPromptState' | 'attachState'
 >;
 
 export function hasAuthOwnerMismatch(
-  current: SyncStateRecord,
+  current: WorkspaceStateRecord,
   nextRemoteUserId: string,
 ): boolean {
   return Boolean(
-    current.identityState === 'member' &&
-    current.remoteUserId &&
-    current.remoteUserId !== nextRemoteUserId,
+    current.ownershipState === 'member' &&
+    current.boundUserId &&
+    current.boundUserId !== nextRemoteUserId,
   );
 }
 
 export function signedInAuthPatch(nextRemoteUserId: string): AuthSyncPatch {
   return {
-    authState: 'signed-in',
-    identityState: 'member',
+    ownershipState: 'member',
+    boundUserId: nextRemoteUserId,
     authPromptState: 'none',
-    remoteUserId: nextRemoteUserId,
+    attachState: 'attached',
   };
 }
 
 export function signedOutAuthPatch(
-  current: SyncStateRecord,
+  current: WorkspaceStateRecord,
   promptState: SyncAuthPromptState,
 ): AuthSyncPatch {
   return {
-    authState: 'signed-out',
-    identityState:
-      current.identityState === 'member' ? 'member' : 'device-guest',
-    authPromptState: current.identityState === 'member' ? promptState : 'none',
-    remoteUserId:
-      current.identityState === 'member' ? current.remoteUserId : null,
+    ownershipState:
+      current.ownershipState === 'member' ? 'member' : 'device-guest',
+    authPromptState:
+      current.ownershipState === 'member' ? promptState : 'none',
+    boundUserId:
+      current.ownershipState === 'member' ? current.boundUserId : null,
+    attachState: current.attachState,
   };
 }
 
 export function resolveSignedOutAuthPromptState(
-  current: SyncStateRecord,
+  current: WorkspaceStateRecord,
   pendingPromptState: SyncAuthPromptState | null,
 ): SyncAuthPromptState {
   if (pendingPromptState) {
     return pendingPromptState;
   }
 
-  if (current.identityState !== 'member') {
+  if (current.ownershipState !== 'member') {
     return 'none';
   }
 

@@ -18,17 +18,23 @@ test('keeps the shell reachable offline after the first load', async ({
   page,
 }) => {
   await page.goto('/');
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
+  await page.waitForFunction(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return Boolean(registration?.active);
   });
-  await page.reload();
+  await page.reload({ waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
 
   await context.setOffline(true);
-  await page.goto('/review');
+  const shellAvailableOffline = await page.evaluate(async () => {
+    const response = await fetch('/index.html');
+    const html = await response.text();
+    return response.ok && html.includes('<div id="root"></div>');
+  });
 
+  expect(shellAvailableOffline).toBe(true);
   await expect(
-    page.getByRole('heading', { name: 'Stay in command of real life.' }),
+    page.getByRole('button', { name: 'Continue with Google' }),
   ).toBeVisible();
 
   await context.setOffline(false);

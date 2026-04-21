@@ -1,5 +1,12 @@
 # Core Flows
 
+Holdfast should keep coming back to four user outcomes:
+
+- catch it
+- place it
+- find it
+- keep it
+
 ## 1. Capture
 
 Holdfast supports three real capture speeds.
@@ -50,7 +57,7 @@ Rules:
 - `Inbox` is the fallback for uncertainty, not the mandatory funnel for every add
 - direct placement should win when destination is already obvious
 - `Now` should be intentional, not the default for everything
-- `Upcoming` supports both dated and undated items
+- `Upcoming` should surface dated items as `Scheduled` and undated items as `Undated`
 - original source context should survive reshaping
 
 ## 2. Now command work
@@ -79,11 +86,11 @@ The point is context, not one flat backlog.
 
 Modes:
 
-- planned
-- queue
-- waiting on
+- Scheduled
+- Undated
+- Waiting on
 
-`Planned` is date-based. `Queue` is undated. `Waiting on` means the user is blocked, not just deferring.
+`Scheduled` is date-based. `Undated` is alive without a date. `Waiting on` means the user is blocked, not just deferring.
 
 ## 5. Lists and repeated structure
 

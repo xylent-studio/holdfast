@@ -4,11 +4,15 @@ import { AuthAccessActions } from '@/app/auth/AuthAccessActions';
 import { useAuth } from '@/app/auth/useAuth';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { useSync } from '@/app/sync/useSync';
+import type { SettingsRecord, WeeklyRecord } from '@/domain/schemas/records';
 import type { DateKey } from '@/domain/dates';
 import { currentWeekLabel } from '@/domain/logic/selectors';
-import { updateSettings, updateWeeklyRecord } from '@/storage/local/api';
+import {
+  attachWorkspaceToAccount,
+  updateSettings,
+  updateWeeklyRecord,
+} from '@/storage/local/api';
 import type { HoldfastSnapshot } from '@/storage/local/api';
-import type { SettingsRecord, WeeklyRecord } from '@/domain/schemas/records';
 import { Panel } from '@/shared/ui/Panel';
 
 import { ExpandablePanel } from './ExpandablePanel';
@@ -50,11 +54,16 @@ function syncStatusLabel(
   isOnline: boolean,
   pendingMutationCount: number,
   syncMode: HoldfastSnapshot['syncState']['mode'],
-  authPromptState: HoldfastSnapshot['syncState']['authPromptState'],
-  identityState: HoldfastSnapshot['syncState']['identityState'],
+  authPromptState: HoldfastSnapshot['workspaceState']['authPromptState'],
+  attachState: HoldfastSnapshot['workspaceState']['attachState'],
+  ownershipState: HoldfastSnapshot['workspaceState']['ownershipState'],
 ): string {
   if (!configured) {
     return 'Account setup is off in this build.';
+  }
+
+  if (attachState === 'detached-restore') {
+    return signedIn ? 'Local until you attach it' : 'Local restore only';
   }
 
   if (signedIn) {
@@ -77,7 +86,7 @@ function syncStatusLabel(
     return 'Needs the original account';
   }
 
-  return identityState === 'member'
+  return ownershipState === 'member'
     ? 'Signed out on this device'
     : 'Not signed in';
 }
@@ -271,16 +280,40 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
   const sync = useSync();
   const localDataExists = hasMeaningfulLocalState(snapshot);
   const deviceWorkspaceExists =
-    localDataExists || snapshot.syncState.identityState === 'member';
+    localDataExists || snapshot.workspaceState.ownershipState === 'member';
   const [workspaceSafetyOpen, setWorkspaceSafetyOpen] = useState(false);
-  const [longerViewOpen, setLongerViewOpen] = useState(false);
-  const [weeklyOpen, setWeeklyOpen] = useState(false);
+  const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
+  const [attachBusy, setAttachBusy] = useState(false);
   const routineSummary = snapshot.routines.length
     ? `${snapshot.routines.length} routine${
         snapshot.routines.length === 1 ? '' : 's'
       } ready to review.`
     : 'No custom routines yet.';
+  const privateNotesSummary = summarizeText(
+    snapshot.settings.direction,
+    snapshot.settings.standards,
+    snapshot.settings.why,
+    snapshot.weeklyRecord.focus,
+    snapshot.weeklyRecord.protect,
+    snapshot.weeklyRecord.notes,
+  );
+  const isDetachedRestore =
+    snapshot.workspaceState.attachState === 'detached-restore';
+
+  const handleAttachWorkspace = async (): Promise<void> => {
+    if (!auth.user?.id) {
+      return;
+    }
+
+    setAttachBusy(true);
+    try {
+      await attachWorkspaceToAccount(auth.user.id);
+      await sync.retrySync();
+    } finally {
+      setAttachBusy(false);
+    }
+  };
 
   return (
     <div className="stack">
@@ -288,11 +321,15 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
         <div className="panel-header">
           <h1>Account</h1>
           <p>
-            {auth.session
+            {isDetachedRestore
+              ? auth.session
+                ? 'This restored workspace is safe on this device. Attach it when you are ready to sync it to this account.'
+                : 'This restored workspace is safe on this device. Sign in when you are ready to attach it again.'
+              : auth.session
               ? 'Stay signed in quietly and let Holdfast catch up in the background.'
-              : snapshot.syncState.authPromptState === 'account-mismatch'
+              : snapshot.workspaceState.authPromptState === 'account-mismatch'
                 ? "This device is still holding another account's workspace."
-                : snapshot.syncState.identityState === 'member'
+                : snapshot.workspaceState.ownershipState === 'member'
                   ? 'Sign in again to keep this device in sync.'
                   : 'Sign in once and pick back up anywhere.'}
           </p>
@@ -307,8 +344,9 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                 sync.isOnline,
                 sync.pendingMutationCount,
                 snapshot.syncState.mode,
-                snapshot.syncState.authPromptState,
-                snapshot.syncState.identityState,
+                snapshot.workspaceState.authPromptState,
+                snapshot.workspaceState.attachState,
+                snapshot.workspaceState.ownershipState,
               )}
             </strong>
           </div>
@@ -357,6 +395,27 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                   Sign out
                 </button>
               </div>
+              {isDetachedRestore ? (
+                <div className="recovery-note">
+                  <strong>This restored workspace is still local.</strong>
+                  <p>
+                    Nothing will sync from this device until you attach this
+                    workspace to your account again.
+                  </p>
+                  <div className="dialog-actions">
+                    <button
+                      className="button accent"
+                      disabled={attachBusy}
+                      onClick={() => void handleAttachWorkspace()}
+                      type="button"
+                    >
+                      {attachBusy
+                        ? 'Attaching...'
+                        : 'Attach this workspace'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </>
           ) : (
             <AuthAccessActions
@@ -368,46 +427,29 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
       </Panel>
 
       <ExpandablePanel
-        description="Keep only the longer-view notes that actually help."
-        isOpen={longerViewOpen}
-        onToggle={() => setLongerViewOpen((current) => !current)}
-        summary={summarizeText(
-          snapshot.settings.direction,
-          snapshot.settings.standards,
-          snapshot.settings.why,
-        )}
-        title="Longer view"
+        description="Optional longer-view notes, kept out of the way."
+        isOpen={privateNotesOpen}
+        onToggle={() => setPrivateNotesOpen((current) => !current)}
+        summary={privateNotesSummary}
+        title="Private notes"
       >
-        <LongerViewEditor
-          key={snapshot.settings.updatedAt}
-          settings={snapshot.settings}
-        />
-      </ExpandablePanel>
-
-      <ExpandablePanel
-        description={currentWeekLabel(currentDate)}
-        isOpen={weeklyOpen}
-        onToggle={() => setWeeklyOpen((current) => !current)}
-        summary={
-          summarizeText(
-            snapshot.weeklyRecord.focus,
-            snapshot.weeklyRecord.protect,
-            snapshot.weeklyRecord.notes,
-          ) === 'Nothing set yet.'
-            ? `${currentWeekLabel(currentDate)}. Nothing set yet.`
-            : summarizeText(
-                snapshot.weeklyRecord.focus,
-                snapshot.weeklyRecord.protect,
-                snapshot.weeklyRecord.notes,
-              )
-        }
-        title="This week"
-      >
-        <WeeklyEditor
-          currentDate={currentDate}
-          key={snapshot.weeklyRecord.updatedAt}
-          weeklyRecord={snapshot.weeklyRecord}
-        />
+        <div className="stack">
+          <div className="stack compact">
+            <div className="eyebrow">Longer view</div>
+            <LongerViewEditor
+              key={snapshot.settings.updatedAt}
+              settings={snapshot.settings}
+            />
+          </div>
+          <div className="stack compact">
+            <div className="eyebrow">{currentWeekLabel(currentDate)}</div>
+            <WeeklyEditor
+              currentDate={currentDate}
+              key={snapshot.weeklyRecord.updatedAt}
+              weeklyRecord={snapshot.weeklyRecord}
+            />
+          </div>
+        </div>
       </ExpandablePanel>
 
       <ExpandablePanel
@@ -415,7 +457,7 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
         isOpen={routineOpen}
         onToggle={() => setRoutineOpen((current) => !current)}
         summary={routineSummary}
-        title="Routine setup"
+        title="Routines"
       >
         <RoutineSetupPanel routines={snapshot.routines} />
       </ExpandablePanel>
@@ -424,7 +466,11 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
         description="Backup this workspace or recover earlier local work when you need to."
         isOpen={workspaceSafetyOpen}
         onToggle={() => setWorkspaceSafetyOpen((current) => !current)}
-        summary="Back up this device or recover earlier prototype work."
+        summary={
+          isDetachedRestore
+            ? 'This restored workspace is still local until you attach it.'
+            : 'Back up this device or recover earlier prototype work.'
+        }
         title="Workspace safety"
       >
         <Suspense fallback={<div className="empty-inline">Loading tools...</div>}>

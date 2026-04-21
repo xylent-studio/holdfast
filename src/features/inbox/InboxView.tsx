@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { todayDateKey, type DateKey } from '@/domain/dates';
+import type { DateKey } from '@/domain/dates';
 import { inboxItems, itemMeta } from '@/domain/logic/selectors';
 import { toggleFocus, toggleTaskDone } from '@/storage/local/api';
 import type { HoldfastSnapshot } from '@/storage/local/api';
@@ -24,8 +24,6 @@ export function InboxView({
   );
   const items = inboxItems(snapshot.items, filter);
   const focusIds = new Set(snapshot.currentDay.focusItemIds);
-  const moveToCurrentDayLabel =
-    currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
 
   return (
     <div className="stack">
@@ -77,7 +75,7 @@ export function InboxView({
                       ? focusIds.has(item.id)
                         ? 'Remove focus'
                         : 'Add focus'
-                      : moveToCurrentDayLabel
+                      : 'Move to Now'
                 }
               />
             ))}
