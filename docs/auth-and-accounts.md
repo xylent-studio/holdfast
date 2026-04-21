@@ -205,6 +205,11 @@ Once a staging project exists, use the repo helper instead of hand-editing auth 
   - `npm run supabase:auth -- --project-ref <staging-ref> --site-url https://holdfast-staging.pages.dev --redirect-url http://localhost:4173/auth/callback --redirect-url https://holdfast-staging.pages.dev/auth/callback`
 - enable Google when you have the staging OAuth values:
   - `npm run supabase:auth -- --project-ref <staging-ref> --enable-google --google-client-id <id> --google-client-secret <secret>`
+- point the staging Pages build at the staging project instead of production:
+  - copy `.env.staging.example` to `.env.staging.local`
+  - set `VITE_SUPABASE_URL=https://<staging-ref>.supabase.co`
+  - set `VITE_SUPABASE_ANON_KEY=<staging-publishable-key>`
+  - deploy or run hosted auth smoke with `--env-file .env.staging.local`
 
 Required Google OAuth basics:
 

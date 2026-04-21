@@ -17,6 +17,7 @@ Usage:
   node scripts/pages-validation.mjs --project holdfast-validation --create --deploy
   node scripts/pages-validation.mjs --project holdfast-validation --create --deploy --smoke
   node scripts/pages-validation.mjs --project holdfast --create --deploy --base-url https://holdfast.xylent.studio
+  node scripts/pages-validation.mjs --project holdfast-staging --create --deploy --base-url https://holdfast-staging.pages.dev --env-file .env.staging.local
   node scripts/pages-validation.mjs --auth-preflight --base-url https://holdfast-validation.pages.dev
   node scripts/pages-validation.mjs --auth-smoke --base-url https://holdfast-validation.pages.dev
   node scripts/pages-validation.mjs --sync-smoke --base-url https://holdfast.xylent.studio
@@ -26,6 +27,7 @@ Options:
   --project <name>    Pages project name. Default: ${DEFAULT_PROJECT}
   --branch <name>     Pages branch to deploy. Default: ${DEFAULT_BRANCH}
   --base-url <url>    Hosted base URL for smoke tests.
+  --env-file <path>   Additional env file to load before build/smoke checks.
   --auth-preflight    Verify Supabase-generated email links stay on the hosted origin.
   --auth-smoke        Run hosted auth smoke after preflight using server-side magic links.
   --sync-smoke        Run hosted same-account sync and attachment smoke after auth preflight.
@@ -131,6 +133,7 @@ function parseArgs(argv) {
     branch: DEFAULT_BRANCH,
     create: false,
     deploy: false,
+    envFile: null,
     help: false,
     project: DEFAULT_PROJECT,
     skipBuild: false,
@@ -155,6 +158,12 @@ function parseArgs(argv) {
 
     if (arg === '--base-url') {
       options.baseUrl = argv[index + 1] ?? null;
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--env-file') {
+      options.envFile = argv[index + 1] ?? null;
       index += 1;
       continue;
     }
@@ -251,10 +260,14 @@ function requireAuthProbeEnv(envValues) {
   };
 }
 
-function loadBuildEnv() {
+function loadBuildEnv(options) {
   const envPath = path.join(repoRoot, '.env');
+  const extraEnvPath = options.envFile
+    ? path.resolve(repoRoot, options.envFile)
+    : null;
   return {
     ...loadEnvFile(envPath),
+    ...(extraEnvPath ? loadEnvFile(extraEnvPath) : {}),
     ...process.env,
   };
 }
@@ -397,7 +410,7 @@ async function main() {
     return;
   }
 
-  const envValues = loadBuildEnv();
+  const envValues = loadBuildEnv(options);
 
   run('npx', ['wrangler', 'whoami']);
 

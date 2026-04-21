@@ -115,11 +115,11 @@ npm run cf:pages:auth-preflight
 npm run cf:pages:auth-smoke
 npm run cf:pages:validate
 npm run cf:pages:staging:status
-npm run cf:pages:staging:deploy
+npm run cf:pages:staging:deploy -- --env-file .env.staging.local
 npm run cf:pages:staging:smoke
-npm run cf:pages:staging:auth-preflight
-npm run cf:pages:staging:auth-smoke
-npm run cf:pages:staging:sync-smoke
+npm run cf:pages:staging:auth-preflight -- --env-file .env.staging.local
+npm run cf:pages:staging:auth-smoke -- --env-file .env.staging.local
+npm run cf:pages:staging:sync-smoke -- --env-file .env.staging.local
 npm run cf:pages:prod:status
 npm run cf:pages:prod:deploy
 npm run cf:pages:prod:smoke

@@ -154,8 +154,14 @@ Fastest repeatable setup path:
 5. If staging will use Google sign-in immediately, patch the provider too:
    - `npm run supabase:auth -- --project-ref <staging-ref> --enable-google --google-client-id <id> --google-client-secret <secret>`
 6. Add staging build-time env locally before running hosted auth smoke:
-   - `VITE_SUPABASE_URL=https://<staging-ref>.supabase.co`
-   - `VITE_SUPABASE_ANON_KEY=<staging-publishable-key>`
+   - copy `.env.staging.example` to `.env.staging.local`
+   - set `VITE_SUPABASE_URL=https://<staging-ref>.supabase.co`
+   - set `VITE_SUPABASE_ANON_KEY=<staging-publishable-key>`
+7. Deploy or smoke the staging lane against that env file:
+   - `npm run cf:pages:staging:deploy -- --env-file .env.staging.local`
+   - `npm run cf:pages:staging:auth-preflight -- --env-file .env.staging.local`
+   - `npm run cf:pages:staging:auth-smoke -- --env-file .env.staging.local`
+   - `npm run cf:pages:staging:sync-smoke -- --env-file .env.staging.local`
 
 What still requires account access:
 
