@@ -10,12 +10,13 @@ const DEFAULT_BRANCH = 'main';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function printUsage() {
-  console.log(`Holdfast Pages validation
+  console.log(`Holdfast Pages deployment helper
 
 Usage:
   node scripts/pages-validation.mjs
   node scripts/pages-validation.mjs --project holdfast-validation --create --deploy
   node scripts/pages-validation.mjs --project holdfast-validation --create --deploy --smoke
+  node scripts/pages-validation.mjs --project holdfast --create --deploy --base-url https://holdfast.xylent.studio
   node scripts/pages-validation.mjs --auth-preflight --base-url https://holdfast-validation.pages.dev
   node scripts/pages-validation.mjs --auth-smoke --base-url https://holdfast-validation.pages.dev
   node scripts/pages-validation.mjs --smoke --base-url https://holdfast-validation.pages.dev
@@ -221,7 +222,7 @@ function requireBuildEnv(envValues) {
 
   if (missing.length) {
     throw new Error(
-      `Missing build-time auth env: ${missing.join(', ')}. Add them to .env or the shell before deploying hosted validation.`,
+      `Missing build-time auth env: ${missing.join(', ')}. Add them to .env or the shell before deploying hosted Pages.`,
     );
   }
 }
@@ -268,6 +269,18 @@ function getProjectDomain(project) {
   return project.domain ?? project['Project Domains'] ?? null;
 }
 
+function getProjectDomains(project) {
+  const raw = getProjectDomain(project);
+  if (!raw) {
+    return [];
+  }
+
+  return String(raw)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function getLatestDeployment(projectName) {
   const raw = run(
     'npx',
@@ -285,8 +298,11 @@ function getCompatibilityDate() {
 
 function printStatus(project, envValues, options) {
   const latestDeployment = project ? getLatestDeployment(options.project) : null;
+  const role = options.project === DEFAULT_PROJECT ? 'validation' : 'production';
+  const projectDomains = project ? getProjectDomains(project) : [];
 
-  console.log('Holdfast Pages validation status');
+  console.log('Holdfast Pages status');
+  console.log(`- Role: ${role}`);
   console.log(`- Pages project: ${options.project}`);
   console.log(`- Project exists: ${project ? 'yes' : 'no'}`);
   console.log(
@@ -296,18 +312,25 @@ function printStatus(project, envValues, options) {
         : 'no'
     }`,
   );
-  console.log(
-    `- Hosted origin: ${
-      project ? `https://${getProjectDomain(project)}` : currentPagesOrigin(options)
-    }`,
-  );
+  if (projectDomains.length) {
+    console.log(
+      `- Project domains: ${projectDomains.map((domain) => `https://${domain}`).join(', ')}`,
+    );
+  }
+  console.log(`- Served base URL: ${currentPagesOrigin(options)}`);
   console.log(`- Hosted callback: ${currentPagesCallback(options)}`);
   if (latestDeployment?.Deployment) {
     console.log(`- Latest deployment: ${latestDeployment.Deployment}`);
   }
-  console.log(
-    '- Reminder: keep the eventual production Pages project Git-integrated; use this validation project as a disposable hosted smoke surface.',
-  );
+  if (role === 'validation') {
+    console.log(
+      '- Reminder: this is the disposable hosted smoke surface. Keep it separate from the production hostname.',
+    );
+  } else {
+    console.log(
+      '- Reminder: production is currently a direct-upload Pages project. If you later want Git integration, replace it intentionally instead of assuming Cloudflare can switch modes.',
+    );
+  }
 }
 
 function runPlaywrightSuite(suiteArgs, envValues, extraEnv = {}) {
@@ -426,9 +449,9 @@ async function main() {
       '--upload-source-maps',
     ]);
 
-    console.log(`Hosted validation URL: ${currentPagesOrigin(options)}`);
+    console.log(`Hosted URL: ${currentPagesOrigin(options)}`);
     console.log(
-      'Add these before Google hosted sign-in smoke if you have not already:',
+      'Add these before hosted sign-in smoke if you have not already:',
     );
     console.log(`- Supabase redirect allow-list: ${currentPagesCallback(options)}`);
     console.log(
@@ -455,7 +478,7 @@ async function main() {
   if (options.smoke) {
     if (!options.baseUrl && !projectExists && !options.deploy) {
       throw new Error(
-        `Pages project ${options.project} does not exist. Pass --base-url or create and deploy the validation project first.`,
+        `Pages project ${options.project} does not exist. Pass --base-url or create and deploy the project first.`,
       );
     }
 

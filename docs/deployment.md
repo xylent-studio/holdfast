@@ -2,20 +2,18 @@
 
 ## Current Release Posture
 
-Holdfast is not ready for public deployment yet.
+Holdfast now has a real production Pages project and a live production hostname.
 
-The repo is prepared for the eventual Cloudflare release, but the public production Pages project should not be created until:
-
-- the signed-out landing and account-attach flow are working
-- auth feels at least as trustworthy as the prototype
-- sync is safe enough that using the hosted app will not erode trust
+That does not mean launch quality is finished.
 
 As of April 20, 2026:
 
 - local Cloudflare CLI auth is working
 - a disposable validation project exists at `https://holdfast-validation.pages.dev`
-- the production project does not exist yet
-- no production hostname is attached yet
+- a production direct-upload Pages project exists at `https://holdfast-5oz.pages.dev`
+- the custom hostname `https://holdfast.xylent.studio` is attached and serving
+- hosted shell smoke passes on the production hostname
+- production auth smoke is still blocked because Supabase Auth URL configuration is generating magic-link redirects back to the validation origin
 
 ## Chosen Hosting Direction
 
@@ -26,53 +24,56 @@ As of April 20, 2026:
 
 ## Deployment Mode Choice
 
-When Holdfast is ready to go public, use Cloudflare Pages with Git integration.
+Holdfast is currently hosted on Cloudflare Pages as a direct-upload project.
 
-Reasons:
+Current production mode:
 
-- it matches the GitHub-first workflow
-- it gives preview deployments for pull requests
-- it is the cleanest default for a frontend-heavy React app
+- project name: `holdfast`
+- project domain: `holdfast-5oz.pages.dev`
+- custom hostname: `holdfast.xylent.studio`
+- deployment path: Wrangler from this repo
+
+Why this changed:
+
+- the real hostname needed to become live now
+- the Cloudflare Git-integration path was not available through the current automation surface
+- direct upload is acceptable because GitHub remains the source of truth and the deploy path is scripted in-repo
 
 Important constraint:
 
-- Cloudflare documents that Pages projects created with Git integration cannot later switch to Direct Upload
+- Cloudflare documents that Direct Upload projects cannot switch to Git integration later
 
-That is acceptable here because GitHub is already the source of truth.
+That means if Git integration becomes a must-have later, replace the production Pages project intentionally and reattach the custom hostname on purpose.
 
 ## Hosted Validation Track
 
-Before public launch, Holdfast now uses a separate disposable Pages project for hosted smoke:
+Holdfast still keeps a separate disposable Pages project for hosted smoke:
 
 - validation project: `holdfast-validation`
 - validation origin: `https://holdfast-validation.pages.dev`
 - current repo command: `npm run cf:pages:validate`
 
-This is intentionally separate from the eventual production project.
+This stays separate from production.
 
 Why:
 
-- it lets the repo exercise real hosted auth/callback/offline behavior now
-- it keeps the eventual production `holdfast` project clean for Git integration
-- it avoids locking the production project into Direct Upload just to get early hosted smoke
+- it lets the repo exercise risky hosted auth/callback/offline behavior without touching the public hostname
+- it keeps a disposable smoke surface available even though production now exists
+- it isolates validation runs from the production domain when needed
 
 Before provider-backed hosted auth smoke, run:
 
 - `npm run cf:pages:auth-preflight`
 
-That preflight uses a server-only Supabase key from the shell to verify that generated email-link redirects stay on the hosted validation origin instead of falling back to localhost or another stale Site URL.
-
 Once that passes, run:
 
 - `npm run cf:pages:auth-smoke`
 
-That deploys the current build to the validation project, then uses server-side generated magic links to exercise hosted sign-in, recovery, and wrong-account protection against that live deployment.
-
 Rules:
 
 - do not attach `holdfast.xylent.studio` to the validation project
-- do not treat the validation project as public launch
-- keep production release gates tied to trust, not to the existence of a disposable hosted URL
+- do not treat the validation project as launch proof by itself
+- keep production release gates tied to trust, not to the existence of a hosted URL
 
 ## Repo Baseline
 
@@ -80,20 +81,18 @@ The repo now includes:
 
 - project-local `wrangler`
 - `wrangler.jsonc` for source-controlled Pages configuration
-- a repo-local Pages validation script at `scripts/pages-validation.mjs`
-- npm scripts for Cloudflare auth, Pages status, and hosted validation
+- a repo-local Pages deployment helper at `scripts/pages-validation.mjs`
+- npm scripts for validation and production Pages status, deploy, and smoke
 - Playwright smoke that can run locally or against a hosted URL
 - pinned local Node version files for reproducible builds
 
-This does not create a public deployment by itself.
-
-## Required Setup Before Public Launch
+## Required Setup For Trustworthy Public Use
 
 ### Cloudflare
 
 - authenticate `wrangler`
 - confirm the `xylent.studio` zone is accessible in the same Cloudflare account used for Pages
-- create the Pages project only after the product gates below are met
+- keep the production and validation projects distinct
 
 ### Supabase
 
@@ -107,6 +106,7 @@ This does not create a public deployment by itself.
   - `https://holdfast-validation.pages.dev/auth/callback`
   - `https://holdfast.xylent.studio/auth/callback`
   - preview callback URLs before public preview testing
+- set Supabase Auth URL configuration so production-domain magic links resolve to `https://holdfast.xylent.studio`, not back to validation
 
 Current repo/backend foundation already includes:
 
@@ -118,7 +118,7 @@ Current repo/backend foundation already includes:
 ### Google OAuth
 
 - create the Google OAuth client
-- add authorized JavaScript origins for localhost, preview, and production
+- add authorized JavaScript origins for localhost, validation, and production
 - add authorized redirect URIs for the callback route
 - set app name, support email, and branding basics
 - publish a privacy policy URL before public rollout
@@ -134,28 +134,25 @@ Current repo/backend foundation already includes:
 
 ## Release Sequence
 
-1. Keep using the disposable validation project for hosted smoke.
-2. Add the validation `pages.dev` callback/origin to Supabase and Google before provider-backed hosted auth smoke.
-3. Finish auth and sync parity.
-4. Create the production Cloudflare Pages project from the GitHub repository.
-5. Set build command `npm run build`.
-6. Set build output directory `dist`.
-7. Pin the Pages Node version to `24.14.0`.
-8. Add production environment variables.
-9. Configure Supabase Site URL and redirect allow-list entries for dev, validation, preview, and production.
-10. Attach `holdfast.xylent.studio`.
-11. Decide whether to keep or redirect the `*.pages.dev` hostname.
-12. Run hosted smoke tests across desktop, mobile, online, and offline states.
-13. Verify service-worker install/update and offline shell behavior on the hosted build.
+1. Keep using the disposable validation project for risky hosted smoke.
+2. Keep the production project deployed from the repo helper: `npm run cf:pages:prod:deploy`.
+3. Configure Supabase Site URL and redirect allow-list entries so production-domain auth stops falling back to validation.
+4. Run hosted smoke tests across validation and production hostnames.
+5. Verify provider-backed auth on production.
+6. Verify service-worker install/update and offline shell behavior on the hosted build.
+7. Run broader multi-device sync and attachment smoke on real accounts.
+8. Decide whether to keep or redirect the `*.pages.dev` hostname.
+9. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
 
 ## Current Hosted State
 
 - local Wrangler access is working in the current dev environment
 - a disposable validation project exists at `holdfast-validation.pages.dev`
-- the production Pages project does not exist yet
-- no production hostname is attached yet
-- hosted smoke is now possible without creating the production project
-- public release remains blocked by product readiness, not CLI authentication
+- a production Pages project exists at `holdfast-5oz.pages.dev`
+- `holdfast.xylent.studio` is attached and currently serves the app
+- hosted shell smoke passes on the production hostname
+- provider-backed production auth smoke currently fails because Supabase still generates magic-link redirects to the validation origin
+- public launch quality is now blocked by auth/sync trust work, not by Cloudflare project setup
 
 ## Useful Checks
 
@@ -165,6 +162,12 @@ Current repo/backend foundation already includes:
 - `npm run cf:pages:auth-preflight`
 - `npm run cf:pages:auth-smoke`
 - `npm run cf:pages:validate`
+- `npm run cf:pages:prod:status`
+- `npm run cf:pages:prod:deploy`
+- `npm run cf:pages:prod:smoke`
+- `npm run cf:pages:prod:auth-preflight`
+- `npm run cf:pages:prod:auth-smoke`
 - `npm run build`
 - `npm run test:e2e`
 - `npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev`
+- `npm run test:e2e:hosted -- --base-url https://holdfast.xylent.studio`

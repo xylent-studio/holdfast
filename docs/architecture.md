@@ -132,9 +132,10 @@ The frontend output is intentionally compatible with Cloudflare Pages. Supabase 
 Current hosting posture:
 
 - the repo is prepared for Cloudflare Pages through `wrangler.jsonc`
-- a disposable validation project can be exercised without creating the production project
-- public deployment is intentionally gated until the auth flow is at least as trustworthy as the prototype
-- the production hostname is planned as `holdfast.xylent.studio`
+- a disposable validation project exists at `holdfast-validation.pages.dev`
+- a production direct-upload Pages project exists at `holdfast-5oz.pages.dev`
+- the production hostname `holdfast.xylent.studio` now points at that Pages project
+- public rollout is still gated by trust work, especially production-domain auth parity and broader multi-device sync validation
 - GitHub remains the source-control system of record
 
 ## Expected Sync Model

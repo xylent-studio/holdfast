@@ -15,7 +15,7 @@ This repo contains:
 - IndexedDB-backed local persistence shaped as a durable device replica
 - a sync-ready mutation queue and Supabase boundary for signed-in continuity
 - a device-guest to member auth model with Google first and magic-link fallback
-- Cloudflare Pages and Wrangler groundwork for the eventual public deploy
+- Cloudflare Pages and Wrangler groundwork for the current hosted deploy
 - control docs, implementation docs, and agent guidance for long-term development
 - archived source artifacts from the prototype and manager control-pack drop
 
@@ -68,6 +68,19 @@ npm run test
 npm run build
 ```
 
+## Hosted State
+
+- validation smoke surface: [holdfast-validation.pages.dev](https://holdfast-validation.pages.dev)
+- production Pages project: [holdfast-5oz.pages.dev](https://holdfast-5oz.pages.dev)
+- production hostname: [holdfast.xylent.studio](https://holdfast.xylent.studio)
+
+Current reality:
+
+- the production shell is live on `holdfast.xylent.studio`
+- production Pages is currently a direct-upload project named `holdfast`
+- hosted shell smoke passes on production
+- production auth smoke is still blocked until Supabase Auth URL configuration stops generating magic-link redirects back to the validation origin
+
 ## Local Tooling
 
 Verified in this workspace:
@@ -95,7 +108,13 @@ npm run cf:pages:status
 npm run cf:pages:auth-preflight
 npm run cf:pages:auth-smoke
 npm run cf:pages:validate
+npm run cf:pages:prod:status
+npm run cf:pages:prod:deploy
+npm run cf:pages:prod:smoke
+npm run cf:pages:prod:auth-preflight
+npm run cf:pages:prod:auth-smoke
 npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev
+npm run test:e2e:hosted -- --base-url https://holdfast.xylent.studio
 npm run supabase -- --version
 npm run supabase:link
 npm run supabase:status

@@ -47,10 +47,10 @@ Status: mostly complete
 
 - authenticate Cloudflare tooling and MCP access
 - keep using the disposable Pages validation project for hosted smoke
-- create the production Cloudflare Pages project once auth parity is good enough
-- connect `holdfast.xylent.studio`
-- set production environment variables in Pages
+- production Pages project exists and `holdfast.xylent.studio` is live
+- fix Supabase Auth URL configuration so production-domain auth no longer falls back to validation
 - decide whether to keep or redirect the `*.pages.dev` hostname
+- run provider-backed auth smoke on production
 - run cross-device and offline smoke tests against the hosted build
 
 ## Phase 6: Product Refinement
