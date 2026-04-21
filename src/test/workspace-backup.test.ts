@@ -17,6 +17,7 @@ import {
   createList,
   createListItem,
   createRoutine,
+  deleteItem,
   toggleReadiness,
   updateRoutine,
   updateSettings,
@@ -488,6 +489,114 @@ describe('workspace backup restore', () => {
     await expect(getWorkspaceRestoreUndoAvailability()).resolves.toMatchObject({
       mode: 'none',
       summary: null,
+    });
+  });
+
+  it('preserves queued deletions for records already removed locally', async () => {
+    const emptyBackup = await createWorkspaceBackup();
+
+    await createItem({
+      title: 'Delete me later',
+      kind: 'task',
+      lane: 'home',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+    const [item] = await db.items.toArray();
+    await addFilesToItem(item!.id, [
+      new File(['queued-delete'], 'queued-delete.txt', { type: 'text/plain' }),
+    ]);
+    const [attachment] = await db.attachments.toArray();
+
+    await deleteItem(item!.id);
+
+    const backupFile = new File(
+      [JSON.stringify(emptyBackup)],
+      'holdfast-backup.json',
+      { type: 'application/json' },
+    );
+    await importWorkspaceBackupFile(backupFile);
+
+    const mutations = await db.mutationQueue.toArray();
+    expect(mutations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: 'item',
+          entityId: item!.id,
+          status: 'pending',
+          type: 'item.deleted',
+        }),
+        expect.objectContaining({
+          entity: 'attachment',
+          entityId: attachment!.id,
+          status: 'pending',
+          type: 'attachment.deleted',
+        }),
+      ]),
+    );
+  });
+
+  it('queues metadata-only attachment restores so remote metadata can be recreated', async () => {
+    await createItem({
+      title: 'Metadata only attachment',
+      kind: 'task',
+      lane: 'home',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+    const [item] = await db.items.toArray();
+    await addFilesToItem(item!.id, [
+      new File(['missing-blob'], 'missing.txt', { type: 'text/plain' }),
+    ]);
+    const [attachment] = await db.attachments.toArray();
+    await db.attachmentBlobs.delete(attachment!.blobId);
+
+    const backup = await createWorkspaceBackup();
+    expect(backup.summary.attachmentPayloadMissingCount).toBe(1);
+    expect(backup.attachments[0]?.payloadState).toBe('missing');
+
+    const backupFile = new File(
+      [JSON.stringify(backup)],
+      'holdfast-backup.json',
+      { type: 'application/json' },
+    );
+
+    await resetLocalDatabase();
+
+    await importWorkspaceBackupFile(backupFile);
+
+    const restoredAttachment = await db.attachments.get(attachment!.id);
+    expect(restoredAttachment).toMatchObject({
+      id: attachment!.id,
+      name: 'missing.txt',
+      syncState: 'pending',
+    });
+    expect(await db.attachmentBlobs.count()).toBe(0);
+
+    const attachmentMutation = (await db.mutationQueue.toArray()).find(
+      (mutation) =>
+        mutation.entity === 'attachment' &&
+        mutation.entityId === attachment!.id &&
+        mutation.type === 'attachment.restored',
+    );
+
+    expect(attachmentMutation).toMatchObject({
+      payload: expect.objectContaining({
+        payloadState: 'missing',
+      }),
+      status: 'pending',
     });
   });
 });

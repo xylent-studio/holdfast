@@ -557,16 +557,23 @@ async function pushCurrentRecord(
     case 'attachment': {
       const attachment = current as AttachmentRecord;
       const blobRow = await db.attachmentBlobs.get(attachment.blobId);
-      if (!blobRow) {
+      const payloadState =
+        (
+          mutation.payload as {
+            payloadState?: 'embedded' | 'missing';
+          }
+        ).payloadState ?? 'embedded';
+
+      if (blobRow) {
+        await uploadAttachmentBlob(
+          userId,
+          attachment.id,
+          blobRow.blob,
+          attachment.mimeType,
+        );
+      } else if (payloadState !== 'missing') {
         throw new Error("Couldn't find the attachment file to sync.");
       }
-
-      await uploadAttachmentBlob(
-        userId,
-        attachment.id,
-        blobRow.blob,
-        attachment.mimeType,
-      );
       const { error } = await client
         .from('attachments')
         .upsert(toRemoteAttachmentRow(userId, attachment));

@@ -342,10 +342,11 @@ Current restore behavior is deliberate:
 - day and week history from the backup restore by date instead of blindly wiping every local row
 - the last restore records an on-device undo snapshot so the user can reverse it cleanly
 - the mutation queue is rebuilt from the final restored state so signed-in sync can catch up honestly
+- pre-existing non-acknowledged deletions that still matter stay queued instead of being erased by the rebuild
 
 Attachment behavior during restore:
 
 - embedded attachment payloads restore locally and queue for sync
-- missing-payload attachments restore as metadata-only rows and rely on later rehydration when possible
+- missing-payload attachments restore as metadata-only rows, reintroduce their metadata to sync, and rely on later rehydration when possible
 
 This keeps backup restore trustworthy without pretending that every historical row should be deleted blindly across devices.

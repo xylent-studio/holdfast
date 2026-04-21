@@ -92,6 +92,8 @@ export interface WorkspaceRestoreUndoAvailability {
   summary: WorkspaceBackupSummary | null;
 }
 
+type AttachmentRestorePayloadState = 'embedded' | 'missing';
+
 const BackupItemRecordSchema = ItemRecordSchema.omit({ syncState: true });
 const BackupListRecordSchema = ListRecordSchema.omit({ syncState: true });
 const BackupListItemRecordSchema = ListItemRecordSchema.omit({ syncState: true });
@@ -277,6 +279,54 @@ function createRestoreMutationRecord(
   });
 }
 
+function isDeletedMutation(mutation: MutationRecord): boolean {
+  return mutation.type.endsWith('.deleted');
+}
+
+function mutationEntityKey(
+  entity: MutationRecord['entity'],
+  entityId: string,
+): string {
+  return `${entity}:${entityId}`;
+}
+
+function isEntityPresentInFinalState(
+  entity: MutationRecord['entity'],
+  entityId: string,
+  finalState: {
+    itemIds: Set<string>;
+    listIds: Set<string>;
+    listItemIds: Set<string>;
+    routineIds: Set<string>;
+    attachmentIds: Set<string>;
+  },
+): boolean {
+  switch (entity) {
+    case 'item':
+      return finalState.itemIds.has(entityId);
+    case 'list':
+      return finalState.listIds.has(entityId);
+    case 'listItem':
+      return finalState.listItemIds.has(entityId);
+    case 'routine':
+      return finalState.routineIds.has(entityId);
+    case 'attachment':
+      return finalState.attachmentIds.has(entityId);
+    case 'dailyRecord':
+    case 'weeklyRecord':
+    case 'settings':
+      return false;
+  }
+}
+
+function preserveQueuedDeletionMutation(mutation: MutationRecord): MutationRecord {
+  return MutationRecordSchema.parse({
+    ...mutation,
+    status: 'pending',
+    lastError: null,
+  });
+}
+
 function normalizeImportedItem(
   record: BackupItemRecord,
   restoredAt: string,
@@ -448,6 +498,7 @@ async function applyWorkspaceBackup(
     currentWeeklyRecords,
     currentRoutines,
     currentAttachments,
+    currentMutations,
   ] = await Promise.all([
     db.items.toArray(),
     db.lists.toArray(),
@@ -456,6 +507,7 @@ async function applyWorkspaceBackup(
     db.weeklyRecords.toArray(),
     db.routines.toArray(),
     db.attachments.toArray(),
+    db.mutationQueue.toArray(),
   ]);
 
   const finalItems = parsedBackup.items.map((record) =>
@@ -480,20 +532,23 @@ async function applyWorkspaceBackup(
 
   const finalAttachments: AttachmentRecord[] = [];
   const finalAttachmentBlobs = [];
-  const attachmentMutationIds = new Set<string>();
+  const attachmentPayloadStates = new Map<
+    string,
+    AttachmentRestorePayloadState
+  >();
 
   for (const entry of parsedBackup.attachments) {
     if (!finalItemIds.has(entry.record.itemId)) {
       continue;
     }
 
-    const syncState = entry.payloadState === 'embedded' ? 'pending' : 'synced';
+    attachmentPayloadStates.set(entry.record.id, entry.payloadState);
     finalAttachments.push(
       AttachmentRecordSchema.parse({
         ...entry.record,
         schemaVersion: SCHEMA_VERSION,
-        updatedAt: entry.payloadState === 'embedded' ? restoredAt : entry.record.updatedAt,
-        syncState,
+        updatedAt: restoredAt,
+        syncState: 'pending',
       }),
     );
 
@@ -506,10 +561,16 @@ async function applyWorkspaceBackup(
           createdAt: restoredAt,
         }),
       );
-      attachmentMutationIds.add(entry.record.id);
     }
   }
   const finalAttachmentIds = new Set(finalAttachments.map((record) => record.id));
+  const finalRestoreState = {
+    itemIds: finalItemIds,
+    listIds: finalListIds,
+    listItemIds: finalListItemIds,
+    routineIds: finalRoutineIds,
+    attachmentIds: finalAttachmentIds,
+  };
 
   const importedDailyRecords = parsedBackup.dailyRecords.map((record) =>
     normalizeImportedDailyRecord(record, restoredAt),
@@ -571,10 +632,31 @@ async function applyWorkspaceBackup(
       .map((record) => record.id),
   );
 
-  const mutations: MutationRecord[] = [];
+  const preservedDeletionMutations = currentMutations
+    .filter(
+      (mutation) =>
+        mutation.status !== 'acknowledged' &&
+        isDeletedMutation(mutation) &&
+        !isEntityPresentInFinalState(
+          mutation.entity,
+          mutation.entityId,
+          finalRestoreState,
+        ),
+    )
+    .map(preserveQueuedDeletionMutation);
+  const preservedDeletionKeys = new Set(
+    preservedDeletionMutations.map((mutation) =>
+      mutationEntityKey(mutation.entity, mutation.entityId),
+    ),
+  );
+
+  const mutations: MutationRecord[] = [...preservedDeletionMutations];
 
   for (const itemId of currentItemIds) {
-    if (!finalItemIds.has(itemId)) {
+    if (
+      !finalItemIds.has(itemId) &&
+      !preservedDeletionKeys.has(mutationEntityKey('item', itemId))
+    ) {
       mutations.push(
         createRestoreMutationRecord('item', itemId, 'item.deleted', { itemId }, restoredAt),
       );
@@ -582,7 +664,10 @@ async function applyWorkspaceBackup(
   }
 
   for (const listId of currentListIds) {
-    if (!finalListIds.has(listId)) {
+    if (
+      !finalListIds.has(listId) &&
+      !preservedDeletionKeys.has(mutationEntityKey('list', listId))
+    ) {
       mutations.push(
         createRestoreMutationRecord('list', listId, 'list.deleted', { listId }, restoredAt),
       );
@@ -590,7 +675,10 @@ async function applyWorkspaceBackup(
   }
 
   for (const listItemId of currentListItemIds) {
-    if (!finalListItemIds.has(listItemId)) {
+    if (
+      !finalListItemIds.has(listItemId) &&
+      !preservedDeletionKeys.has(mutationEntityKey('listItem', listItemId))
+    ) {
       mutations.push(
         createRestoreMutationRecord(
           'listItem',
@@ -604,7 +692,10 @@ async function applyWorkspaceBackup(
   }
 
   for (const routineId of currentRoutineIds) {
-    if (!finalRoutineIds.has(routineId)) {
+    if (
+      !finalRoutineIds.has(routineId) &&
+      !preservedDeletionKeys.has(mutationEntityKey('routine', routineId))
+    ) {
       mutations.push(
         createRestoreMutationRecord(
           'routine',
@@ -618,7 +709,10 @@ async function applyWorkspaceBackup(
   }
 
   for (const attachmentId of currentAttachmentIds) {
-    if (!finalAttachmentIds.has(attachmentId)) {
+    if (
+      !finalAttachmentIds.has(attachmentId) &&
+      !preservedDeletionKeys.has(mutationEntityKey('attachment', attachmentId))
+    ) {
       mutations.push(
         createRestoreMutationRecord(
           'attachment',
@@ -695,16 +789,15 @@ async function applyWorkspaceBackup(
     ),
   );
   for (const record of finalAttachments) {
-    if (!attachmentMutationIds.has(record.id)) {
-      continue;
-    }
-
     mutations.push(
       createRestoreMutationRecord(
         'attachment',
         record.id,
         'attachment.restored',
-        { attachment: record },
+        {
+          attachment: record,
+          payloadState: attachmentPayloadStates.get(record.id) ?? 'embedded',
+        },
         restoredAt,
       ),
     );
