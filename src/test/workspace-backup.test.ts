@@ -27,6 +27,9 @@ import { HOLDFAST_DB_NAME, db } from '@/storage/local/db';
 import {
   createWorkspaceBackup,
   createWorkspaceBackupExport,
+  getWorkspaceRestoreUndoAvailability,
+  importWorkspaceBackupFile,
+  undoLastWorkspaceRestore,
   workspaceBackupFilename,
 } from '@/storage/local/workspace-backup';
 
@@ -256,6 +259,235 @@ describe('workspace backup export', () => {
     expect(backup.attachments[0]).toMatchObject({
       dataUrl: null,
       payloadState: 'missing',
+    });
+  });
+});
+
+describe('workspace backup restore', () => {
+  it('restores a backup by replacing current workspace objects and merging day history by date', async () => {
+    await createItem({
+      title: 'Restore coffee',
+      kind: 'task',
+      lane: 'home',
+      status: 'upcoming',
+      body: 'From backup',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: '2026-04-21',
+      scheduledTime: '09:00',
+    });
+    await createList({
+      title: 'Restore groceries',
+      kind: 'replenishment',
+      lane: 'home',
+      pinned: true,
+    });
+    const [backupList] = await db.lists.toArray();
+    await createListItem({
+      listId: backupList!.id,
+      title: 'Eggs',
+      body: 'One dozen',
+    });
+    await createRoutine();
+    const [backupRoutine] = await db.routines.toArray();
+    await updateRoutine(backupRoutine!.id, {
+      title: 'Restore pantry',
+      lane: 'home',
+      destination: 'upcoming',
+      weekdays: [1, 3, 5],
+      scheduledTime: '08:30',
+      notes: 'Backup routine',
+    });
+    await updateSettings({
+      direction: 'Restore direction',
+      standards: 'Restore standards',
+      why: 'Restore why',
+    });
+    await toggleReadiness(CURRENT_DATE, 'water');
+    await createItem({
+      title: 'Receipt item',
+      kind: 'task',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+    const backupItems = await db.items.toArray();
+    const attachmentItem = backupItems.find((item) => item.title === 'Receipt item')!;
+    await addFilesToItem(attachmentItem.id, [
+      new File(['backup-attachment'], 'restore.txt', { type: 'text/plain' }),
+    ]);
+
+    const backup = await createWorkspaceBackup();
+    const backupFile = new File(
+      [JSON.stringify(backup)],
+      'holdfast-backup.json',
+      { type: 'application/json' },
+    );
+
+    await resetLocalDatabase();
+
+    await createItem({
+      title: 'Current item',
+      kind: 'task',
+      lane: 'work',
+      status: 'today',
+      body: 'Current body',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: CURRENT_DATE,
+      scheduledTime: '10:00',
+    });
+    await createRoutine();
+    const [currentRoutine] = await db.routines.toArray();
+    await updateRoutine(currentRoutine!.id, {
+      title: 'Current routine',
+      lane: 'work',
+      destination: 'today',
+      weekdays: [1],
+      scheduledTime: '11:00',
+      notes: 'Current routine notes',
+    });
+    await updateSettings({
+      direction: 'Current direction',
+      standards: 'Current standards',
+      why: 'Current why',
+    });
+    await toggleReadiness('2026-04-25' as DateKey, 'food');
+
+    const result = await importWorkspaceBackupFile(backupFile);
+
+    expect(result.summary).toMatchObject({
+      itemCount: backup.summary.itemCount,
+      listCount: backup.summary.listCount,
+      attachmentCount: backup.summary.attachmentCount,
+    });
+
+    const restoredItems = (await db.items.toArray()).sort((left, right) =>
+      left.title.localeCompare(right.title),
+    );
+    expect(restoredItems.map((item) => item.title)).toEqual(
+      expect.arrayContaining(['Receipt item', 'Restore coffee']),
+    );
+    expect(restoredItems.map((item) => item.title)).not.toContain('Current item');
+
+    const restoredLists = await db.lists.toArray();
+    expect(restoredLists[0]?.title).toBe('Restore groceries');
+
+    const restoredListItems = await db.listItems.toArray();
+    expect(restoredListItems[0]?.title).toBe('Eggs');
+
+    const restoredRoutines = await db.routines.toArray();
+    expect(restoredRoutines[0]?.title).toBe('Restore pantry');
+
+    const restoredSettings = await db.settings.get('settings');
+    expect(restoredSettings).toMatchObject({
+      direction: 'Restore direction',
+      standards: 'Restore standards',
+      why: 'Restore why',
+    });
+
+    const restoredAttachments = await db.attachments.toArray();
+    expect(restoredAttachments).toHaveLength(1);
+    expect(restoredAttachments[0]?.name).toBe('restore.txt');
+    expect(await db.attachmentBlobs.count()).toBe(1);
+
+    const dailyDates = (await db.dailyRecords.toArray()).map((record) => record.date);
+    expect(dailyDates).toEqual(
+      expect.arrayContaining([CURRENT_DATE, '2026-04-25']),
+    );
+
+    const mutations = await db.mutationQueue.toArray();
+    expect(mutations.map((mutation) => mutation.type)).toEqual(
+      expect.arrayContaining([
+        'item.restored',
+        'list.restored',
+        'list-item.restored',
+        'routine.restored',
+        'settings.restored',
+        'daily.restored',
+        'attachment.restored',
+        'item.deleted',
+        'routine.deleted',
+      ]),
+    );
+
+    await expect(getWorkspaceRestoreUndoAvailability()).resolves.toMatchObject({
+      mode: 'recorded',
+      summary: result.summary,
+    });
+  });
+
+  it('undoes the last workspace restore back to the previous workspace snapshot', async () => {
+    await createItem({
+      title: 'Restore later',
+      kind: 'task',
+      lane: 'home',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+    const backup = await createWorkspaceBackup();
+    const backupFile = new File(
+      [JSON.stringify(backup)],
+      'holdfast-backup.json',
+      { type: 'application/json' },
+    );
+
+    await resetLocalDatabase();
+
+    await createItem({
+      title: 'Current only',
+      kind: 'task',
+      lane: 'work',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+    await createList({
+      title: 'Current list',
+      kind: 'project',
+      lane: 'work',
+    });
+
+    await importWorkspaceBackupFile(backupFile);
+
+    let titles = (await db.items.toArray()).map((item) => item.title);
+    expect(titles).toContain('Restore later');
+    expect(titles).not.toContain('Current only');
+
+    const undoResult = await undoLastWorkspaceRestore();
+    expect(undoResult.summary.itemCount).toBe(1);
+
+    titles = (await db.items.toArray()).map((item) => item.title);
+    expect(titles).toContain('Current only');
+    expect(titles).not.toContain('Restore later');
+    expect(await db.lists.toArray()).toMatchObject([
+      expect.objectContaining({ title: 'Current list' }),
+    ]);
+
+    await expect(getWorkspaceRestoreUndoAvailability()).resolves.toMatchObject({
+      mode: 'none',
+      summary: null,
     });
   });
 });

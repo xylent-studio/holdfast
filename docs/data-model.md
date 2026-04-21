@@ -331,3 +331,21 @@ This keeps the file user-meaningful instead of leaking device bookkeeping into a
 
 Per-record sync bookkeeping is stripped from the exported JSON.
 If an attachment file is missing on the device and cannot be rehydrated, the backup now preserves the attachment metadata with an explicit missing-payload marker instead of failing the whole export.
+
+## Manual Backup Restore
+
+The app can now restore a Holdfast backup file back into the current device workspace.
+
+Current restore behavior is deliberate:
+
+- items, lists, list items, routines, settings, and attachment state from the backup replace the current device workspace
+- day and week history from the backup restore by date instead of blindly wiping every local row
+- the last restore records an on-device undo snapshot so the user can reverse it cleanly
+- the mutation queue is rebuilt from the final restored state so signed-in sync can catch up honestly
+
+Attachment behavior during restore:
+
+- embedded attachment payloads restore locally and queue for sync
+- missing-payload attachments restore as metadata-only rows and rely on later rehydration when possible
+
+This keeps backup restore trustworthy without pretending that every historical row should be deleted blindly across devices.

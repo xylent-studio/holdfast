@@ -12,6 +12,7 @@ import type {
   RoutineRecord,
   SettingsRecord,
   SyncStateRecord,
+  WorkspaceRestoreSessionRecord,
   WeeklyRecord,
 } from '@/domain/schemas/records';
 
@@ -29,6 +30,7 @@ export class HoldfastDatabase extends Dexie {
   attachmentBlobs!: Table<AttachmentBlobRecord, string>;
   mutationQueue!: Table<MutationRecord, string>;
   prototypeRecoverySessions!: Table<PrototypeRecoverySessionRecord, string>;
+  workspaceRestoreSessions!: Table<WorkspaceRestoreSessionRecord, string>;
   syncState!: Table<SyncStateRecord, string>;
 
   constructor(name = HOLDFAST_DB_NAME) {
@@ -136,6 +138,24 @@ export class HoldfastDatabase extends Dexie {
       attachmentBlobs: 'id, createdAt',
       mutationQueue: 'id, entity, entityId, status, createdAt',
       prototypeRecoverySessions: 'id, createdAt, undoneAt',
+      syncState: 'id, updatedAt',
+    });
+
+    this.version(4).stores({
+      items:
+        'id, status, kind, lane, scheduledDate, updatedAt, routineId, sourceItemId, deletedAt',
+      lists: 'id, kind, pinned, updatedAt, archivedAt, deletedAt',
+      listItems:
+        'id, listId, status, position, promotedItemId, updatedAt, deletedAt',
+      dailyRecords: 'date, updatedAt',
+      weeklyRecords: 'weekStart, updatedAt',
+      routines: 'id, active, updatedAt, deletedAt',
+      settings: 'id, updatedAt',
+      attachments: 'id, itemId, kind, updatedAt, deletedAt',
+      attachmentBlobs: 'id, createdAt',
+      mutationQueue: 'id, entity, entityId, status, createdAt',
+      prototypeRecoverySessions: 'id, createdAt, undoneAt',
+      workspaceRestoreSessions: 'id, createdAt, undoneAt',
       syncState: 'id, updatedAt',
     });
   }

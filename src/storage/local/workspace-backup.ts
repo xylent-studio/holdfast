@@ -1,13 +1,32 @@
-import { SCHEMA_VERSION } from '@/domain/constants';
-import type {
-  AttachmentRecord,
-  DailyRecord,
-  ItemRecord,
-  ListItemRecord,
-  ListRecord,
-  RoutineRecord,
-  SettingsRecord,
-  WeeklyRecord,
+import { z } from 'zod';
+
+import {
+  SCHEMA_VERSION,
+  SETTINGS_ROW_ID,
+} from '@/domain/constants';
+import { nowIso } from '@/domain/dates';
+import {
+  AttachmentBlobRecordSchema,
+  AttachmentRecordSchema,
+  DailyRecordSchema,
+  ItemRecordSchema,
+  ListItemRecordSchema,
+  ListRecordSchema,
+  MutationRecordSchema,
+  RoutineRecordSchema,
+  SettingsRecordSchema,
+  type AttachmentRecord,
+  type DailyRecord,
+  type ItemRecord,
+  type ListItemRecord,
+  type ListRecord,
+  type MutationRecord,
+  type RoutineRecord,
+  type SettingsRecord,
+  type WorkspaceBackupSummary as WorkspaceBackupSummaryRecord,
+  WorkspaceRestoreSessionRecordSchema,
+  WeeklyRecordSchema,
+  type WeeklyRecord,
 } from '@/domain/schemas/records';
 import { getAttachmentDownload } from '@/storage/local/api';
 import { db } from '@/storage/local/db';
@@ -61,6 +80,59 @@ export interface WorkspaceBackupExport {
   filename: string;
 }
 
+export interface WorkspaceRestoreResult {
+  restoredAt: string;
+  sourceExportedAt: string;
+  summary: WorkspaceBackupSummary;
+}
+
+export interface WorkspaceRestoreUndoAvailability {
+  createdAt: string | null;
+  mode: 'none' | 'recorded';
+  summary: WorkspaceBackupSummary | null;
+}
+
+const BackupItemRecordSchema = ItemRecordSchema.omit({ syncState: true });
+const BackupListRecordSchema = ListRecordSchema.omit({ syncState: true });
+const BackupListItemRecordSchema = ListItemRecordSchema.omit({ syncState: true });
+const BackupDailyRecordSchema = DailyRecordSchema.omit({ syncState: true });
+const BackupWeeklyRecordSchema = WeeklyRecordSchema.omit({ syncState: true });
+const BackupRoutineRecordSchema = RoutineRecordSchema.omit({ syncState: true });
+const BackupSettingsRecordSchema = SettingsRecordSchema.omit({ syncState: true });
+const BackupAttachmentRecordSchema = AttachmentRecordSchema.omit({
+  syncState: true,
+});
+const WorkspaceBackupSummarySchema = z.object({
+  attachmentCount: z.number().int().nonnegative(),
+  attachmentPayloadMissingCount: z.number().int().nonnegative(),
+  dayCount: z.number().int().nonnegative(),
+  itemCount: z.number().int().nonnegative(),
+  listCount: z.number().int().nonnegative(),
+  listItemCount: z.number().int().nonnegative(),
+  routineCount: z.number().int().nonnegative(),
+  weekCount: z.number().int().nonnegative(),
+});
+const WorkspaceBackupAttachmentSchema = z.object({
+  dataUrl: z.string().nullable(),
+  payloadState: z.enum(['embedded', 'missing']),
+  record: BackupAttachmentRecordSchema,
+});
+const WorkspaceBackupFileSchema: z.ZodType<WorkspaceBackupFile> = z.object({
+  appSchemaVersion: z.number().int().positive(),
+  attachments: z.array(WorkspaceBackupAttachmentSchema),
+  dailyRecords: z.array(BackupDailyRecordSchema),
+  exportedAt: z.string(),
+  format: z.literal('holdfast-backup'),
+  items: z.array(BackupItemRecordSchema),
+  listItems: z.array(BackupListItemRecordSchema),
+  lists: z.array(BackupListRecordSchema),
+  routines: z.array(BackupRoutineRecordSchema),
+  settings: BackupSettingsRecordSchema.nullable(),
+  summary: WorkspaceBackupSummarySchema,
+  version: z.literal(1),
+  weeklyRecords: z.array(BackupWeeklyRecordSchema),
+});
+
 function compareByCreatedAt<T extends { createdAt: string; id: string }>(
   left: T,
   right: T,
@@ -102,19 +174,51 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 async function blobToDataUrl(blob: Blob, mimeType: string): Promise<string> {
+  const normalizedBlob =
+    blob instanceof Blob
+      ? blob
+      : new Blob(
+          [
+            typeof (blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> })
+              .arrayBuffer === 'function'
+              ? await (blob as Blob & { arrayBuffer: () => Promise<ArrayBuffer> })
+                  .arrayBuffer()
+              : (blob as BlobPart),
+          ],
+          {
+            type:
+              mimeType ||
+              (blob as Blob & { type?: string }).type ||
+              'application/octet-stream',
+          },
+        );
   const bytes = new Uint8Array(
-    typeof blob.arrayBuffer === 'function'
-      ? await blob.arrayBuffer()
+    typeof normalizedBlob.arrayBuffer === 'function'
+      ? await normalizedBlob.arrayBuffer()
       : await new Promise<ArrayBuffer>((resolve, reject) => {
           const reader = new FileReader();
           reader.onerror = () =>
             reject(reader.error ?? new Error("Couldn't read the attachment."));
           reader.onload = () => resolve(reader.result as ArrayBuffer);
-          reader.readAsArrayBuffer(blob);
+          reader.readAsArrayBuffer(normalizedBlob);
         }),
   );
-  const type = mimeType || blob.type || 'application/octet-stream';
+  const type = mimeType || normalizedBlob.type || 'application/octet-stream';
   return `data:${type};base64,${bytesToBase64(bytes)}`;
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, payload = ''] = dataUrl.split(',');
+  const mimeMatch = meta.match(/^data:([^;]+);/i);
+  const mimeType = mimeMatch?.[1] ?? 'application/octet-stream';
+  const decoded = atob(payload);
+  const bytes = new Uint8Array(decoded.length);
+
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+
+  return new Blob([bytes], { type: mimeType });
 }
 
 function buildBackupSummary(
@@ -152,6 +256,539 @@ function stripSyncState<T extends { syncState: unknown }>(
   return rest;
 }
 
+function createRestoreMutationRecord(
+  entity: MutationRecord['entity'],
+  entityId: string,
+  type: string,
+  payload: Record<string, unknown>,
+  createdAt: string,
+): MutationRecord {
+  return MutationRecordSchema.parse({
+    id: crypto.randomUUID(),
+    schemaVersion: SCHEMA_VERSION,
+    entity,
+    entityId,
+    type,
+    payload,
+    createdAt,
+    status: 'pending',
+    attempts: 0,
+    lastError: null,
+  });
+}
+
+function normalizeImportedItem(
+  record: BackupItemRecord,
+  restoredAt: string,
+): ItemRecord {
+  return ItemRecordSchema.parse({
+    ...record,
+    schemaVersion: SCHEMA_VERSION,
+    updatedAt: restoredAt,
+    syncState: 'pending',
+  });
+}
+
+function normalizeImportedList(
+  record: BackupListRecord,
+  restoredAt: string,
+): ListRecord {
+  return ListRecordSchema.parse({
+    ...record,
+    schemaVersion: SCHEMA_VERSION,
+    updatedAt: restoredAt,
+    syncState: 'pending',
+  });
+}
+
+function normalizeImportedListItem(
+  record: BackupListItemRecord,
+  restoredAt: string,
+): ListItemRecord {
+  return ListItemRecordSchema.parse({
+    ...record,
+    schemaVersion: SCHEMA_VERSION,
+    updatedAt: restoredAt,
+    syncState: 'pending',
+  });
+}
+
+function normalizeImportedRoutine(
+  record: BackupRoutineRecord,
+  restoredAt: string,
+): RoutineRecord {
+  return RoutineRecordSchema.parse({
+    ...record,
+    schemaVersion: SCHEMA_VERSION,
+    updatedAt: restoredAt,
+    syncState: 'pending',
+  });
+}
+
+function normalizeImportedDailyRecord(
+  record: BackupDailyRecord,
+  updatedAt: string,
+): DailyRecord {
+  return DailyRecordSchema.parse({
+    ...record,
+    schemaVersion: SCHEMA_VERSION,
+    updatedAt,
+    syncState: 'pending',
+  });
+}
+
+function normalizeImportedWeeklyRecord(
+  record: BackupWeeklyRecord,
+  updatedAt: string,
+): WeeklyRecord {
+  return WeeklyRecordSchema.parse({
+    ...record,
+    schemaVersion: SCHEMA_VERSION,
+    updatedAt,
+    syncState: 'pending',
+  });
+}
+
+function normalizeImportedSettings(
+  record: BackupSettingsRecord | null,
+  restoredAt: string,
+): SettingsRecord {
+  return SettingsRecordSchema.parse({
+    id: SETTINGS_ROW_ID,
+    schemaVersion: SCHEMA_VERSION,
+    direction: record?.direction ?? '',
+    standards: record?.standards ?? '',
+    why: record?.why ?? '',
+    createdAt: record?.createdAt ?? restoredAt,
+    updatedAt: restoredAt,
+    syncState: 'pending',
+  });
+}
+
+function mergeByDate(
+  current: DailyRecord[],
+  imported: DailyRecord[],
+): DailyRecord[] {
+  const merged = new Map(current.map((record) => [record.date, record]));
+  for (const record of imported) {
+    merged.set(record.date, record);
+  }
+
+  return [...merged.values()].sort(compareByDate);
+}
+
+function mergeByWeekStart(
+  current: WeeklyRecord[],
+  imported: WeeklyRecord[],
+): WeeklyRecord[] {
+  const merged = new Map(current.map((record) => [record.weekStart, record]));
+  for (const record of imported) {
+    merged.set(record.weekStart, record);
+  }
+
+  return [...merged.values()].sort(compareByWeekStart);
+}
+
+function parseWorkspaceBackupValue(value: unknown): WorkspaceBackupFile {
+  const parsed = WorkspaceBackupFileSchema.parse(value);
+  if (parsed.appSchemaVersion > SCHEMA_VERSION) {
+    throw new Error(
+      `This backup was created by a newer Holdfast schema (${parsed.appSchemaVersion}). Update the app before restoring it.`,
+    );
+  }
+
+  return parsed;
+}
+
+async function parseWorkspaceBackupFile(file: File): Promise<WorkspaceBackupFile> {
+  const text = await file.text();
+
+  try {
+    return parseWorkspaceBackupValue(JSON.parse(text));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error("This backup file couldn't be read.", {
+        cause: error,
+      });
+    }
+
+    throw error;
+  }
+}
+
+function latestOpenWorkspaceRestoreSession(
+  rows: unknown[],
+): z.infer<typeof WorkspaceRestoreSessionRecordSchema> | null {
+  return rows
+    .map((row) => WorkspaceRestoreSessionRecordSchema.parse(row))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .find((row) => !row.undoneAt) ?? null;
+}
+
+function toSummaryRecord(
+  summary: WorkspaceBackupSummary,
+): WorkspaceBackupSummaryRecord {
+  return summary;
+}
+
+async function applyWorkspaceBackup(
+  backup: WorkspaceBackupFile,
+  options?: { recordUndo?: boolean },
+): Promise<WorkspaceRestoreResult> {
+  const parsedBackup = parseWorkspaceBackupValue(backup);
+  const recordUndo = options?.recordUndo ?? true;
+  const restoredAt = nowIso();
+  const previousBackup = recordUndo ? await createWorkspaceBackup() : null;
+
+  const [
+    currentItems,
+    currentLists,
+    currentListItems,
+    currentDailyRecords,
+    currentWeeklyRecords,
+    currentRoutines,
+    currentAttachments,
+  ] = await Promise.all([
+    db.items.toArray(),
+    db.lists.toArray(),
+    db.listItems.toArray(),
+    db.dailyRecords.toArray(),
+    db.weeklyRecords.toArray(),
+    db.routines.toArray(),
+    db.attachments.toArray(),
+  ]);
+
+  const finalItems = parsedBackup.items.map((record) =>
+    normalizeImportedItem(record, restoredAt),
+  );
+  const finalItemIds = new Set(finalItems.map((record) => record.id));
+
+  const finalLists = parsedBackup.lists.map((record) =>
+    normalizeImportedList(record, restoredAt),
+  );
+  const finalListIds = new Set(finalLists.map((record) => record.id));
+
+  const finalListItems = parsedBackup.listItems
+    .filter((record) => finalListIds.has(record.listId))
+    .map((record) => normalizeImportedListItem(record, restoredAt));
+  const finalListItemIds = new Set(finalListItems.map((record) => record.id));
+
+  const finalRoutines = parsedBackup.routines.map((record) =>
+    normalizeImportedRoutine(record, restoredAt),
+  );
+  const finalRoutineIds = new Set(finalRoutines.map((record) => record.id));
+
+  const finalAttachments: AttachmentRecord[] = [];
+  const finalAttachmentBlobs = [];
+  const attachmentMutationIds = new Set<string>();
+
+  for (const entry of parsedBackup.attachments) {
+    if (!finalItemIds.has(entry.record.itemId)) {
+      continue;
+    }
+
+    const syncState = entry.payloadState === 'embedded' ? 'pending' : 'synced';
+    finalAttachments.push(
+      AttachmentRecordSchema.parse({
+        ...entry.record,
+        schemaVersion: SCHEMA_VERSION,
+        updatedAt: entry.payloadState === 'embedded' ? restoredAt : entry.record.updatedAt,
+        syncState,
+      }),
+    );
+
+    if (entry.payloadState === 'embedded' && entry.dataUrl) {
+      finalAttachmentBlobs.push(
+        AttachmentBlobRecordSchema.parse({
+          id: entry.record.blobId,
+          schemaVersion: SCHEMA_VERSION,
+          blob: dataUrlToBlob(entry.dataUrl),
+          createdAt: restoredAt,
+        }),
+      );
+      attachmentMutationIds.add(entry.record.id);
+    }
+  }
+  const finalAttachmentIds = new Set(finalAttachments.map((record) => record.id));
+
+  const importedDailyRecords = parsedBackup.dailyRecords.map((record) =>
+    normalizeImportedDailyRecord(record, restoredAt),
+  );
+  const importedDailyDates = new Set(importedDailyRecords.map((record) => record.date));
+  const preservedDailyRecords = currentDailyRecords
+    .filter((record) => !importedDailyDates.has(record.date))
+    .map((record) =>
+      DailyRecordSchema.parse({
+        ...record,
+        schemaVersion: SCHEMA_VERSION,
+        syncState: 'pending',
+      }),
+    );
+  const finalDailyRecords = mergeByDate(
+    preservedDailyRecords,
+    importedDailyRecords,
+  );
+
+  const importedWeeklyRecords = parsedBackup.weeklyRecords.map((record) =>
+    normalizeImportedWeeklyRecord(record, restoredAt),
+  );
+  const importedWeekStarts = new Set(
+    importedWeeklyRecords.map((record) => record.weekStart),
+  );
+  const preservedWeeklyRecords = currentWeeklyRecords
+    .filter((record) => !importedWeekStarts.has(record.weekStart))
+    .map((record) =>
+      WeeklyRecordSchema.parse({
+        ...record,
+        schemaVersion: SCHEMA_VERSION,
+        syncState: 'pending',
+      }),
+    );
+  const finalWeeklyRecords = mergeByWeekStart(
+    preservedWeeklyRecords,
+    importedWeeklyRecords,
+  );
+
+  const finalSettings = normalizeImportedSettings(parsedBackup.settings, restoredAt);
+
+  const currentItemIds = new Set(
+    currentItems.filter((record) => !record.deletedAt).map((record) => record.id),
+  );
+  const currentListIds = new Set(
+    currentLists.filter((record) => !record.deletedAt).map((record) => record.id),
+  );
+  const currentListItemIds = new Set(
+    currentListItems
+      .filter((record) => !record.deletedAt)
+      .map((record) => record.id),
+  );
+  const currentRoutineIds = new Set(
+    currentRoutines.filter((record) => !record.deletedAt).map((record) => record.id),
+  );
+  const currentAttachmentIds = new Set(
+    currentAttachments
+      .filter((record) => !record.deletedAt)
+      .map((record) => record.id),
+  );
+
+  const mutations: MutationRecord[] = [];
+
+  for (const itemId of currentItemIds) {
+    if (!finalItemIds.has(itemId)) {
+      mutations.push(
+        createRestoreMutationRecord('item', itemId, 'item.deleted', { itemId }, restoredAt),
+      );
+    }
+  }
+
+  for (const listId of currentListIds) {
+    if (!finalListIds.has(listId)) {
+      mutations.push(
+        createRestoreMutationRecord('list', listId, 'list.deleted', { listId }, restoredAt),
+      );
+    }
+  }
+
+  for (const listItemId of currentListItemIds) {
+    if (!finalListItemIds.has(listItemId)) {
+      mutations.push(
+        createRestoreMutationRecord(
+          'listItem',
+          listItemId,
+          'list-item.deleted',
+          { listItemId },
+          restoredAt,
+        ),
+      );
+    }
+  }
+
+  for (const routineId of currentRoutineIds) {
+    if (!finalRoutineIds.has(routineId)) {
+      mutations.push(
+        createRestoreMutationRecord(
+          'routine',
+          routineId,
+          'routine.deleted',
+          { routineId },
+          restoredAt,
+        ),
+      );
+    }
+  }
+
+  for (const attachmentId of currentAttachmentIds) {
+    if (!finalAttachmentIds.has(attachmentId)) {
+      mutations.push(
+        createRestoreMutationRecord(
+          'attachment',
+          attachmentId,
+          'attachment.deleted',
+          { attachmentId },
+          restoredAt,
+        ),
+      );
+    }
+  }
+
+  for (const record of finalItems) {
+    mutations.push(
+      createRestoreMutationRecord('item', record.id, 'item.restored', { item: record }, restoredAt),
+    );
+  }
+  for (const record of finalLists) {
+    mutations.push(
+      createRestoreMutationRecord('list', record.id, 'list.restored', { list: record }, restoredAt),
+    );
+  }
+  for (const record of finalListItems) {
+    mutations.push(
+      createRestoreMutationRecord(
+        'listItem',
+        record.id,
+        'list-item.restored',
+        { listItem: record },
+        restoredAt,
+      ),
+    );
+  }
+  for (const record of finalDailyRecords) {
+    mutations.push(
+      createRestoreMutationRecord(
+        'dailyRecord',
+        record.date,
+        'daily.restored',
+        { dailyRecord: record },
+        restoredAt,
+      ),
+    );
+  }
+  for (const record of finalWeeklyRecords) {
+    mutations.push(
+      createRestoreMutationRecord(
+        'weeklyRecord',
+        record.weekStart,
+        'weekly.restored',
+        { weeklyRecord: record },
+        restoredAt,
+      ),
+    );
+  }
+  for (const record of finalRoutines) {
+    mutations.push(
+      createRestoreMutationRecord(
+        'routine',
+        record.id,
+        'routine.restored',
+        { routine: record },
+        restoredAt,
+      ),
+    );
+  }
+  mutations.push(
+    createRestoreMutationRecord(
+      'settings',
+      SETTINGS_ROW_ID,
+      'settings.restored',
+      { settings: finalSettings },
+      restoredAt,
+    ),
+  );
+  for (const record of finalAttachments) {
+    if (!attachmentMutationIds.has(record.id)) {
+      continue;
+    }
+
+    mutations.push(
+      createRestoreMutationRecord(
+        'attachment',
+        record.id,
+        'attachment.restored',
+        { attachment: record },
+        restoredAt,
+      ),
+    );
+  }
+
+  await db.transaction(
+    'rw',
+    [
+      db.items,
+      db.lists,
+      db.listItems,
+      db.dailyRecords,
+      db.weeklyRecords,
+      db.routines,
+      db.settings,
+      db.attachments,
+      db.attachmentBlobs,
+      db.mutationQueue,
+      db.workspaceRestoreSessions,
+    ],
+    async () => {
+      await db.items.clear();
+      await db.lists.clear();
+      await db.listItems.clear();
+      await db.dailyRecords.clear();
+      await db.weeklyRecords.clear();
+      await db.routines.clear();
+      await db.settings.clear();
+      await db.attachments.clear();
+      await db.attachmentBlobs.clear();
+      await db.mutationQueue.clear();
+
+      if (recordUndo && previousBackup) {
+        await db.workspaceRestoreSessions.clear();
+        await db.workspaceRestoreSessions.put(
+          WorkspaceRestoreSessionRecordSchema.parse({
+            id: crypto.randomUUID(),
+            schemaVersion: SCHEMA_VERSION,
+            createdAt: restoredAt,
+            undoneAt: null,
+            restoredSummary: toSummaryRecord(parsedBackup.summary),
+            previousBackupJson: JSON.stringify(previousBackup),
+          }),
+        );
+      }
+
+      if (finalItems.length) {
+        await db.items.bulkPut(finalItems);
+      }
+      if (finalLists.length) {
+        await db.lists.bulkPut(finalLists);
+      }
+      if (finalListItems.length) {
+        await db.listItems.bulkPut(finalListItems);
+      }
+      if (finalDailyRecords.length) {
+        await db.dailyRecords.bulkPut(finalDailyRecords);
+      }
+      if (finalWeeklyRecords.length) {
+        await db.weeklyRecords.bulkPut(finalWeeklyRecords);
+      }
+      if (finalRoutines.length) {
+        await db.routines.bulkPut(finalRoutines);
+      }
+      await db.settings.put(finalSettings);
+      if (finalAttachments.length) {
+        await db.attachments.bulkPut(finalAttachments);
+      }
+      if (finalAttachmentBlobs.length) {
+        await db.attachmentBlobs.bulkPut(finalAttachmentBlobs);
+      }
+      if (mutations.length) {
+        await db.mutationQueue.bulkPut(mutations);
+      }
+    },
+  );
+
+  return {
+    restoredAt,
+    sourceExportedAt: parsedBackup.exportedAt,
+    summary: parsedBackup.summary,
+  };
+}
+
 export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
   const [
     itemRows,
@@ -169,7 +806,7 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
     db.dailyRecords.toArray(),
     db.weeklyRecords.toArray(),
     db.routines.toArray(),
-    db.settings.get('settings'),
+    db.settings.get(SETTINGS_ROW_ID),
     db.attachments.toArray(),
   ]);
 
@@ -213,9 +850,7 @@ export async function createWorkspaceBackup(): Promise<WorkspaceBackupFile> {
     });
   }
 
-  const sortedDailyRecords = dailyRecords
-    .sort(compareByDate)
-    .map(stripSyncState);
+  const sortedDailyRecords = dailyRecords.sort(compareByDate).map(stripSyncState);
   const sortedWeeklyRecords = weeklyRecords
     .sort(compareByWeekStart)
     .map(stripSyncState);
@@ -257,4 +892,51 @@ export async function createWorkspaceBackupExport(): Promise<WorkspaceBackupExpo
     blob,
     filename: workspaceBackupFilename(backup.exportedAt),
   };
+}
+
+export async function importWorkspaceBackupFile(
+  file: File,
+): Promise<WorkspaceRestoreResult> {
+  const backup = await parseWorkspaceBackupFile(file);
+  return applyWorkspaceBackup(backup);
+}
+
+export async function getWorkspaceRestoreUndoAvailability(): Promise<WorkspaceRestoreUndoAvailability> {
+  const sessions = await db.workspaceRestoreSessions.toArray();
+  const latest = latestOpenWorkspaceRestoreSession(sessions);
+
+  return latest
+    ? {
+        createdAt: latest.createdAt,
+        mode: 'recorded',
+        summary: latest.restoredSummary,
+      }
+    : {
+        createdAt: null,
+        mode: 'none',
+        summary: null,
+      };
+}
+
+export async function undoLastWorkspaceRestore(): Promise<WorkspaceRestoreResult> {
+  const sessions = await db.workspaceRestoreSessions.toArray();
+  const latest = latestOpenWorkspaceRestoreSession(sessions);
+
+  if (!latest) {
+    throw new Error('No workspace restore with undo history was found yet.');
+  }
+
+  const previousBackup = parseWorkspaceBackupValue(
+    JSON.parse(latest.previousBackupJson),
+  );
+  const result = await applyWorkspaceBackup(previousBackup, { recordUndo: false });
+
+  await db.workspaceRestoreSessions.put(
+    WorkspaceRestoreSessionRecordSchema.parse({
+      ...latest,
+      undoneAt: nowIso(),
+    }),
+  );
+
+  return result;
 }

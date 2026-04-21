@@ -250,6 +250,17 @@ export const LegacyPrototypeSummarySchema = z.object({
   weekCount: z.number().int().nonnegative(),
 });
 
+export const WorkspaceBackupSummarySchema = z.object({
+  attachmentCount: z.number().int().nonnegative(),
+  attachmentPayloadMissingCount: z.number().int().nonnegative(),
+  dayCount: z.number().int().nonnegative(),
+  itemCount: z.number().int().nonnegative(),
+  listCount: z.number().int().nonnegative(),
+  listItemCount: z.number().int().nonnegative(),
+  routineCount: z.number().int().nonnegative(),
+  weekCount: z.number().int().nonnegative(),
+});
+
 export const PrototypeRecoverySessionRecordSchema = z.object({
   id: z.string().uuid(),
   schemaVersion,
@@ -266,6 +277,15 @@ export const PrototypeRecoverySessionRecordSchema = z.object({
   previousDailyRecords: z.array(DailyRecordSchema),
   previousWeeklyRecords: z.array(WeeklyRecordSchema),
   previousSettings: SettingsRecordSchema.nullable(),
+});
+
+export const WorkspaceRestoreSessionRecordSchema = z.object({
+  id: z.string().uuid(),
+  schemaVersion,
+  createdAt: z.string(),
+  undoneAt: z.string().nullable(),
+  restoredSummary: WorkspaceBackupSummarySchema,
+  previousBackupJson: z.string().min(1),
 });
 
 export type Lane = z.infer<typeof LaneSchema>;
@@ -298,6 +318,12 @@ export type SyncStateRecord = z.infer<typeof SyncStateRecordSchema>;
 export type LegacyPrototypeSummary = z.infer<
   typeof LegacyPrototypeSummarySchema
 >;
+export type WorkspaceBackupSummary = z.infer<
+  typeof WorkspaceBackupSummarySchema
+>;
 export type PrototypeRecoverySessionRecord = z.infer<
   typeof PrototypeRecoverySessionRecordSchema
+>;
+export type WorkspaceRestoreSessionRecord = z.infer<
+  typeof WorkspaceRestoreSessionRecordSchema
 >;
