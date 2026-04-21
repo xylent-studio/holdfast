@@ -135,7 +135,8 @@ Current hosting posture:
 - a disposable validation project exists at `holdfast-validation.pages.dev`
 - a production direct-upload Pages project exists at `holdfast-5oz.pages.dev`
 - the production hostname `holdfast.xylent.studio` now points at that Pages project
-- public rollout is still gated by trust work, especially production-domain auth parity and broader multi-device sync validation
+- production auth and same-account hosted sync smoke now pass on `holdfast.xylent.studio`
+- public rollout is still gated by broader multi-device sync, offline, and conflict-handling trust work
 - GitHub remains the source-control system of record
 
 ## Expected Sync Model

@@ -33,6 +33,7 @@
     "cf:pages:prod:smoke": "node scripts/pages-validation.mjs --project holdfast --smoke --base-url https://holdfast.xylent.studio",
     "cf:pages:prod:auth-preflight": "node scripts/pages-validation.mjs --project holdfast --auth-preflight --base-url https://holdfast.xylent.studio",
     "cf:pages:prod:auth-smoke": "node scripts/pages-validation.mjs --project holdfast --auth-smoke --base-url https://holdfast.xylent.studio",
+    "cf:pages:prod:sync-smoke": "node scripts/pages-validation.mjs --project holdfast --sync-smoke --base-url https://holdfast.xylent.studio",
     "supabase": "supabase",
     "supabase:status": "supabase status",
     "supabase:link": "supabase link --project-ref acpaqcdttgdofwcsnhxf",

@@ -19,6 +19,7 @@ Usage:
   node scripts/pages-validation.mjs --project holdfast --create --deploy --base-url https://holdfast.xylent.studio
   node scripts/pages-validation.mjs --auth-preflight --base-url https://holdfast-validation.pages.dev
   node scripts/pages-validation.mjs --auth-smoke --base-url https://holdfast-validation.pages.dev
+  node scripts/pages-validation.mjs --sync-smoke --base-url https://holdfast.xylent.studio
   node scripts/pages-validation.mjs --smoke --base-url https://holdfast-validation.pages.dev
 
 Options:
@@ -27,6 +28,7 @@ Options:
   --base-url <url>    Hosted base URL for smoke tests.
   --auth-preflight    Verify Supabase-generated email links stay on the hosted origin.
   --auth-smoke        Run hosted auth smoke after preflight using server-side magic links.
+  --sync-smoke        Run hosted same-account sync and attachment smoke after auth preflight.
   --create            Create the Pages project if it does not exist.
   --deploy            Build the app and deploy dist to the Pages project.
   --smoke             Run Playwright smoke tests against the hosted URL.
@@ -133,6 +135,7 @@ function parseArgs(argv) {
     project: DEFAULT_PROJECT,
     skipBuild: false,
     smoke: false,
+    syncSmoke: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -163,6 +166,11 @@ function parseArgs(argv) {
 
     if (arg === '--auth-smoke') {
       options.authSmoke = true;
+      continue;
+    }
+
+    if (arg === '--sync-smoke') {
+      options.syncSmoke = true;
       continue;
     }
 
@@ -472,6 +480,15 @@ async function main() {
     runPlaywrightSuite(['tests/e2e/hosted-auth.spec.ts'], envValues, {
       PLAYWRIGHT_AUTH_SMOKE: '1',
       PLAYWRIGHT_BASE_URL: currentPagesOrigin(options),
+    });
+  }
+
+  if (options.syncSmoke) {
+    await runHostedAuthPreflight(envValues, options);
+    console.log(`Running hosted sync smoke against ${currentPagesOrigin(options)}...`);
+    runPlaywrightSuite(['tests/e2e/hosted-sync.spec.ts'], envValues, {
+      PLAYWRIGHT_BASE_URL: currentPagesOrigin(options),
+      PLAYWRIGHT_SYNC_SMOKE: '1',
     });
   }
 

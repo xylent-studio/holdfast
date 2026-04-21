@@ -13,7 +13,8 @@ As of April 20, 2026:
 - a production direct-upload Pages project exists at `https://holdfast-5oz.pages.dev`
 - the custom hostname `https://holdfast.xylent.studio` is attached and serving
 - hosted shell smoke passes on the production hostname
-- production auth smoke is still blocked because Supabase Auth URL configuration is generating magic-link redirects back to the validation origin
+- provider-backed production auth smoke passes on the production hostname
+- same-account hosted sync and attachment smoke passes on the production hostname
 
 ## Chosen Hosting Direction
 
@@ -73,6 +74,7 @@ Rules:
 
 - do not attach `holdfast.xylent.studio` to the validation project
 - do not treat the validation project as launch proof by itself
+- do not assume validation auth smoke will pass while Supabase Auth URL configuration is pinned to production
 - keep production release gates tied to trust, not to the existence of a hosted URL
 
 ## Repo Baseline
@@ -106,7 +108,6 @@ The repo now includes:
   - `https://holdfast-validation.pages.dev/auth/callback`
   - `https://holdfast.xylent.studio/auth/callback`
   - preview callback URLs before public preview testing
-- set Supabase Auth URL configuration so production-domain magic links resolve to `https://holdfast.xylent.studio`, not back to validation
 
 Current repo/backend foundation already includes:
 
@@ -136,13 +137,12 @@ Current repo/backend foundation already includes:
 
 1. Keep using the disposable validation project for risky hosted smoke.
 2. Keep the production project deployed from the repo helper: `npm run cf:pages:prod:deploy`.
-3. Configure Supabase Site URL and redirect allow-list entries so production-domain auth stops falling back to validation.
-4. Run hosted smoke tests across validation and production hostnames.
-5. Verify provider-backed auth on production.
-6. Verify service-worker install/update and offline shell behavior on the hosted build.
-7. Run broader multi-device sync and attachment smoke on real accounts.
-8. Decide whether to keep or redirect the `*.pages.dev` hostname.
-9. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
+3. Run hosted smoke tests across validation and production hostnames.
+4. Treat production as the authoritative provider-backed auth surface while Supabase Auth URL configuration stays pinned to production.
+5. Verify service-worker install/update and offline shell behavior on the hosted build.
+6. Run broader multi-device sync and attachment smoke on real accounts.
+7. Decide whether to keep or redirect the `*.pages.dev` hostname.
+8. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
 
 ## Current Hosted State
 
@@ -151,7 +151,9 @@ Current repo/backend foundation already includes:
 - a production Pages project exists at `holdfast-5oz.pages.dev`
 - `holdfast.xylent.studio` is attached and currently serves the app
 - hosted shell smoke passes on the production hostname
-- provider-backed production auth smoke currently fails because Supabase still generates magic-link redirects to the validation origin
+- provider-backed production auth smoke passes on `holdfast.xylent.studio`
+- same-account hosted sync and attachment smoke passes on `holdfast.xylent.studio`
+- validation auth preflight and auth smoke now fail because Supabase generates magic-link redirects to the production origin while the Auth URL configuration is pinned there
 - public launch quality is now blocked by auth/sync trust work, not by Cloudflare project setup
 
 ## Useful Checks
@@ -167,6 +169,7 @@ Current repo/backend foundation already includes:
 - `npm run cf:pages:prod:smoke`
 - `npm run cf:pages:prod:auth-preflight`
 - `npm run cf:pages:prod:auth-smoke`
+- `npm run cf:pages:prod:sync-smoke`
 - `npm run build`
 - `npm run test:e2e`
 - `npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev`

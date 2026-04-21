@@ -1,75 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-const baseUrl = process.env.PLAYWRIGHT_BASE_URL?.trim() ?? '';
-const supabaseUrl = process.env.VITE_SUPABASE_URL?.trim() ?? '';
-const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY?.trim() ?? '';
+import {
+  baseUrl,
+  clearSupabaseSession,
+  consumeMagicLink,
+  createMagicLink,
+  deleteUser,
+  openSignedInSettings,
+  supabaseSecretKey,
+  supabaseUrl,
+} from './hosted-auth.helpers';
+
 const authSmokeEnabled = process.env.PLAYWRIGHT_AUTH_SMOKE === '1';
-
-function authClient() {
-  if (!supabaseUrl || !supabaseSecretKey) {
-    throw new Error(
-      'Hosted auth smoke needs VITE_SUPABASE_URL and SUPABASE_SECRET_KEY in the environment.',
-    );
-  }
-
-  return createClient(supabaseUrl, supabaseSecretKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
-async function createMagicLink(email: string, nextPath = '/settings') {
-  const client = authClient();
-  const redirectTo = `${baseUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
-  const { data, error } = await client.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-    redirectTo,
-  });
-
-  if (error || !data?.properties?.action_link || !data.user?.id) {
-    throw new Error(error?.message ?? 'Supabase did not return a hosted magic link.');
-  }
-
-  return {
-    actionLink: data.properties.action_link,
-    email,
-    generatedRedirect: data.properties.redirect_to ?? null,
-    userId: data.user.id,
-  };
-}
-
-async function deleteUser(userId: string) {
-  await authClient().auth.admin.deleteUser(userId).catch(() => undefined);
-}
-
-async function consumeMagicLink(actionLink: string, page: Page) {
-  await page.goto(actionLink, { waitUntil: 'networkidle' });
-}
-
-async function openSignedInSettings(page: Page) {
-  await expect(page.getByRole('button', { name: 'Settings' })).toBeVisible();
-  await page.goto('/settings', { waitUntil: 'networkidle' });
-  await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
-}
-
-async function clearSupabaseSession(page: Page) {
-  await page.evaluate(() => {
-    for (const storage of [window.localStorage, window.sessionStorage]) {
-      const keys = [];
-      for (let index = 0; index < storage.length; index += 1) {
-        const key = storage.key(index);
-        if (key && key.includes('auth-token')) {
-          keys.push(key);
-        }
-      }
-      keys.forEach((key) => storage.removeItem(key));
-    }
-  });
-}
 
 test.describe('hosted auth smoke', () => {
   test.skip(

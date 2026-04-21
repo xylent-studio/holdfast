@@ -170,14 +170,15 @@ When the preflight passes, run:
 - `npm run cf:pages:auth-smoke`
 - `npm run cf:pages:prod:auth-smoke`
 
-That hosted auth smoke deploys the current validation build, then uses server-side generated magic links to verify the validation app can sign in, recover a lost local session, and reject the wrong account on a member-owned device workspace.
+Those hosted auth checks use server-side generated magic links to verify the hosted app can sign in, recover a lost local session, and reject the wrong account on a member-owned device workspace.
 
-Current production-domain blocker:
+Current hosted auth state:
 
 - `holdfast.xylent.studio` is live on Cloudflare Pages
-- hosted shell smoke passes on the production hostname
-- Supabase is still generating email-link redirects back to the validation origin instead of `https://holdfast.xylent.studio`
-- until Supabase Auth URL configuration is updated, provider-backed auth smoke on the production hostname will fail even though the site itself is live
+- provider-backed production auth smoke passes on the production hostname
+- same-account hosted sync and attachment smoke now pass on the production hostname
+- validation auth preflight now intentionally fails when Supabase Auth URL configuration is pinned to production
+- the validation project remains useful for hosted shell, offline, and risky smoke, but production is now the authoritative hosted auth path
 
 Required Google OAuth basics:
 
@@ -204,5 +205,4 @@ The repo now includes:
 What is still not done:
 
 - cross-device merge logic
-- production-domain auth redirect parity
 - delete-account and remove-device-data flows

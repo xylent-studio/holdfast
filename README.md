@@ -79,7 +79,10 @@ Current reality:
 - the production shell is live on `holdfast.xylent.studio`
 - production Pages is currently a direct-upload project named `holdfast`
 - hosted shell smoke passes on production
-- production auth smoke is still blocked until Supabase Auth URL configuration stops generating magic-link redirects back to the validation origin
+- provider-backed production auth smoke passes on `holdfast.xylent.studio`
+- same-account hosted sync and attachment smoke passes on `holdfast.xylent.studio`
+- validation auth preflight now resolves to the production origin because Supabase Auth URL configuration is pinned to production
+- the validation project remains useful for hosted shell, offline, and risky smoke, but production is now the authoritative hosted auth path
 
 ## Local Tooling
 
@@ -113,6 +116,7 @@ npm run cf:pages:prod:deploy
 npm run cf:pages:prod:smoke
 npm run cf:pages:prod:auth-preflight
 npm run cf:pages:prod:auth-smoke
+npm run cf:pages:prod:sync-smoke
 npm run test:e2e:hosted -- --base-url https://holdfast-validation.pages.dev
 npm run test:e2e:hosted -- --base-url https://holdfast.xylent.studio
 npm run supabase -- --version
