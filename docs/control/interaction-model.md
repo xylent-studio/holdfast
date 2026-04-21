@@ -19,10 +19,10 @@ This file defines how the app should behave at the screen and action level so th
 ### Primary actions
 Use for the actions that truly move the product forward:
 - Add
-- Save
+- Open
 - Done
+- Search
 - Schedule
-- Finish day
 
 ### Secondary actions
 Use for utility, recovery, or lower-frequency moves:
@@ -30,6 +30,7 @@ Use for utility, recovery, or lower-frequency moves:
 - Retry
 - Move to today
 - Plan for later
+- Finish day
 - Add photo
 - Record voice memo
 
@@ -55,8 +56,8 @@ It should answer:
 Now should prioritize:
 - today's active items
 - focused items
-- start/end-of-day context
 - quick movement, completion, and schedule actions
+- day context only when it reduces cold start or carry friction
 
 Now should avoid:
 - dense historical data
@@ -125,6 +126,7 @@ It should answer:
 Review should prioritize:
 - search
 - retrieval
+- list drill-in without new top-level navigation
 - repeated-loop visibility
 - recent history and carry-forward honesty
 - refinding saved things, list items, and preserved captures
@@ -224,7 +226,7 @@ Avoid turning scheduling into:
 - a field collection exercise
 
 ## Closeout rules
-Closing the day is a real product behavior, not a decorative feature.
+Closing the day is a supportive behavior, not a ritual the product should demand.
 
 Closeout should help the user:
 - acknowledge what landed
@@ -232,6 +234,7 @@ Closeout should help the user:
 - avoid reopening the next day cold
 
 Closeout should not:
+- lead the main `Now` surface
 - feel like journaling homework
 - require excessive text
 - create duplicated data that confuses later review

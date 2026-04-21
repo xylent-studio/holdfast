@@ -33,8 +33,41 @@ function makeSnapshot(): HoldfastSnapshot {
         attachments: [],
       },
     ],
-    lists: [],
-    listItems: [],
+    lists: [
+      {
+        id: 'list-1',
+        schemaVersion: SCHEMA_VERSION,
+        title: 'Groceries',
+        kind: 'replenishment',
+        lane: 'home',
+        pinned: true,
+        sourceItemId: null,
+        archivedAt: null,
+        createdAt: '2026-04-20T08:00:00.000Z',
+        updatedAt: '2026-04-20T09:00:00.000Z',
+        deletedAt: null,
+        syncState: 'pending',
+      },
+    ],
+    listItems: [
+      {
+        id: 'list-item-1',
+        schemaVersion: SCHEMA_VERSION,
+        listId: 'list-1',
+        title: 'Eggs',
+        body: 'Check pantry first',
+        status: 'open',
+        position: 0,
+        sourceItemId: null,
+        promotedItemId: null,
+        completedAt: null,
+        archivedAt: null,
+        createdAt: '2026-04-20T08:00:00.000Z',
+        updatedAt: '2026-04-20T10:00:00.000Z',
+        deletedAt: null,
+        syncState: 'pending',
+      },
+    ],
     dailyRecords: [
       {
         date: '2026-04-19',
@@ -193,5 +226,24 @@ describe('ReviewView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show matches' }));
     expect(screen.getByRole('searchbox')).toHaveValue('Buy coffee');
+  });
+
+  it('surfaces lists in review and lets the user drill into a list without new nav', () => {
+    render(
+      <ReviewView
+        currentDate="2026-04-20"
+        onJumpToDate={vi.fn()}
+        onOpenItem={vi.fn()}
+        snapshot={makeSnapshot()}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'groceries' },
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show list' })[0]);
+
+    expect(screen.getByText('Showing list | Groceries')).toBeInTheDocument();
+    expect(screen.getByText('Eggs')).toBeInTheDocument();
   });
 });

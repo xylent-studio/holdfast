@@ -53,35 +53,7 @@ Rules:
 - `Upcoming` supports both dated and undated items
 - original source context should survive reshaping
 
-## 2. Start Day
-
-Entry point: `Now > Start day`
-
-Behavior:
-
-- ensure the current day record exists
-- bring in active routines for that weekday
-- avoid duplicating already-open routine items for that date
-- mark the day as started
-
-## 3. Readiness
-
-`Now` includes a short fixed checklist:
-
-- Water
-- Food
-- Supplements
-- Hygiene
-- Movement
-- Sleep setup
-
-Rules:
-
-- readiness is binary and intentionally limited
-- it is not a health tracker
-- once complete, it should stay quiet
-
-## 4. Focus
+## 2. Now command work
 
 Focus is the short list inside `Now`.
 
@@ -91,7 +63,7 @@ Rules:
 - focus stays intentionally limited
 - adding focus pulls the item into `Now` if needed
 
-## 5. In-Play Work
+## 3. In-Play Work
 
 `Now` combines:
 
@@ -103,24 +75,7 @@ Rules:
 
 The point is context, not one flat backlog.
 
-## 6. Finish Day
-
-Entry point: `Now > Finish day`
-
-Inputs:
-
-- what landed
-- what still matters
-- tomorrow seed
-- note
-
-Behavior:
-
-- save the closeout on the daily record
-- carry unresolved lines into `Upcoming`
-- avoid duplicating open items that already exist
-
-## 7. Upcoming
+## 4. Upcoming
 
 Modes:
 
@@ -130,7 +85,7 @@ Modes:
 
 `Planned` is date-based. `Queue` is undated. `Waiting on` means the user is blocked, not just deferring.
 
-## 8. Lists and repeated structure
+## 5. Lists and repeated structure
 
 Lists are contextual objects, not a competing top-level navigation model.
 
@@ -148,7 +103,7 @@ Rules:
 - recurring checklists should grow toward template-plus-run behavior
 - reference collections should preserve things without pretending everything is actionable
 
-## 9. Review
+## 6. Review and retrieval
 
 Review should answer:
 
@@ -168,7 +123,40 @@ Review should include retrieval for:
 - lists and list items
 - attachments and preserved context
 
-## 10. Settings And Routines
+Review should also be the first honest place to revisit list surfaces before Holdfast ever grows a separate list home.
+
+## 7. Optional day support
+
+Day support exists to reduce cold starts and keep continuity, not to make the user maintain a ritual.
+
+Entry points:
+
+- `Now > Open day tools`
+- `Now > Finish day`
+
+Behavior:
+
+- ensure the current day record exists when the user explicitly starts the day
+- bring in active routines for that weekday without duplicating already-open routine items
+- keep readiness as a short fixed checklist:
+  - Water
+  - Food
+  - Supplements
+  - Hygiene
+  - Movement
+  - Sleep setup
+- save closeout only when the user wants the extra continuity
+- carry unresolved lines into `Upcoming`
+- preserve a short tomorrow seed without turning closeout into homework
+
+Rules:
+
+- readiness is binary and intentionally limited
+- it is not a health tracker
+- once complete, it should stay quiet
+- start day and finish day are supportive tools, not the main job of `Now`
+
+## 8. Settings And Routines
 
 Settings should stay minimal and meaningful.
 

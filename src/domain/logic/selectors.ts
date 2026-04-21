@@ -12,11 +12,34 @@ import type {
   DailyRecord,
   ItemRecord,
   Lane,
+  ListItemRecord,
+  ListRecord,
 } from '@/domain/schemas/records';
 
 export type InboxFilter = 'unsorted' | 'open' | 'archived';
 export type UpcomingFilter = 'planned' | 'queue' | 'waiting';
 export type PlanSpan = 'day' | 'week' | 'month';
+export type ReviewableItem = ItemRecord & {
+  attachments?: AttachmentRecord[];
+};
+export type ReviewSearchResult<T extends ItemRecord = ItemRecord> =
+  | { type: 'item'; item: T }
+  | {
+      type: 'day';
+      date: string;
+      dailyRecord: DailyRecord;
+    }
+  | {
+      type: 'list';
+      list: ListRecord;
+      openCount: number;
+      doneCount: number;
+    }
+  | {
+      type: 'listItem';
+      list: ListRecord;
+      listItem: ListItemRecord;
+    };
 
 export function normalizedText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -215,8 +238,8 @@ export function recentDaySummaries(
   currentDate: string,
   daysBack = 7,
 ): Array<{
+  carryCount: number;
   date: string;
-  readinessCount: number;
   focusTitles: string[];
   closeWin: string;
   closeSeed: string;
@@ -234,10 +257,13 @@ export function recentDaySummaries(
         .filter((value): value is string => Boolean(value)) ?? [];
 
     return {
-      date,
-      readinessCount: record
-        ? Object.values(record.readiness).filter(Boolean).length
+      carryCount: record
+        ? record.closeCarry
+            .split(/\r?\n/g)
+            .map((line) => line.trim())
+            .filter(Boolean).length
         : 0,
+      date,
       focusTitles,
       closeWin: record?.closeWin ?? '',
       closeSeed: record?.closeSeed ?? '',
@@ -246,18 +272,13 @@ export function recentDaySummaries(
   });
 }
 
-export function searchAll<T extends ItemRecord>(
+export function searchWorkspace<T extends ReviewableItem>(
   items: T[],
   dailyRecords: DailyRecord[],
+  lists: ListRecord[],
+  listItems: ListItemRecord[],
   query: string,
-): Array<
-  | { type: 'item'; item: T }
-  | {
-      type: 'day';
-      date: string;
-      dailyRecord: DailyRecord;
-    }
-> {
+): ReviewSearchResult<T>[] {
   const needle = normalizedText(query);
   if (!needle) {
     return [];
@@ -271,12 +292,13 @@ export function searchAll<T extends ItemRecord>(
           item.title,
           item.body,
           item.sourceText ?? '',
+          ...(item.attachments ?? []).map((attachment) => attachment.name),
           item.lane,
           ITEM_STATUS_LABELS[item.status] ?? item.status,
         ].join(' | '),
       ).includes(needle),
     )
-    .map((item) => ({ type: 'item', item }) as const);
+    .map((item) => ({ type: 'item', item }) as const satisfies ReviewSearchResult<T>);
 
   const dayResults = dailyRecords
     .filter((record) =>
@@ -292,16 +314,96 @@ export function searchAll<T extends ItemRecord>(
     )
     .map(
       (dailyRecord) =>
-        ({ type: 'day', date: dailyRecord.date, dailyRecord }) as const,
+        ({
+          type: 'day',
+          date: dailyRecord.date,
+          dailyRecord,
+        }) as const satisfies ReviewSearchResult<T>,
     );
 
-  return [...itemResults, ...dayResults].sort((left, right) => {
-    const leftTimestamp =
-      left.type === 'item' ? left.item.updatedAt : left.dailyRecord.updatedAt;
-    const rightTimestamp =
-      right.type === 'item'
-        ? right.item.updatedAt
-        : right.dailyRecord.updatedAt;
+  const activeLists = lists.filter((list) => !list.deletedAt);
+  const activeListItems = listItems.filter(
+    (listItem) => !listItem.deletedAt && listItem.status !== 'archived',
+  );
+  const itemsByListId = new Map<string, ListItemRecord[]>();
+  for (const listItem of activeListItems) {
+    const next = itemsByListId.get(listItem.listId) ?? [];
+    next.push(listItem);
+    itemsByListId.set(listItem.listId, next);
+  }
+
+  const listResults = activeLists
+    .filter((list) =>
+      normalizedText([list.title, list.kind, list.lane].join(' | ')).includes(
+        needle,
+      ),
+    )
+    .map((list) => {
+      const relatedItems = itemsByListId.get(list.id) ?? [];
+      return {
+        type: 'list',
+        list,
+        openCount: relatedItems.filter((entry) => entry.status === 'open')
+          .length,
+        doneCount: relatedItems.filter((entry) => entry.status === 'done')
+          .length,
+      } as const satisfies ReviewSearchResult<T>;
+    });
+
+  const listLookup = new Map(activeLists.map((list) => [list.id, list]));
+  const listItemResults = activeListItems
+    .map((listItem) => ({
+      list: listLookup.get(listItem.listId) ?? null,
+      listItem,
+    }))
+    .filter(
+      (
+        entry,
+      ): entry is {
+        list: ListRecord;
+        listItem: ListItemRecord;
+      } => Boolean(entry.list),
+    )
+    .filter(({ list, listItem }) =>
+      normalizedText(
+        [listItem.title, listItem.body, list.title, list.kind].join(' | '),
+      ).includes(needle),
+    )
+    .map(
+      ({ list, listItem }) =>
+        ({ type: 'listItem', list, listItem }) as const satisfies ReviewSearchResult<T>,
+    );
+
+  return [
+    ...itemResults,
+    ...dayResults,
+    ...listResults,
+    ...listItemResults,
+  ].sort((left, right) => {
+    const leftTimestamp = (() => {
+      switch (left.type) {
+        case 'item':
+          return left.item.updatedAt;
+        case 'day':
+          return left.dailyRecord.updatedAt;
+        case 'list':
+          return left.list.updatedAt;
+        case 'listItem':
+          return left.listItem.updatedAt;
+      }
+    })();
+    const rightTimestamp = (() => {
+      switch (right.type) {
+        case 'item':
+          return right.item.updatedAt;
+        case 'day':
+          return right.dailyRecord.updatedAt;
+        case 'list':
+          return right.list.updatedAt;
+        case 'listItem':
+          return right.listItem.updatedAt;
+      }
+    })();
     return rightTimestamp.localeCompare(leftTimestamp);
   });
 }
@@ -309,7 +411,7 @@ export function searchAll<T extends ItemRecord>(
 export function carrySuggestions(
   dailyRecords: DailyRecord[],
   currentDate: string,
-): Array<{ type: 'seed' | 'carry'; text: string }> {
+): Array<{ type: 'seed'; text: string }> {
   const previousDay = dailyRecords.find(
     (record) => record.date === addDays(currentDate, -1),
   );
@@ -317,20 +419,59 @@ export function carrySuggestions(
     return [];
   }
 
-  const suggestions: Array<{ type: 'seed' | 'carry'; text: string }> = [];
+  const suggestions: Array<{ type: 'seed'; text: string }> = [];
 
   if (previousDay.closeSeed.trim()) {
     suggestions.push({ type: 'seed', text: previousDay.closeSeed.trim() });
   }
 
-  for (const line of previousDay.closeCarry.split(/\r?\n/g)) {
-    const trimmed = line.trim();
-    if (trimmed) {
-      suggestions.push({ type: 'carry', text: trimmed });
-    }
+  return suggestions;
+}
+
+export function reviewListSummaries(
+  lists: ListRecord[],
+  listItems: ListItemRecord[],
+  limit = 6,
+): Array<{
+  list: ListRecord;
+  openCount: number;
+  doneCount: number;
+  previewTitles: string[];
+}> {
+  const activeLists = lists.filter((list) => !list.deletedAt && !list.archivedAt);
+  const itemsByListId = new Map<string, ListItemRecord[]>();
+
+  for (const listItem of listItems.filter((entry) => !entry.deletedAt)) {
+    const next = itemsByListId.get(listItem.listId) ?? [];
+    next.push(listItem);
+    itemsByListId.set(listItem.listId, next);
   }
 
-  return suggestions;
+  return activeLists
+    .map((list) => {
+      const relatedItems = (itemsByListId.get(list.id) ?? []).filter(
+        (entry) => entry.status !== 'archived',
+      );
+      const orderedOpenItems = relatedItems
+        .filter((entry) => entry.status === 'open')
+        .sort((left, right) => left.position - right.position);
+
+      return {
+        list,
+        openCount: orderedOpenItems.length,
+        doneCount: relatedItems.filter((entry) => entry.status === 'done')
+          .length,
+        previewTitles: orderedOpenItems.slice(0, 3).map((entry) => entry.title),
+      };
+    })
+    .sort((left, right) => {
+      if (left.list.pinned !== right.list.pinned) {
+        return left.list.pinned ? -1 : 1;
+      }
+
+      return right.list.updatedAt.localeCompare(left.list.updatedAt);
+    })
+    .slice(0, limit);
 }
 
 export function openCountsByLane(items: ItemRecord[]): Record<Lane, number> {

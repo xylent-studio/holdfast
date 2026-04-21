@@ -290,6 +290,11 @@ These should help the user:
 - know what remains alive
 - avoid a cold start the next day
 
+Day context should stay supportive and secondary.
+
+- carry-forward should usually become real `Upcoming` work, not linger as ritual text in `Now`
+- closeout should preserve a short seed when useful, not demand end-of-day homework
+
 ## Routine Rules
 
 Routines should be supportive, not oppressive.

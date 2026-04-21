@@ -2,8 +2,22 @@ import { useMemo, useState } from 'react';
 
 import { READINESS_CHECKS } from '@/domain/constants';
 import { todayDateKey, type DateKey } from '@/domain/dates';
-import { itemMeta, carrySuggestions, getFocusItems, getQueueItemsForToday, itemsForToday, nextScheduledItems, overdueItems } from '@/domain/logic/selectors';
-import { seedLaunchFromYesterday, startDay, toggleFocus, toggleReadiness, toggleTaskDone } from '@/storage/local/api';
+import {
+  carrySuggestions,
+  getFocusItems,
+  getQueueItemsForToday,
+  itemMeta,
+  itemsForToday,
+  nextScheduledItems,
+  overdueItems,
+} from '@/domain/logic/selectors';
+import {
+  seedLaunchFromYesterday,
+  startDay,
+  toggleFocus,
+  toggleReadiness,
+  toggleTaskDone,
+} from '@/storage/local/api';
 import type { HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
@@ -20,20 +34,24 @@ interface NowViewProps {
 
 export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
   const [closeDayOpen, setCloseDayOpen] = useState(false);
-  const [showReadiness, setShowReadiness] = useState(true);
-  const moveToCurrentDayLabel = currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
+  const [dayToolsOpen, setDayToolsOpen] = useState(false);
+  const moveToCurrentDayLabel =
+    currentDate === todayDateKey() ? 'Move to today' : 'Move to Now';
 
   const focusItems = useMemo(
     () => getFocusItems(snapshot.currentDay, snapshot.items),
     [snapshot.currentDay, snapshot.items],
   );
   const queueItems = useMemo(
-    () => getQueueItemsForToday(snapshot.currentDay, snapshot.items, currentDate),
+    () =>
+      getQueueItemsForToday(snapshot.currentDay, snapshot.items, currentDate),
     [currentDate, snapshot.currentDay, snapshot.items],
   );
   const todayNotes = queueItems.filter((item) => item.kind === 'note');
   const todayTasks = queueItems.filter((item) => item.kind === 'task');
-  const readinessCount = Object.values(snapshot.currentDay.readiness).filter(Boolean).length;
+  const readinessCount = Object.values(snapshot.currentDay.readiness).filter(
+    Boolean,
+  ).length;
   const readinessComplete = readinessCount === READINESS_CHECKS.length;
   const pendingRoutineCount = snapshot.routines.filter(
     (routine) =>
@@ -44,6 +62,17 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
   const carry = carrySuggestions(snapshot.dailyRecords, currentDate);
   const overdue = overdueItems(snapshot.items, currentDate);
   const nextUp = nextScheduledItems(snapshot.items, currentDate);
+  const closeDayKey = `${snapshot.currentDay.date}-${snapshot.currentDay.updatedAt}-${closeDayOpen ? 'open' : 'closed'}`;
+  const dayToolsSummary = [
+    snapshot.currentDay.startedAt ? 'Day started' : 'Not started',
+    pendingRoutineCount
+      ? `${pendingRoutineCount} routine${pendingRoutineCount === 1 ? '' : 's'} ready`
+      : null,
+    `Basics ${readinessCount}/${READINESS_CHECKS.length}`,
+    snapshot.currentDay.closedAt ? 'Closeout saved' : null,
+  ]
+    .filter(Boolean)
+    .join(' | ');
 
   return (
     <div className="stack">
@@ -52,75 +81,52 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
           <div>
             <div className="eyebrow">Command view</div>
             <h1>Now</h1>
-            <p>What matters for this day, without the noise.</p>
+            <p>What matters now, without extra ceremony.</p>
           </div>
           <div className="button-row">
-            <button className="button accent" onClick={() => void startDay(currentDate)} type="button">
-              {!snapshot.currentDay.startedAt
-                ? 'Start day'
-                : pendingRoutineCount
-                  ? `Add ${pendingRoutineCount} routine${pendingRoutineCount === 1 ? '' : 's'}`
-                  : 'Day started'}
-            </button>
-            <button className="button ghost" onClick={() => setCloseDayOpen(true)} type="button">
-              Finish day
+            <button
+              aria-expanded={dayToolsOpen}
+              className="button ghost"
+              onClick={() => setDayToolsOpen((value) => !value)}
+              type="button"
+            >
+              {dayToolsOpen ? 'Hide day tools' : 'Open day tools'}
             </button>
           </div>
         </div>
         <div className="grid two">
-          <StatCard detail="What deserves extra attention right now" label="Focus" value={focusItems.length} />
-          <StatCard detail="Open items in play for this date" label="In play" value={itemsForToday(snapshot.items, currentDate).length} />
+          <StatCard
+            detail="What deserves extra attention right now"
+            label="Focus"
+            value={focusItems.length}
+          />
+          <StatCard
+            detail="Open items in play for this date"
+            label="In play"
+            value={itemsForToday(snapshot.items, currentDate).length}
+          />
         </div>
         {carry.length ? (
           <div className="field-stack">
             <span>From yesterday</span>
             <div className="chip-row">
               {carry.map((entry) => (
-                <span className={`chip ${entry.type === 'seed' ? 'active' : ''}`} key={`${entry.type}-${entry.text}`}>
-                  {entry.text}
+                <span className="chip active" key={`${entry.type}-${entry.text}`}>
+                  Next start | {entry.text}
                 </span>
               ))}
-              {carry.some((entry) => entry.type === 'seed') ? (
-                <button className="button ghost small" onClick={() => void seedLaunchFromYesterday(currentDate)} type="button">
+              {carry.length ? (
+                <button
+                  className="button ghost small"
+                  onClick={() => void seedLaunchFromYesterday(currentDate)}
+                  type="button"
+                >
                   Use here
                 </button>
               ) : null}
             </div>
           </div>
         ) : null}
-      </Panel>
-
-      <Panel>
-        <div className="panel-header split">
-          <div>
-            <h2>Readiness</h2>
-            <p>Handle the platform, then move on.</p>
-          </div>
-          {readinessComplete ? (
-            <button className="button ghost small" onClick={() => setShowReadiness((value) => !value)} type="button">
-              {showReadiness ? 'Hide checklist' : 'Show checklist'}
-            </button>
-          ) : null}
-        </div>
-        {showReadiness || !readinessComplete ? (
-          <div className="grid two">
-            {READINESS_CHECKS.map((entry) => (
-              <button
-                className={`toggle ${snapshot.currentDay.readiness[entry.key] ? 'active' : ''}`}
-                key={entry.key}
-                onClick={() => void toggleReadiness(currentDate, entry.key)}
-                type="button"
-              >
-                <span>{entry.label}</span>
-                <span>{snapshot.currentDay.readiness[entry.key] ? 'Done' : 'Open'}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="chip-row">
-            <span className="chip active">Morning check done</span>
-          </div>
-        )}
       </Panel>
 
       <Panel>
@@ -138,7 +144,11 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
                 meta={itemMeta(item, currentDate, item.attachments)}
                 onOpen={() => onOpenItem(item.id)}
                 onPrimaryAction={() => void toggleFocus(currentDate, item.id)}
-                onToggleDone={item.kind === 'task' ? () => void toggleTaskDone(item.id, currentDate) : undefined}
+                onToggleDone={
+                  item.kind === 'task'
+                    ? () => void toggleTaskDone(item.id, currentDate)
+                    : undefined
+                }
                 primaryActionLabel="Remove focus"
               />
             ))}
@@ -200,7 +210,11 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
                 meta={itemMeta(item, currentDate, item.attachments)}
                 onOpen={() => onOpenItem(item.id)}
                 onPrimaryAction={() => void toggleFocus(currentDate, item.id)}
-                onToggleDone={item.kind === 'task' ? () => void toggleTaskDone(item.id, currentDate) : undefined}
+                onToggleDone={
+                  item.kind === 'task'
+                    ? () => void toggleTaskDone(item.id, currentDate)
+                    : undefined
+                }
                 primaryActionLabel={moveToCurrentDayLabel}
               />
             ))}
@@ -231,11 +245,89 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
         )}
       </Panel>
 
+      <Panel>
+        <div className="panel-header split">
+          <div>
+            <h2>Day tools</h2>
+            <p>Optional setup and closeout when it actually helps.</p>
+          </div>
+          <button
+            aria-expanded={dayToolsOpen}
+            className="button ghost small"
+            onClick={() => setDayToolsOpen((value) => !value)}
+            type="button"
+          >
+            {dayToolsOpen ? 'Hide tools' : 'Open tools'}
+          </button>
+        </div>
+        {dayToolsOpen ? (
+          <div className="stack compact">
+            <div className="chip-row">
+              <span className="chip">
+                {snapshot.currentDay.startedAt ? 'Day started' : 'Not started'}
+              </span>
+              <span className={`chip ${readinessComplete ? 'active' : ''}`}>
+                Basics {readinessCount}/{READINESS_CHECKS.length}
+              </span>
+              {pendingRoutineCount ? (
+                <span className="chip">
+                  {pendingRoutineCount} routine
+                  {pendingRoutineCount === 1 ? '' : 's'} ready
+                </span>
+              ) : null}
+              {snapshot.currentDay.closedAt ? (
+                <span className="chip">Closeout saved</span>
+              ) : null}
+            </div>
+            <div className="button-row">
+              {!snapshot.currentDay.startedAt || pendingRoutineCount ? (
+                <button
+                  className="button accent"
+                  onClick={() => void startDay(currentDate)}
+                  type="button"
+                >
+                  {!snapshot.currentDay.startedAt
+                    ? 'Start day'
+                    : `Add ${pendingRoutineCount} routine${pendingRoutineCount === 1 ? '' : 's'}`}
+                </button>
+              ) : null}
+              <button
+                className="button ghost"
+                onClick={() => setCloseDayOpen(true)}
+                type="button"
+              >
+                Finish day
+              </button>
+            </div>
+            <div className="field-stack">
+              <span>Basics</span>
+              <div className="grid two">
+                {READINESS_CHECKS.map((entry) => (
+                  <button
+                    className={`toggle ${snapshot.currentDay.readiness[entry.key] ? 'active' : ''}`}
+                    key={entry.key}
+                    onClick={() => void toggleReadiness(currentDate, entry.key)}
+                    type="button"
+                  >
+                    <span>{entry.label}</span>
+                    <span>
+                      {snapshot.currentDay.readiness[entry.key] ? 'Done' : 'Open'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="empty-inline">{dayToolsSummary}</div>
+        )}
+      </Panel>
+
       <FinishDayDialog
         currentDate={currentDate}
         day={snapshot.currentDay}
         isOpen={closeDayOpen}
-        key={`${snapshot.currentDay.date}-${snapshot.currentDay.updatedAt}`}
+        key={closeDayKey}
         onClose={() => setCloseDayOpen(false)}
       />
     </div>

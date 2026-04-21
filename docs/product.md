@@ -13,7 +13,7 @@ It exists to help the user:
 - decide what matters now
 - park things for later without losing them
 - keep things worth preserving even when they are not tasks
-- finish the day cleanly
+- pick back up without a cold start
 - pick back up on any device without friction
 - trust that nothing important quietly vanished
 
@@ -33,13 +33,12 @@ Holdfast should feel:
 
 ### Now
 
-The command view for the day. It should help the user:
+The command view for active work. It should help the user:
 
-- start the day
-- handle readiness basics quickly
 - keep a short honest focus list
 - see what is active without backlog fog
-- finish the day cleanly
+- move through what matters without ritual overhead
+- use day support only when it actually helps continuity
 
 ### Inbox
 
@@ -101,7 +100,7 @@ Holdfast is not:
 - the four core areas stay purposeful and distinct
 - capture stays faster than organization
 - direct placement works when the destination is already obvious
-- routines support the day without becoming a habit engine
+- routines and day support stay quiet unless the user wants them
 - review stays decision-relevant, not analytical theater
 - the normal long-term experience is signed-in and synced
 - first-time sign-in should be one tap or a magic link, not a form wall
