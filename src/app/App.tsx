@@ -25,6 +25,7 @@ import { todayDateKey } from '@/domain/dates';
 import { openItems } from '@/domain/logic/selectors';
 import { bootstrapHoldfast, useHoldfastSnapshot } from '@/storage/local/api';
 import { LoadingPanel } from '@/shared/ui/LoadingPanel';
+
 const InboxView = lazy(async () =>
   import('@/features/inbox/InboxView').then((module) => ({
     default: module.InboxView,
@@ -45,6 +46,10 @@ const SettingsView = lazy(async () =>
     default: module.SettingsView,
   })),
 );
+
+async function preloadCoreOfflineSurface(): Promise<void> {
+  await import('@/features/item-details/ItemDetailsDialog');
+}
 
 function quickAddPlacementForPath(
   pathname: string,
@@ -71,6 +76,10 @@ function AppRoutes() {
 
   useEffect(() => {
     void bootstrapHoldfast();
+  }, []);
+
+  useEffect(() => {
+    void preloadCoreOfflineSurface();
   }, []);
 
   const selectedItem = useMemo(

@@ -14,7 +14,7 @@ As of April 20, 2026:
 - the custom hostname `https://holdfast.xylent.studio` is attached and serving
 - hosted shell smoke passes on the production hostname
 - provider-backed production auth smoke passes on the production hostname
-- same-account hosted sync and attachment smoke passes on the production hostname
+- same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path pass on the production hostname
 
 ## Chosen Hosting Direction
 
@@ -140,7 +140,7 @@ Current repo/backend foundation already includes:
 3. Run hosted smoke tests across validation and production hostnames.
 4. Treat production as the authoritative provider-backed auth surface while Supabase Auth URL configuration stays pinned to production.
 5. Verify service-worker install/update and offline shell behavior on the hosted build.
-6. Run broader multi-device sync and attachment smoke on real accounts.
+6. Run broader multi-device sync, offline, and attachment smoke on real accounts.
 7. Decide whether to keep or redirect the `*.pages.dev` hostname.
 8. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
 
@@ -152,7 +152,7 @@ Current repo/backend foundation already includes:
 - `holdfast.xylent.studio` is attached and currently serves the app
 - hosted shell smoke passes on the production hostname
 - provider-backed production auth smoke passes on `holdfast.xylent.studio`
-- same-account hosted sync and attachment smoke passes on `holdfast.xylent.studio`
+- same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path pass on `holdfast.xylent.studio`
 - validation auth preflight and auth smoke now fail because Supabase generates magic-link redirects to the production origin while the Auth URL configuration is pinned there
 - public launch quality is now blocked by auth/sync trust work, not by Cloudflare project setup
 

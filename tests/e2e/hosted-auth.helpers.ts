@@ -114,6 +114,36 @@ export async function waitForRemoteItemByTitle(
   );
 }
 
+export async function waitForRemoteItemTitle(
+  userId: string,
+  itemId: string,
+  title: string,
+  timeoutMs?: number,
+) {
+  return pollFor(
+    async () => {
+      const { data, error } = await authClient()
+        .from('items')
+        .select('id,title,body,status,updated_at')
+        .eq('user_id', userId)
+        .eq('id', itemId)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data || data.title !== title) {
+        return null;
+      }
+
+      return data;
+    },
+    `remote item "${itemId}" with title "${title}"`,
+    timeoutMs,
+  );
+}
+
 export async function waitForRemoteAttachment(
   userId: string,
   itemId: string,

@@ -49,7 +49,7 @@ Status: mostly complete
 - keep using the disposable Pages validation project for hosted smoke
 - production Pages project exists and `holdfast.xylent.studio` is live
 - run provider-backed auth smoke on production
-- run same-account hosted sync and attachment smoke on production
+- run same-account hosted sync, attachment, offline replay, and common later-offline-edit smoke on production
 - keep production as the authoritative hosted auth path while Supabase Auth URL configuration is pinned there
 - decide whether to keep or redirect the `*.pages.dev` hostname
 - run broader multi-device and offline smoke tests against the hosted build

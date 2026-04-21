@@ -80,7 +80,7 @@ Current reality:
 - production Pages is currently a direct-upload project named `holdfast`
 - hosted shell smoke passes on production
 - provider-backed production auth smoke passes on `holdfast.xylent.studio`
-- same-account hosted sync and attachment smoke passes on `holdfast.xylent.studio`
+- same-account hosted sync, attachment download, offline replay, and later-offline-edit catch-up smoke pass on `holdfast.xylent.studio`
 - validation auth preflight now resolves to the production origin because Supabase Auth URL configuration is pinned to production
 - the validation project remains useful for hosted shell, offline, and risky smoke, but production is now the authoritative hosted auth path
 

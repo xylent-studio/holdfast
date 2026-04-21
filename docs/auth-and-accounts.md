@@ -176,7 +176,7 @@ Current hosted auth state:
 
 - `holdfast.xylent.studio` is live on Cloudflare Pages
 - provider-backed production auth smoke passes on the production hostname
-- same-account hosted sync and attachment smoke now pass on the production hostname
+- same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path now pass on the production hostname
 - validation auth preflight now intentionally fails when Supabase Auth URL configuration is pinned to production
 - the validation project remains useful for hosted shell, offline, and risky smoke, but production is now the authoritative hosted auth path
 
