@@ -136,6 +136,12 @@ npm run supabase:auth -- --project-ref <ref> --show
 npm run supabase:status
 ```
 
+Local-only secret fallback:
+
+- `scripts/supabase-auth-config.mjs` and `scripts/pages-validation.mjs` also read `.env.local` and `.env.secrets.local`
+- keep `SUPABASE_ACCESS_TOKEN` there if you want repo helpers to stop depending on clipboard or ad-hoc shell exports
+- `.env.secrets.local` is ignored by git
+
 ## Repo Map
 
 - [src/app](/C:/dev/GitHub/Holdfast/src/app): shell, routing, app bootstrap

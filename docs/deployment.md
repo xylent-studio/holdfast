@@ -153,6 +153,7 @@ Expected use:
 Fastest repeatable setup path:
 
 1. Authenticate the Supabase CLI or set `SUPABASE_ACCESS_TOKEN`.
+   - local-only convenience: `.env.local` and `.env.secrets.local` are also read by the Supabase auth helper and hosted Pages validation helper
 2. Use the repo helper to inspect or patch auth config:
    - `npm run supabase:auth -- --project-ref <staging-ref> --show`
    - `npm run supabase:auth -- --project-ref <staging-ref> --site-url https://holdfast-staging.pages.dev --redirect-url http://localhost:4173/auth/callback --redirect-url https://holdfast-staging.pages.dev/auth/callback`

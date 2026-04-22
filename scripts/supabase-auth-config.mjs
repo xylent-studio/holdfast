@@ -1,6 +1,63 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const MANAGEMENT_API_BASE = 'https://api.supabase.com/v1';
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function stripQuotes(value) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+
+  return value;
+}
+
+function loadEnvFile(filePath) {
+  if (!existsSync(filePath)) {
+    return {};
+  }
+
+  const content = readFileSync(filePath, 'utf8');
+  const values = {};
+
+  for (const rawLine of content.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1).trim();
+    values[key] = stripQuotes(value);
+  }
+
+  return values;
+}
+
+function applyLocalEnvFallbacks() {
+  const merged = {
+    ...loadEnvFile(path.join(repoRoot, '.env.local')),
+    ...loadEnvFile(path.join(repoRoot, '.env.secrets.local')),
+  };
+
+  for (const [key, value] of Object.entries(merged)) {
+    if (!process.env[key] && value) {
+      process.env[key] = value;
+    }
+  }
+}
+
+applyLocalEnvFallbacks();
 
 function printUsage() {
   console.log(`Holdfast Supabase auth config helper
@@ -27,6 +84,7 @@ Environment:
 
 Notes:
   - This script uses the Supabase Management API and does not write secrets to repo files.
+  - For local-only convenience it also reads .env.local and .env.secrets.local when present.
   - The Google provider callback for a project is always:
       https://<project-ref>.supabase.co/auth/v1/callback
 `);

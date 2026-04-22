@@ -77,6 +77,22 @@ function loadEnvFile(filePath) {
   return values;
 }
 
+function applyLocalEnvFallbacks(envValues) {
+  const merged = {
+    ...loadEnvFile(path.join(repoRoot, '.env.local')),
+    ...loadEnvFile(path.join(repoRoot, '.env.secrets.local')),
+    ...envValues,
+  };
+
+  for (const [key, value] of Object.entries(merged)) {
+    if (!process.env[key] && value) {
+      process.env[key] = value;
+    }
+  }
+
+  return merged;
+}
+
 function parseJsonc(filePath) {
   const content = readFileSync(filePath, 'utf8')
     .replace(/^\s*\/\/.*$/gmu, '')
@@ -247,17 +263,69 @@ function requireBuildEnv(envValues) {
 function requireAuthProbeEnv(envValues) {
   const supabaseUrl = envValues.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY ?? null;
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN ?? null;
 
-  if (!supabaseUrl || !secretKey) {
+  if (!supabaseUrl || (!secretKey && !accessToken)) {
     throw new Error(
-      'Hosted auth preflight needs VITE_SUPABASE_URL (or SUPABASE_URL) plus SUPABASE_SECRET_KEY in the shell. Keep the secret key out of repo files.',
+      'Hosted auth preflight needs VITE_SUPABASE_URL (or SUPABASE_URL) plus SUPABASE_SECRET_KEY or SUPABASE_ACCESS_TOKEN. Keep secrets out of tracked repo files.',
     );
   }
 
   return {
+    accessToken,
     secretKey,
     supabaseUrl,
   };
+}
+
+function supabaseProjectRefFromUrl(supabaseUrl) {
+  try {
+    const hostname = new URL(supabaseUrl).hostname;
+    const [projectRef] = hostname.split('.');
+    return projectRef || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveSupabaseSecretKey(authEnv) {
+  if (authEnv.secretKey) {
+    return authEnv.secretKey;
+  }
+
+  const projectRef = supabaseProjectRefFromUrl(authEnv.supabaseUrl);
+  if (!projectRef || !authEnv.accessToken) {
+    throw new Error(
+      'Hosted auth probe could not derive a service-role key because the Supabase project ref or access token is missing.',
+    );
+  }
+
+  const response = await fetch(
+    `https://api.supabase.com/v1/projects/${projectRef}/api-keys`,
+    {
+      headers: {
+        Authorization: `Bearer ${authEnv.accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Supabase Management API GET /projects/${projectRef}/api-keys failed with ${response.status}.`,
+    );
+  }
+
+  const keys = await response.json();
+  const key = keys.find((entry) => entry.id === 'service_role')?.api_key ?? null;
+
+  if (!key) {
+    throw new Error(
+      `Supabase project ${projectRef} does not expose a service_role key through the management response.`,
+    );
+  }
+
+  process.env.SUPABASE_SECRET_KEY = key;
+  return key;
 }
 
 function loadBuildEnv(options) {
@@ -374,11 +442,12 @@ function runPlaywrightSuite(suiteArgs, envValues, extraEnv = {}) {
 }
 
 async function runHostedAuthPreflight(envValues, options) {
-  const { secretKey, supabaseUrl } = requireAuthProbeEnv(envValues);
+  const authEnv = requireAuthProbeEnv(envValues);
+  const secretKey = await resolveSupabaseSecretKey(authEnv);
   const { createClient } = await import('@supabase/supabase-js');
   const authProbeTarget = currentAuthProbeTarget(options);
   const email = `holdfast-auth-preflight-${Date.now()}@example.com`;
-  const client = createClient(supabaseUrl, secretKey, {
+  const client = createClient(authEnv.supabaseUrl, secretKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -420,6 +489,7 @@ async function main() {
   }
 
   const envValues = loadBuildEnv(options);
+  applyLocalEnvFallbacks(envValues);
 
   run('npx', ['wrangler', 'whoami']);
 
