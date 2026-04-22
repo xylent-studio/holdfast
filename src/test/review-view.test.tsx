@@ -267,4 +267,30 @@ describe('ReviewView', () => {
 
     expect(onOpenList).toHaveBeenCalledWith('list-1');
   });
+
+  it('surfaces conflicted records as needs-attention work', () => {
+    const snapshot = makeSnapshot();
+    snapshot.items[0] = {
+      ...snapshot.items[0],
+      syncState: 'conflict',
+    };
+
+    render(
+      <ReviewView
+        currentDate="2026-04-20"
+        onJumpToDate={vi.fn()}
+        onOpenList={vi.fn()}
+        onOpenItem={vi.fn()}
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
+    expect(
+      screen.getByText(
+        'Something changed in two places. Open it and decide what still matters before you keep moving.',
+      ),
+    ).toBeVisible();
+    expect(screen.getAllByText('Needs attention').length).toBeGreaterThan(0);
+  });
 });

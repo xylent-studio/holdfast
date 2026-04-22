@@ -50,6 +50,10 @@ import { downloadAttachmentBlob } from '@/storage/sync/supabase/attachments';
 import { getSupabaseBrowserClient } from '@/storage/sync/supabase/client';
 import { getSupabaseSyncStatus } from '@/storage/sync/supabase/config';
 import {
+  fromRemoteItemRow,
+  type RemoteItemRow,
+} from '@/storage/sync/supabase/schema';
+import {
   createDefaultSyncPullCursorMap,
   createDefaultSyncState,
   normalizeSyncStateRecord,
@@ -462,6 +466,46 @@ export async function getCurrentWorkspaceState(): Promise<WorkspaceStateRecord> 
   return workspaceState;
 }
 
+export async function removeDataFromDevice(): Promise<void> {
+  await db.transaction(
+    'rw',
+    [
+      db.items,
+      db.lists,
+      db.listItems,
+      db.dailyRecords,
+      db.weeklyRecords,
+      db.routines,
+      db.settings,
+      db.attachments,
+      db.attachmentBlobs,
+      db.mutationQueue,
+      db.prototypeRecoverySessions,
+      db.workspaceRestoreSessions,
+      db.syncState,
+      db.workspaceState,
+    ],
+    async () => {
+      await db.items.clear();
+      await db.lists.clear();
+      await db.listItems.clear();
+      await db.dailyRecords.clear();
+      await db.weeklyRecords.clear();
+      await db.routines.clear();
+      await db.settings.clear();
+      await db.attachments.clear();
+      await db.attachmentBlobs.clear();
+      await db.mutationQueue.clear();
+      await db.prototypeRecoverySessions.clear();
+      await db.workspaceRestoreSessions.clear();
+      await db.syncState.clear();
+      await db.workspaceState.clear();
+    },
+  );
+
+  await bootstrapHoldfast();
+}
+
 export async function updateSyncState(
   patch: Partial<
     Pick<SyncStateRecord, 'mode' | 'lastSyncedAt' | 'pullCursorByStream'>
@@ -686,6 +730,73 @@ export async function saveItem(
       await queueMutation(
         createMutationRecord('item', itemId, 'item.updated', { item: updated }),
       );
+    },
+  );
+}
+
+export async function replaceItemWithLatestSavedVersion(
+  itemId: string,
+): Promise<void> {
+  const client = getSupabaseBrowserClient();
+  if (!client) {
+    throw new Error("Account setup isn't ready yet.");
+  }
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await client.auth.getSession();
+
+  if (sessionError || !session?.user?.id) {
+    throw new Error('Sign in again to use the latest saved version.');
+  }
+
+  const { data, error } = await client
+    .from('items')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .eq('id', itemId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Couldn't load the latest saved version yet.");
+  }
+
+  if (!data) {
+    throw new Error("Couldn't find the latest saved version.");
+  }
+
+  const remoteItem = fromRemoteItemRow(data as RemoteItemRow);
+
+  await db.transaction(
+    'rw',
+    db.items,
+    db.dailyRecords,
+    db.mutationQueue,
+    async () => {
+      const current = await db.items.get(itemId);
+      if (!current) {
+        return;
+      }
+
+      await db.items.put(remoteItem);
+
+      if (remoteItem.status !== 'today') {
+        await removeItemFromFocusEverywhere(itemId, {
+          queueMutations: true,
+        });
+      }
+
+      const queuedMutations = (await db.mutationQueue
+        .where('entity')
+        .equals('item')
+        .toArray())
+        .filter((mutation) => mutation.entityId === itemId);
+      if (queuedMutations.length) {
+        await db.mutationQueue.bulkDelete(
+          queuedMutations.map((mutation) => mutation.id),
+        );
+      }
     },
   );
 }

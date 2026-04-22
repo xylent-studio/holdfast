@@ -8,6 +8,7 @@ const addFilesToItemMock = vi.fn();
 const deleteItemMock = vi.fn();
 const getAttachmentDownloadMock = vi.fn();
 const removeAttachmentMock = vi.fn();
+const replaceItemWithLatestSavedVersionMock = vi.fn();
 const saveItemMock = vi.fn();
 const toggleFocusMock = vi.fn();
 
@@ -15,6 +16,8 @@ vi.mock('@/storage/local/api', () => ({
   addFilesToItem: (...args: unknown[]) => addFilesToItemMock(...args),
   deleteItem: (...args: unknown[]) => deleteItemMock(...args),
   getAttachmentDownload: (...args: unknown[]) => getAttachmentDownloadMock(...args),
+  replaceItemWithLatestSavedVersion: (...args: unknown[]) =>
+    replaceItemWithLatestSavedVersionMock(...args),
   removeAttachment: (...args: unknown[]) => removeAttachmentMock(...args),
   saveItem: (...args: unknown[]) => saveItemMock(...args),
   toggleFocus: (...args: unknown[]) => toggleFocusMock(...args),
@@ -25,6 +28,7 @@ describe('ItemDetailsDialog', () => {
     addFilesToItemMock.mockReset();
     deleteItemMock.mockReset();
     getAttachmentDownloadMock.mockReset();
+    replaceItemWithLatestSavedVersionMock.mockReset();
     removeAttachmentMock.mockReset();
     saveItemMock.mockReset();
     toggleFocusMock.mockReset();
@@ -88,6 +92,57 @@ describe('ItemDetailsDialog', () => {
           "Couldn't download this file yet. Keep this device signed in and online, then try again.",
         ),
       ).toBeVisible();
+    });
+  });
+
+  it('surfaces a calm conflict path and can pull in the latest saved version', async () => {
+    replaceItemWithLatestSavedVersionMock.mockResolvedValue(undefined);
+    const onClose = vi.fn();
+
+    render(
+      <ItemDetailsDialog
+        currentDate="2026-04-20"
+        isFocused={false}
+        isOpen
+        item={{
+          attachments: [],
+          body: 'Local version',
+          captureMode: null,
+          createdAt: '2026-04-20T08:00:00.000Z',
+          id: '22222222-2222-4222-8222-222222222222',
+          kind: 'task',
+          lane: 'admin',
+          schemaVersion: SCHEMA_VERSION,
+          scheduledDate: null,
+          scheduledTime: null,
+          sourceDate: '2026-04-20',
+          sourceItemId: null,
+          sourceText: null,
+          routineId: null,
+          completedAt: null,
+          archivedAt: null,
+          status: 'inbox',
+          syncState: 'conflict',
+          remoteRevision: 'server-2',
+          title: 'Conflict item',
+          updatedAt: '2026-04-20T08:00:00.000Z',
+          deletedAt: null,
+        }}
+        onClose={onClose}
+      />,
+    );
+
+    expect(screen.getByText('This changed in two places.')).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Use latest saved version' }),
+    );
+
+    await waitFor(() => {
+      expect(replaceItemWithLatestSavedVersionMock).toHaveBeenCalledWith(
+        '22222222-2222-4222-8222-222222222222',
+      );
+      expect(onClose).toHaveBeenCalled();
     });
   });
 });

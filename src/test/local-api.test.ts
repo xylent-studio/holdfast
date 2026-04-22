@@ -10,8 +10,10 @@ import {
   deleteList,
   deleteItem,
   getHoldfastSnapshot,
+  removeDataFromDevice,
   toggleFocus,
   toggleTaskDone,
+  updateWorkspaceState,
   updateList,
   updateListItem,
   addFilesToItem,
@@ -162,5 +164,57 @@ describe('item deletion sync coverage', () => {
     expect(mutations).toContain(`item:${item!.id}:item.deleted`);
     expect(await db.attachments.count()).toBe(0);
     expect(await db.attachmentBlobs.count()).toBe(0);
+  });
+});
+
+describe('device data removal', () => {
+  it('clears the local workspace back to a fresh device state', async () => {
+    await createItem({
+      title: 'Keep moving',
+      kind: 'task',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+    await createList({
+      title: 'Groceries',
+      kind: 'replenishment',
+      lane: 'home',
+      pinned: true,
+    });
+    const [item] = await db.items.toArray();
+    await addFilesToItem(
+      item!.id,
+      [new File(['receipt'], 'receipt.txt', { type: 'text/plain' })],
+    );
+    await updateWorkspaceState({
+      ownershipState: 'member',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+      authPromptState: 'signed-out-by-user',
+      attachState: 'detached-restore',
+    });
+
+    await removeDataFromDevice();
+
+    const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
+
+    expect(snapshot.items).toEqual([]);
+    expect(snapshot.lists).toEqual([]);
+    expect(snapshot.listItems).toEqual([]);
+    expect(await db.attachments.count()).toBe(0);
+    expect(await db.attachmentBlobs.count()).toBe(0);
+    expect(await db.mutationQueue.count()).toBe(0);
+    expect(snapshot.workspaceState).toMatchObject({
+      ownershipState: 'device-guest',
+      boundUserId: null,
+      authPromptState: 'none',
+      attachState: 'attached',
+    });
   });
 });

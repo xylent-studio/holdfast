@@ -7,6 +7,7 @@ import {
   addFilesToItem,
   deleteItem,
   getAttachmentDownload,
+  replaceItemWithLatestSavedVersion,
   removeAttachment,
   saveItem,
   toggleFocus,
@@ -60,11 +61,14 @@ export function ItemDetailsDialog({
   const [scheduledDate, setScheduledDate] = useState(item.scheduledDate ?? '');
   const [scheduledTime, setScheduledTime] = useState(item.scheduledTime ?? '');
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<
     string | null
   >(null);
+  const [replacingConflict, setReplacingConflict] = useState(false);
 
   const canPlaceActively = kind !== 'capture';
+  const isConflict = item.syncState === 'conflict';
 
   const handleSave = async (): Promise<void> => {
     const nextStatus =
@@ -100,6 +104,24 @@ export function ItemDetailsDialog({
   const handleDelete = async (): Promise<void> => {
     await deleteItem(item.id);
     onClose();
+  };
+
+  const handleUseLatestSavedVersion = async (): Promise<void> => {
+    setConflictError(null);
+    setReplacingConflict(true);
+
+    try {
+      await replaceItemWithLatestSavedVersion(item.id);
+      onClose();
+    } catch (error) {
+      setConflictError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Couldn't load the latest saved version yet.",
+      );
+    } finally {
+      setReplacingConflict(false);
+    }
   };
 
   const handleDownload = async (attachmentId: string): Promise<void> => {
@@ -149,6 +171,29 @@ export function ItemDetailsDialog({
             </button>
           ) : null}
         </div>
+
+        {isConflict ? (
+          <div className="recovery-note">
+            <strong>This changed in two places.</strong>
+            <p>
+              Keep this version if it still matters, or pull in the latest saved
+              version before you keep moving.
+            </p>
+            <div className="dialog-actions">
+              <button
+                className="button ghost"
+                disabled={replacingConflict}
+                onClick={() => void handleUseLatestSavedVersion()}
+                type="button"
+              >
+                {replacingConflict ? 'Loading...' : 'Use latest saved version'}
+              </button>
+            </div>
+            {conflictError ? (
+              <p className="auth-feedback danger">{conflictError}</p>
+            ) : null}
+          </div>
+        ) : null}
 
         <label className="field-stack">
           <span>Title</span>
@@ -351,7 +396,7 @@ export function ItemDetailsDialog({
               onClick={() => void handleSave()}
               type="button"
             >
-              Save
+              {isConflict ? 'Keep this version' : 'Save'}
             </button>
           </div>
         </div>

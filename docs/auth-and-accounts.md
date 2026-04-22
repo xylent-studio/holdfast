@@ -75,13 +75,17 @@ It should stay small:
 - provider
 - light sync status
 - sign out
+- remove data from this device
 
 Not here yet:
 
 - delete account
-- remove local data from this device
 - storage or sync mechanics
 - provider internals
+
+`Remove data from this device` should stay separate from sign-out.
+It clears the local workspace, backups, and attachment cache on this device only.
+It should not imply account deletion.
 
 ## Session Recovery
 

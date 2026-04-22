@@ -115,6 +115,26 @@ export function overdueItems<T extends ItemRecord>(
     );
 }
 
+export function conflictedItems<T extends ItemRecord>(items: T[]): T[] {
+  return items
+    .filter((item) => !item.deletedAt && item.syncState === 'conflict')
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+export function conflictedLists<T extends ListRecord>(lists: T[]): T[] {
+  return lists
+    .filter((list) => !list.deletedAt && list.syncState === 'conflict')
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+export function conflictedListItems<T extends ListItemRecord>(
+  listItems: T[],
+): T[] {
+  return listItems
+    .filter((listItem) => !listItem.deletedAt && listItem.syncState === 'conflict')
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
 export function nextScheduledItems<T extends ItemRecord>(
   items: T[],
   currentDate: string,
@@ -493,6 +513,9 @@ export function itemMeta(
 ): string[] {
   if (item.kind === 'capture') {
     const parts = ['Capture', niceDate(item.sourceDate)];
+    if (item.syncState === 'conflict') {
+      parts.unshift('Needs attention');
+    }
 
     if (item.body.trim()) {
       parts.push('Details');
@@ -524,6 +547,9 @@ export function itemMeta(
       : (ITEM_STATUS_LABELS[item.status] ?? item.status);
 
   const parts = [status, niceDate(item.sourceDate)];
+  if (item.syncState === 'conflict') {
+    parts.unshift('Needs attention');
+  }
   if (item.scheduledDate) {
     if (item.status === 'upcoming' && item.scheduledDate < currentDate) {
       parts.push('Overdue');

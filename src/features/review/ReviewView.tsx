@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 
 import type { DateKey } from '@/domain/dates';
 import {
+  conflictedItems,
+  conflictedListItems,
+  conflictedLists,
   itemMeta,
   overdueItems,
   recentDaySummaries,
@@ -33,6 +36,18 @@ export function ReviewView({
   const repeated = useMemo(
     () => repeatedOpenTitles(snapshot.items),
     [snapshot.items],
+  );
+  const conflictItems = useMemo(
+    () => conflictedItems(snapshot.items),
+    [snapshot.items],
+  );
+  const conflictLists = useMemo(
+    () => conflictedLists(snapshot.lists),
+    [snapshot.lists],
+  );
+  const conflictListItems = useMemo(
+    () => conflictedListItems(snapshot.listItems),
+    [snapshot.listItems],
   );
   const overdue = useMemo(
     () => overdueItems(snapshot.items, currentDate),
@@ -200,6 +215,76 @@ export function ReviewView({
           </EmptyState>
         )}
       </Panel>
+
+      {conflictItems.length || conflictLists.length || conflictListItems.length ? (
+        <Panel>
+          <div className="panel-header">
+            <h2>Needs attention</h2>
+            <p>
+              Something changed in two places. Open it and decide what still
+              matters before you keep moving.
+            </p>
+          </div>
+          <div className="stack compact">
+            {conflictItems.map((item) => (
+              <ItemCard
+                item={item}
+                key={item.id}
+                meta={itemMeta(item, currentDate, item.attachments)}
+                onOpen={() => onOpenItem(item.id)}
+              />
+            ))}
+            {conflictLists.map((list) => (
+              <div className="item-card day-result" key={`conflict-list-${list.id}`}>
+                <div className="eyebrow">{list.kind} list</div>
+                <div className="item-title-row">
+                  <h3>{list.title}</h3>
+                  <span className="chip small">Needs attention</span>
+                </div>
+                <p>Open the list and decide what should stay.</p>
+                <div className="dialog-actions">
+                  <button
+                    className="button ghost small"
+                    onClick={() => onOpenList(list.id)}
+                    type="button"
+                  >
+                    Open list
+                  </button>
+                </div>
+              </div>
+            ))}
+            {conflictListItems.map((listItem) => {
+              const list = snapshot.lists.find((entry) => entry.id === listItem.listId);
+              if (!list) {
+                return null;
+              }
+
+              return (
+                <div
+                  className="item-card day-result"
+                  key={`conflict-list-item-${listItem.id}`}
+                >
+                  <div className="eyebrow">List item | {list.title}</div>
+                  <div className="item-title-row">
+                    <h3>{listItem.title}</h3>
+                    <span className="chip small">Needs attention</span>
+                  </div>
+                  <p>Open the list and decide what should stay.</p>
+                  <div className="dialog-actions">
+                    <button
+                      className="button ghost small"
+                      onClick={() => onOpenList(list.id)}
+                      type="button"
+                    >
+                      Open list
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      ) : null}
 
       <Panel>
         <div className="panel-header">

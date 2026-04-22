@@ -31,7 +31,7 @@ Still open in this lane:
 - broader multi-device validation on real accounts
 - richer conflict handling and merge behavior
 - attachment upload lifecycle hardening
-- remove-device-data and delete-account flows
+- delete-account flows
 - staged Google OAuth allow-list parity and broader staged provider validation
 
 ## Phase 3: Product Realignment

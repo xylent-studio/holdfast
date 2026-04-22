@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
@@ -8,6 +8,7 @@ import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
 const retrySyncMock = vi.fn();
 const signOutMock = vi.fn();
+const removeDataFromDeviceMock = vi.fn();
 const updateSettingsMock = vi.fn();
 const updateWeeklyRecordMock = vi.fn();
 let mockedSession: { user: { id: string } } | null = {
@@ -43,6 +44,8 @@ vi.mock('@/storage/local/api', async () => {
 
   return {
     ...actual,
+    removeDataFromDevice: (...args: unknown[]) =>
+      removeDataFromDeviceMock(...args),
     updateSettings: (...args: unknown[]) => updateSettingsMock(...args),
     updateWeeklyRecord: (...args: unknown[]) => updateWeeklyRecordMock(...args),
   };
@@ -156,6 +159,7 @@ describe('SettingsView', () => {
   beforeEach(() => {
     retrySyncMock.mockReset();
     signOutMock.mockReset();
+    removeDataFromDeviceMock.mockReset();
     updateSettingsMock.mockReset();
     updateWeeklyRecordMock.mockReset();
     mockedSession = { user: { id: 'user-1' } };
@@ -234,5 +238,28 @@ describe('SettingsView', () => {
       screen.getByText("This device is still holding another account's workspace."),
     ).toBeInTheDocument();
     expect(screen.getByText('Needs the original account')).toBeInTheDocument();
+  });
+
+  it('offers a separate remove-data action for this device', async () => {
+    const confirmMock = vi
+      .spyOn(window, 'confirm')
+      .mockReturnValue(true);
+    signOutMock.mockResolvedValue(undefined);
+    removeDataFromDeviceMock.mockResolvedValue(undefined);
+
+    render(<SettingsView currentDate="2026-04-20" snapshot={makeSnapshot()} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open' })[2]);
+    const removeButton = await screen.findByRole('button', {
+      name: 'Remove data from this device',
+    });
+    fireEvent.click(removeButton);
+
+    await waitFor(() => {
+      expect(signOutMock).toHaveBeenCalled();
+      expect(removeDataFromDeviceMock).toHaveBeenCalled();
+    });
+
+    confirmMock.mockRestore();
   });
 });

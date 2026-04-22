@@ -6,9 +6,15 @@ import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { useSync } from '@/app/sync/useSync';
 import type { SettingsRecord, WeeklyRecord } from '@/domain/schemas/records';
 import type { DateKey } from '@/domain/dates';
-import { currentWeekLabel } from '@/domain/logic/selectors';
+import {
+  conflictedItems,
+  conflictedListItems,
+  conflictedLists,
+  currentWeekLabel,
+} from '@/domain/logic/selectors';
 import {
   attachWorkspaceToAccount,
+  removeDataFromDevice,
   updateSettings,
   updateWeeklyRecord,
 } from '@/storage/local/api';
@@ -49,6 +55,7 @@ function summarizeText(...values: string[]): string {
 }
 
 function syncStatusLabel(
+  hasConflicts: boolean,
   configured: boolean,
   signedIn: boolean,
   isOnline: boolean,
@@ -60,6 +67,10 @@ function syncStatusLabel(
 ): string {
   if (!configured) {
     return 'Account setup is off in this build.';
+  }
+
+  if (hasConflicts) {
+    return 'Needs attention';
   }
 
   if (attachState === 'detached-restore') {
@@ -285,6 +296,10 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
   const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
   const [attachBusy, setAttachBusy] = useState(false);
+  const [removeDataBusy, setRemoveDataBusy] = useState(false);
+  const [removeDataFeedback, setRemoveDataFeedback] = useState<string | null>(
+    null,
+  );
   const routineSummary = snapshot.routines.length
     ? `${snapshot.routines.length} routine${
         snapshot.routines.length === 1 ? '' : 's'
@@ -300,6 +315,10 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
   );
   const isDetachedRestore =
     snapshot.workspaceState.attachState === 'detached-restore';
+  const hasConflictAttention =
+    conflictedItems(snapshot.items).length > 0 ||
+    conflictedLists(snapshot.lists).length > 0 ||
+    conflictedListItems(snapshot.listItems).length > 0;
 
   const handleAttachWorkspace = async (): Promise<void> => {
     if (!auth.user?.id) {
@@ -312,6 +331,29 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
       await sync.retrySync();
     } finally {
       setAttachBusy(false);
+    }
+  };
+
+  const handleRemoveDataFromDevice = async (): Promise<void> => {
+    const confirmed = window.confirm(
+      auth.session
+        ? 'Remove data from this device?\n\nThis signs you out here and removes local items, lists, attachments, backups, and settings from this device only.'
+        : 'Remove data from this device?\n\nThis clears local items, lists, attachments, backups, and settings from this device only.',
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setRemoveDataFeedback(null);
+    setRemoveDataBusy(true);
+    try {
+      if (auth.session) {
+        await auth.signOut();
+      }
+      await removeDataFromDevice();
+      setRemoveDataFeedback('This device is empty again.');
+    } finally {
+      setRemoveDataBusy(false);
     }
   };
 
@@ -339,6 +381,7 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
             <span>Status</span>
             <strong>
               {syncStatusLabel(
+                hasConflictAttention,
                 auth.configured,
                 Boolean(auth.session),
                 sync.isOnline,
@@ -477,6 +520,28 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
           <div className="stack">
             <WorkspaceBackupPanel />
             <PrototypeRecoveryPanel />
+            <div className="recovery-note">
+              <strong>Remove data from this device</strong>
+              <p>
+                Sign out here and clear local items, lists, attachments, and
+                backup history from this device without deleting your account.
+              </p>
+              <div className="dialog-actions">
+                <button
+                  className="button danger"
+                  disabled={removeDataBusy}
+                  onClick={() => void handleRemoveDataFromDevice()}
+                  type="button"
+                >
+                  {removeDataBusy
+                    ? 'Removing...'
+                    : 'Remove data from this device'}
+                </button>
+              </div>
+              {removeDataFeedback ? (
+                <p className="form-status">{removeDataFeedback}</p>
+              ) : null}
+            </div>
           </div>
         </Suspense>
       </ExpandablePanel>
