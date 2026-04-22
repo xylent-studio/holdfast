@@ -51,7 +51,11 @@ import { getSupabaseBrowserClient } from '@/storage/sync/supabase/client';
 import { getSupabaseSyncStatus } from '@/storage/sync/supabase/config';
 import {
   fromRemoteItemRow,
+  fromRemoteListItemRow,
+  fromRemoteListRow,
   type RemoteItemRow,
+  type RemoteListItemRow,
+  type RemoteListRow,
 } from '@/storage/sync/supabase/schema';
 import {
   createDefaultSyncPullCursorMap,
@@ -799,6 +803,116 @@ export async function replaceItemWithLatestSavedVersion(
       }
     },
   );
+}
+
+export async function replaceListWithLatestSavedVersion(
+  listId: string,
+): Promise<void> {
+  const client = getSupabaseBrowserClient();
+  if (!client) {
+    throw new Error("Account setup isn't ready yet.");
+  }
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await client.auth.getSession();
+
+  if (sessionError || !session?.user?.id) {
+    throw new Error('Sign in again to use the latest saved version.');
+  }
+
+  const { data, error } = await client
+    .from('lists')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .eq('id', listId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Couldn't load the latest saved version yet.");
+  }
+
+  if (!data) {
+    throw new Error("Couldn't find the latest saved version.");
+  }
+
+  const remoteList = fromRemoteListRow(data as RemoteListRow);
+
+  await db.transaction('rw', db.lists, db.mutationQueue, async () => {
+    const current = await db.lists.get(listId);
+    if (!current) {
+      return;
+    }
+
+    await db.lists.put(remoteList);
+
+    const queuedMutations = (await db.mutationQueue
+      .where('entity')
+      .equals('list')
+      .toArray()
+    ).filter((mutation) => mutation.entityId === listId);
+    if (queuedMutations.length) {
+      await db.mutationQueue.bulkDelete(
+        queuedMutations.map((mutation) => mutation.id),
+      );
+    }
+  });
+}
+
+export async function replaceListItemWithLatestSavedVersion(
+  listItemId: string,
+): Promise<void> {
+  const client = getSupabaseBrowserClient();
+  if (!client) {
+    throw new Error("Account setup isn't ready yet.");
+  }
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await client.auth.getSession();
+
+  if (sessionError || !session?.user?.id) {
+    throw new Error('Sign in again to use the latest saved version.');
+  }
+
+  const { data, error } = await client
+    .from('list_items')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .eq('id', listItemId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Couldn't load the latest saved version yet.");
+  }
+
+  if (!data) {
+    throw new Error("Couldn't find the latest saved version.");
+  }
+
+  const remoteListItem = fromRemoteListItemRow(data as RemoteListItemRow);
+
+  await db.transaction('rw', db.listItems, db.mutationQueue, async () => {
+    const current = await db.listItems.get(listItemId);
+    if (!current) {
+      return;
+    }
+
+    await db.listItems.put(remoteListItem);
+
+    const queuedMutations = (await db.mutationQueue
+      .where('entity')
+      .equals('listItem')
+      .toArray()
+    ).filter((mutation) => mutation.entityId === listItemId);
+    if (queuedMutations.length) {
+      await db.mutationQueue.bulkDelete(
+        queuedMutations.map((mutation) => mutation.id),
+      );
+    }
+  });
 }
 
 export async function deleteItem(itemId: string): Promise<void> {
