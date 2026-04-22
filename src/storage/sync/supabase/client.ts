@@ -18,6 +18,7 @@ export function getSupabaseBrowserClient(): SupabaseClient | null {
   browserClient = createClient(config.url, config.anonKey, {
     auth: {
       autoRefreshToken: true,
+      detectSessionInUrl: false,
       persistSession: true,
     },
   });

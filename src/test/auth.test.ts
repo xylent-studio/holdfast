@@ -10,7 +10,10 @@ import { shouldShowAuthLanding } from '@/app/auth/gating';
 import { shouldShowSessionRecovery } from '@/app/auth/recovery';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { SCHEMA_VERSION } from '@/domain/constants';
-import { normalizeAuthNextPath } from '@/storage/sync/supabase/auth';
+import {
+  normalizeAuthNextPath,
+  parseSupabaseAuthHash,
+} from '@/storage/sync/supabase/auth';
 import type { HoldfastSnapshot } from '@/storage/local/api';
 import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
@@ -125,6 +128,29 @@ describe('normalizeAuthNextPath', () => {
     expect(normalizeAuthNextPath('https://example.com')).toBe('/now');
     expect(normalizeAuthNextPath('//example.com')).toBe('/now');
     expect(normalizeAuthNextPath(null)).toBe('/now');
+  });
+});
+
+describe('parseSupabaseAuthHash', () => {
+  it('extracts a session from hash tokens', () => {
+    expect(
+      parseSupabaseAuthHash('#access_token=abc&refresh_token=def&type=signup'),
+    ).toEqual({
+      accessToken: 'abc',
+      refreshToken: 'def',
+    });
+  });
+
+  it('surfaces auth errors from the hash payload', () => {
+    expect(
+      parseSupabaseAuthHash('#error=access_denied&error_description=bad+link'),
+    ).toEqual({
+      error: 'bad link',
+    });
+  });
+
+  it('ignores unrelated hashes', () => {
+    expect(parseSupabaseAuthHash('#hello=world')).toBeNull();
   });
 });
 

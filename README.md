@@ -78,14 +78,15 @@ npm run build
 Current reality:
 
 - the production shell is live on `holdfast.xylent.studio`
-- a dedicated Cloudflare staging shell lane now exists at `holdfast-staging.pages.dev`
+- a dedicated Cloudflare staging auth/sync lane now exists at `holdfast-staging.pages.dev`
 - production Pages is currently a direct-upload project named `holdfast`
-- provider-backed staging auth still needs its own Supabase project or auth environment before staging becomes a real auth lane
+- provider-backed staging auth smoke now passes on `holdfast-staging.pages.dev`
+- same-account staged sync, attachment download, offline replay, and later-offline-edit catch-up smoke now pass on `holdfast-staging.pages.dev`
 - hosted shell smoke passes on production
 - provider-backed production auth smoke passes on `holdfast.xylent.studio`
 - same-account hosted sync, attachment download, offline replay, and later-offline-edit catch-up smoke pass on `holdfast.xylent.studio`
 - validation auth preflight now resolves to the production origin because Supabase Auth URL configuration is pinned to production
-- the validation project remains useful for hosted shell, offline, and risky smoke, but production is now the authoritative hosted auth path
+- the validation project remains useful for hosted shell, offline, and risky smoke
 
 ## Local Tooling
 

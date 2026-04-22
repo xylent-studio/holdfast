@@ -157,21 +157,27 @@ Required allow-list targets:
 
 - `http://localhost:4173/auth/callback`
 - `https://holdfast-validation.pages.dev/auth/callback`
+- `https://holdfast-staging.pages.dev/auth/callback`
 - `https://holdfast.xylent.studio/auth/callback`
 - preview callback URLs for hosted previews before public testing
 
 ## Staging Auth Lane Requirement
 
-Provider-backed staging auth is not automatic.
+Provider-backed staging auth is now a deliberate, real lane.
 
-If Holdfast needs real auth on a staging or preview hostname, create that lane on purpose:
+Current staging auth lane:
 
-- use a stable staging hostname
-- allow-list that callback in Supabase Auth
-- allow-list that origin and redirect URI in Google OAuth
-- give staging its own auth preflight and smoke target
+- staging hostname: `https://holdfast-staging.pages.dev`
+- staging Supabase project: `tgldornordukkssrbjlc`
+- staging callback: `https://holdfast-staging.pages.dev/auth/callback`
+- staging Google callback: `https://tgldornordukkssrbjlc.supabase.co/auth/v1/callback`
+- staging auth smoke and staging sync smoke are both first-class repo checks
 
-Do not assume preview or validation auth should work while Auth URL configuration is pinned to production.
+Rules:
+
+- validate risky auth and sync changes on staging before production
+- do not assume validation auth should work while Auth URL configuration is pinned elsewhere
+- keep staging deliberate; do not casually treat every preview as a provider-backed auth lane
 
 Before hosted auth smoke on the validation project, use the repo preflight:
 
@@ -188,16 +194,17 @@ Those hosted auth checks use server-side generated magic links to verify the hos
 
 Current hosted auth state:
 
-- `holdfast-staging.pages.dev` now exists as a dedicated staging shell lane on Cloudflare Pages
+- `holdfast-staging.pages.dev` now exists as a dedicated staging auth and sync lane on Cloudflare Pages
 - `holdfast.xylent.studio` is live on Cloudflare Pages
+- provider-backed staging auth smoke passes on the staging hostname
+- same-account staged sync, attachment download, offline replay, and a common later-offline-edit catch-up path now pass on the staging hostname
 - provider-backed production auth smoke passes on the production hostname
 - same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path now pass on the production hostname
 - validation auth preflight now intentionally fails when Supabase Auth URL configuration is pinned to production
-- a deliberate staging auth lane does not exist yet
-- the validation project remains useful for hosted shell, offline, and risky smoke, but production is now the authoritative hosted auth path
-- a second Supabase project or staging auth environment is still required before staging becomes a real provider-backed auth lane
+- the validation project remains useful for hosted shell, offline, and risky smoke
+- staging should be the first provider-backed auth and sync lane for risky hosted changes before production
 
-Once a staging project exists, use the repo helper instead of hand-editing auth URLs every time:
+Use the repo helper instead of hand-editing auth URLs every time:
 
 - inspect current config:
   - `npm run supabase:auth -- --project-ref <staging-ref> --show`
@@ -210,6 +217,11 @@ Once a staging project exists, use the repo helper instead of hand-editing auth 
   - set `VITE_SUPABASE_URL=https://<staging-ref>.supabase.co`
   - set `VITE_SUPABASE_ANON_KEY=<staging-publishable-key>`
   - deploy or run hosted auth smoke with `--env-file .env.staging.local`
+
+Staging still requires explicit Google Cloud allow-list changes before staged Google OAuth itself is trustworthy:
+
+- JavaScript origin: `https://holdfast-staging.pages.dev`
+- Redirect URI: `https://tgldornordukkssrbjlc.supabase.co/auth/v1/callback`
 
 Required Google OAuth basics:
 

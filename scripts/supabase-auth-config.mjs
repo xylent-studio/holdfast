@@ -184,11 +184,13 @@ function buildPatch(currentConfig, options) {
   if (options.redirectUrls.length || options.replaceRedirects) {
     const baseRedirects = options.replaceRedirects
       ? []
-      : currentConfig.additional_redirect_urls ?? [];
-    patch.additional_redirect_urls = dedupe([
-      ...baseRedirects,
-      ...options.redirectUrls,
-    ]);
+      : String(currentConfig.uri_allow_list ?? '')
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+    patch.uri_allow_list = dedupe([...baseRedirects, ...options.redirectUrls]).join(
+      ',',
+    );
   }
 
   if (options.enableGoogle) {
@@ -213,7 +215,10 @@ function buildPatch(currentConfig, options) {
 }
 
 function printConfig(projectRef, config) {
-  const redirectUrls = config.additional_redirect_urls ?? [];
+  const redirectUrls = String(config.uri_allow_list ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
   console.log(`Supabase auth config for ${projectRef}`);
   console.log(`- Site URL: ${config.site_url ?? '(unset)'}`);
   console.log(

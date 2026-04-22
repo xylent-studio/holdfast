@@ -32,20 +32,125 @@ export function buildAuthCallbackUrl(nextPath?: string): string {
   return url.toString();
 }
 
-export async function finishSupabaseAuthRedirect(
-  client: SupabaseClient,
-): Promise<{ error: string | null; session: Session | null }> {
-  const url = new URL(window.location.href);
-  const code = url.searchParams.get('code');
+export function parseSupabaseAuthHash(
+  value: string,
+):
+  | { accessToken: string; refreshToken: string }
+  | { error: string }
+  | null {
+  const hash = value.startsWith('#') ? value.slice(1) : value;
+  if (!hash) {
+    return null;
+  }
 
-  if (code) {
-    const { error } = await client.auth.exchangeCodeForSession(code);
-    if (error) {
+  const params = new URLSearchParams(hash);
+  const error =
+    params.get('error_description') ??
+    params.get('error') ??
+    params.get('error_code');
+  if (error) {
+    return { error };
+  }
+
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+
+  if (!accessToken || !refreshToken) {
+    return null;
+  }
+
+  return { accessToken, refreshToken };
+}
+
+function clearAuthHash(url: URL): void {
+  if (!url.hash) {
+    return;
+  }
+
+  url.hash = '';
+  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+}
+
+export async function maybeRestoreSupabaseSessionFromUrl(
+  client: SupabaseClient,
+): Promise<{ error: string | null; handled: boolean; session: Session | null }> {
+  const url = new URL(window.location.href);
+  const parsedHash = parseSupabaseAuthHash(url.hash);
+
+  if (parsedHash) {
+    clearAuthHash(url);
+
+    if ('error' in parsedHash) {
       return {
         error: "Couldn't finish sign-in. Try again.",
+        handled: true,
         session: null,
       };
     }
+
+    const { data, error } = await client.auth.setSession({
+      access_token: parsedHash.accessToken,
+      refresh_token: parsedHash.refreshToken,
+    });
+
+    if (error || !data.session) {
+      return {
+        error: "Couldn't finish sign-in. Try again.",
+        handled: true,
+        session: null,
+      };
+    }
+
+    return {
+      error: null,
+      handled: true,
+      session: data.session,
+    };
+  }
+
+  const code = url.searchParams.get('code');
+  if (!code) {
+    return {
+      error: null,
+      handled: false,
+      session: null,
+    };
+  }
+
+  const { error } = await client.auth.exchangeCodeForSession(code);
+  if (error) {
+    return {
+      error: "Couldn't finish sign-in. Try again.",
+      handled: true,
+      session: null,
+    };
+  }
+
+  const { data, error: sessionError } = await client.auth.getSession();
+  if (sessionError || !data.session) {
+    return {
+      error: "Couldn't finish sign-in. Try again.",
+      handled: true,
+      session: null,
+    };
+  }
+
+  return {
+    error: null,
+    handled: true,
+    session: data.session,
+  };
+}
+
+export async function finishSupabaseAuthRedirect(
+  client: SupabaseClient,
+): Promise<{ error: string | null; session: Session | null }> {
+  const restored = await maybeRestoreSupabaseSessionFromUrl(client);
+  if (restored.handled) {
+    return {
+      error: restored.error,
+      session: restored.session,
+    };
   }
 
   const { data, error } = await client.auth.getSession();

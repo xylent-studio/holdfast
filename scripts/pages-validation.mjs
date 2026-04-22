@@ -319,7 +319,12 @@ function getCompatibilityDate() {
 
 function printStatus(project, envValues, options) {
   const latestDeployment = project ? getLatestDeployment(options.project) : null;
-  const role = options.project === DEFAULT_PROJECT ? 'validation' : 'production';
+  const role =
+    options.project === DEFAULT_PROJECT
+      ? 'validation'
+      : options.project === 'holdfast-staging'
+        ? 'staging'
+        : 'production';
   const projectDomains = project ? getProjectDomains(project) : [];
 
   console.log('Holdfast Pages status');
@@ -346,6 +351,10 @@ function printStatus(project, envValues, options) {
   if (role === 'validation') {
     console.log(
       '- Reminder: this is the disposable hosted smoke surface. Keep it separate from the production hostname.',
+    );
+  } else if (role === 'staging') {
+    console.log(
+      '- Reminder: staging should be the first provider-backed auth and sync lane for risky hosted validation before production.',
     );
   } else {
     console.log(
@@ -452,7 +461,7 @@ async function main() {
     }
 
     if (!options.skipBuild) {
-      run('npm', ['run', 'build']);
+      run('npm', ['run', 'build'], { env: envValues });
     }
 
     console.log(`Deploying dist to ${options.project}...`);

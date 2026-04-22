@@ -133,8 +133,10 @@ Current hosting posture:
 
 - the repo is prepared for Cloudflare Pages through `wrangler.jsonc`
 - a disposable validation project exists at `holdfast-validation.pages.dev`
+- a staging Pages project exists at `holdfast-staging.pages.dev`
 - a production direct-upload Pages project exists at `holdfast-5oz.pages.dev`
 - the production hostname `holdfast.xylent.studio` now points at that Pages project
+- staging auth plus same-account staged sync, attachment download, offline replay, and a common later-offline-edit catch-up path now pass on `holdfast-staging.pages.dev`
 - production auth plus same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path now pass on `holdfast.xylent.studio`
 - public rollout is still gated by broader multi-device merge, deeper offline, and conflict-handling trust work
 - GitHub remains the source-control system of record

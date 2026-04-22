@@ -50,7 +50,17 @@ export async function consumeMagicLink(actionLink: string, page: Page) {
 }
 
 export async function openSignedInSettings(page: Page) {
-  await expect(page.getByRole('button', { name: 'Settings' })).toBeVisible();
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() =>
+          Object.keys(window.localStorage).some((key) =>
+            key.includes('auth-token'),
+          ),
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
   await page.goto('/settings', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
 }

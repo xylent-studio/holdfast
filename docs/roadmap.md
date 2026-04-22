@@ -14,11 +14,14 @@ Status: complete
 
 ## Phase 2: Auth, Sync, And Hosting Foundation
 
-Status: mostly complete
+Status: complete enough for real staging and production hosted lanes
 
 - Supabase Auth is wired with Google and magic-link paths
 - callback handoff and session recovery are in place
 - remote tables, RLS, mutation logging, and the browser sync engine exist
+- a dedicated staging Supabase project exists for hosted validation
+- provider-backed staging auth smoke passes
+- same-account staged sync, attachment download, offline replay, and a common later-offline-edit catch-up path pass on staging
 - Cloudflare Pages production hosting is live at `holdfast.xylent.studio`
 - provider-backed production auth smoke passes
 - same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path pass on production
@@ -29,7 +32,7 @@ Still open in this lane:
 - richer conflict handling and merge behavior
 - attachment upload lifecycle hardening
 - remove-device-data and delete-account flows
-- a second Supabase project or auth environment so `holdfast-staging.pages.dev` can become a real provider-backed staging auth lane
+- staged Google OAuth allow-list parity and broader staged provider validation
 
 ## Phase 3: Product Realignment
 

@@ -23,6 +23,7 @@ import {
   authEmail,
   authProviderLabel,
   buildAuthCallbackUrl,
+  maybeRestoreSupabaseSessionFromUrl,
   normalizeAuthNextPath,
 } from '@/storage/sync/supabase/auth';
 import { getSupabaseBrowserClient } from '@/storage/sync/supabase/client';
@@ -83,9 +84,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
 
-    void client.auth
-      .getSession()
-      .then(async ({ data, error: sessionError }) => {
+    void (async () => {
+      const restored = await maybeRestoreSupabaseSessionFromUrl(client);
+      if (cancelled) {
+        return;
+      }
+
+      if (restored.handled) {
+        if (restored.error) {
+          setError(restored.error);
+        }
+
+        const resolvedSession = await syncSessionToLocal(restored.session);
+        if (cancelled) {
+          return;
+        }
+
+        setSession(resolvedSession);
+        setIsReady(true);
+        return;
+      }
+
+      const { data, error: sessionError } = await client.auth.getSession();
         if (cancelled) {
           return;
         }
@@ -101,8 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(resolvedSession);
         setIsReady(true);
-      })
-      .catch((caughtError) => {
+      })().catch((caughtError) => {
         if (cancelled) {
           return;
         }
