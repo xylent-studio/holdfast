@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 const DEFAULT_PROJECT = 'holdfast-validation';
 const DEFAULT_BRANCH = 'main';
+const NON_BLOCKING_PRODUCTION_DIRTY_PATHS = new Set([
+  'scripts/rehydrate-agent.ps1',
+]);
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -28,6 +31,7 @@ Options:
   --branch <name>     Pages branch to deploy. Default: ${DEFAULT_BRANCH}
   --base-url <url>    Hosted base URL for smoke tests.
   --env-file <path>   Additional env file to load before build/smoke checks.
+  --allow-dirty       Allow production deploys with release-affecting dirty files.
   --auth-preflight    Verify Supabase-generated email links stay on the hosted origin.
   --auth-smoke        Run hosted auth smoke after preflight using server-side magic links.
   --sync-smoke        Run hosted same-account sync and attachment smoke after auth preflight.
@@ -145,6 +149,7 @@ function parseArgs(argv) {
   const options = {
     authSmoke: false,
     authPreflight: false,
+    allowDirty: false,
     baseUrl: null,
     branch: DEFAULT_BRANCH,
     create: false,
@@ -186,6 +191,11 @@ function parseArgs(argv) {
 
     if (arg === '--auth-preflight') {
       options.authPreflight = true;
+      continue;
+    }
+
+    if (arg === '--allow-dirty') {
+      options.allowDirty = true;
       continue;
     }
 
@@ -380,6 +390,65 @@ function getLatestDeployment(projectName) {
   return deployments[0] ?? null;
 }
 
+function projectRole(options) {
+  return options.project === DEFAULT_PROJECT
+    ? 'validation'
+    : options.project === 'holdfast-staging'
+      ? 'staging'
+      : 'production';
+}
+
+function parseDirtyPath(line) {
+  const candidate = line.slice(3).trim();
+  const pathText = candidate.includes(' -> ')
+    ? candidate.split(' -> ').at(-1) ?? candidate
+    : candidate;
+  return pathText.replaceAll('\\', '/');
+}
+
+function getBlockingDirtyPaths() {
+  const raw = run(
+    'git',
+    ['status', '--porcelain=1', '--untracked-files=all'],
+    { capture: true },
+  );
+
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(/\r?\n/u)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map(parseDirtyPath)
+    .filter((entry) => !NON_BLOCKING_PRODUCTION_DIRTY_PATHS.has(entry));
+}
+
+function ensureProductionDeployClean(options) {
+  if (projectRole(options) !== 'production' || options.allowDirty) {
+    return;
+  }
+
+  const blockingDirtyPaths = getBlockingDirtyPaths();
+  if (!blockingDirtyPaths.length) {
+    return;
+  }
+
+  const preview = blockingDirtyPaths
+    .slice(0, 10)
+    .map((entry) => `- ${entry}`)
+    .join('\n');
+  const more =
+    blockingDirtyPaths.length > 10
+      ? `\n- ...and ${blockingDirtyPaths.length - 10} more`
+      : '';
+
+  throw new Error(
+    `Production deploy requires a clean release-affecting working tree.\nCommit or stash these paths before deploying:\n${preview}${more}\n\nIgnored non-release path: scripts/rehydrate-agent.ps1\nOverride only for emergencies with --allow-dirty.`,
+  );
+}
+
 function getCompatibilityDate() {
   const wranglerConfig = parseJsonc(path.join(repoRoot, 'wrangler.jsonc'));
   return wranglerConfig.compatibility_date;
@@ -387,12 +456,7 @@ function getCompatibilityDate() {
 
 function printStatus(project, envValues, options) {
   const latestDeployment = project ? getLatestDeployment(options.project) : null;
-  const role =
-    options.project === DEFAULT_PROJECT
-      ? 'validation'
-      : options.project === 'holdfast-staging'
-        ? 'staging'
-        : 'production';
+  const role = projectRole(options);
   const projectDomains = project ? getProjectDomains(project) : [];
 
   console.log('Holdfast Pages status');
@@ -426,7 +490,7 @@ function printStatus(project, envValues, options) {
     );
   } else {
     console.log(
-      '- Reminder: production is currently a direct-upload Pages project. If you later want Git integration, replace it intentionally instead of assuming Cloudflare can switch modes.',
+      '- Reminder: production is currently a direct-upload Pages project. Deploy from a clean release-affecting tree, and replace the project intentionally later if you need Git integration.',
     );
   }
 }
@@ -522,6 +586,7 @@ async function main() {
   }
 
   if (options.deploy) {
+    ensureProductionDeployClean(options);
     requireBuildEnv(envValues);
 
     if (!projectExists) {

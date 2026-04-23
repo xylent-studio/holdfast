@@ -6,6 +6,7 @@ import {
   createListItem,
   deleteListItem,
   promoteListItemToNow,
+  reopenAllDoneListItems,
   replaceListItemWithLatestSavedVersion,
   replaceListWithLatestSavedVersion,
   updateList,
@@ -50,6 +51,23 @@ export function ListView({
   );
   const openItems = items.filter((entry) => entry.status === 'open');
   const doneItems = items.filter((entry) => entry.status === 'done');
+  const listDescription = (() => {
+    if (!list) {
+      return '';
+    }
+
+    switch (list.kind) {
+      case 'replenishment':
+        return 'Keep a reusable list without losing what you already picked up.';
+      case 'checklist':
+        return 'Keep a repeatable checklist without turning it into a project board.';
+      case 'reference':
+        return 'Keep saved things close without pretending they all belong in Now.';
+      case 'project':
+      default:
+        return 'Keep a living list without turning it into a second navigation system.';
+    }
+  })();
 
   if (!list) {
     return (
@@ -172,6 +190,9 @@ export function ListView({
     const promotedItem = entry.promotedItemId
       ? snapshot.items.find((item) => item.id === entry.promotedItemId) ?? null
       : null;
+    const sourceItem = entry.sourceItemId
+      ? snapshot.items.find((item) => item.id === entry.sourceItemId) ?? null
+      : null;
     const isConflict = entry.syncState === 'conflict';
     const conflictBusy = listItemConflictBusyId === entry.id;
     const conflictError =
@@ -242,7 +263,7 @@ export function ListView({
               Done
             </button>
           )}
-          {entry.status === 'open' ? (
+          {entry.status === 'open' && list.kind !== 'reference' ? (
             promotedItem ? (
               <button
                 className="button ghost small"
@@ -260,6 +281,31 @@ export function ListView({
                 Send to Now
               </button>
             )
+          ) : null}
+          {entry.status === 'done' && list.kind === 'replenishment' ? (
+            <button
+              className="button ghost small"
+              onClick={() =>
+                void createListItem({
+                  listId: list.id,
+                  title: entry.title,
+                  body: entry.body,
+                  sourceItemId: entry.sourceItemId,
+                })
+              }
+              type="button"
+            >
+              Add again
+            </button>
+          ) : null}
+          {sourceItem ? (
+            <button
+              className="button ghost small"
+              onClick={() => onOpenItem(sourceItem.id)}
+              type="button"
+            >
+              Open original
+            </button>
           ) : null}
           {entry.status === 'open' ? (
             <button
@@ -282,10 +328,7 @@ export function ListView({
           <div>
             <div className="eyebrow">{LIST_KIND_LABELS[list.kind]} list</div>
             <h1>{list.title}</h1>
-            <p>
-              Keep a living list without turning it into a second navigation
-              system.
-            </p>
+            <p>{listDescription}</p>
           </div>
           <div className="chip-row">
             {list.syncState === 'conflict' ? (
@@ -370,9 +413,22 @@ export function ListView({
       </Panel>
 
       <Panel>
-        <div className="panel-header">
-          <h2>Done history</h2>
-          <p>What this list already carried through.</p>
+        <div className="panel-header split">
+          <div>
+            <h2>Done history</h2>
+            <p>What this list already carried through.</p>
+          </div>
+          {list.kind === 'checklist' && doneItems.length ? (
+            <div className="dialog-actions">
+              <button
+                className="button ghost small"
+                onClick={() => void reopenAllDoneListItems(list.id)}
+                type="button"
+              >
+                Reopen all done
+              </button>
+            </div>
+          ) : null}
         </div>
         {doneItems.length ? (
           <div className="item-list">{doneItems.map(renderListItemCard)}</div>

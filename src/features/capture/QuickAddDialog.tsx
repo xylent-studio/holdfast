@@ -12,8 +12,11 @@ import {
   type AddContext,
   type AddDestination,
 } from '@/domain/logic/capture';
+import {
+  buildListTargetGroups,
+  inferListKind,
+} from '@/domain/logic/list-targets';
 import type { DateKey } from '@/domain/dates';
-import type { ListKind } from '@/domain/schemas/records';
 import {
   createItem,
   createListItem,
@@ -43,6 +46,40 @@ interface QuickAddDialogBodyProps {
   onOpenList: (listId: string) => void;
 }
 
+function ListTargetSection({
+  title,
+  lists,
+  selectedListId,
+  onSelect,
+}: {
+  title: string;
+  lists: HoldfastSnapshot['lists'];
+  selectedListId: string | null;
+  onSelect: (listId: string) => void;
+}) {
+  if (!lists.length) {
+    return null;
+  }
+
+  return (
+    <div className="field-stack">
+      <span>{title}</span>
+      <div className="chip-row">
+        {lists.map((list) => (
+          <button
+            className={`chip ${selectedListId === list.id ? 'active' : ''}`}
+            key={list.id}
+            onClick={() => onSelect(list.id)}
+            type="button"
+          >
+            {list.title}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function QuickAddDialogBody({
   context,
   currentDate,
@@ -54,29 +91,21 @@ function QuickAddDialogBody({
   const defaults = useMemo(() => buildQuickAddDraft(currentDate), [currentDate]);
   const currentList =
     lists.find((entry) => entry.id === currentListId && !entry.deletedAt) ?? null;
-  const availableLists = useMemo(() => {
-    const ordered = [
-      ...(currentList ? [currentList] : []),
-      ...lists.filter(
-        (entry) => !entry.deletedAt && entry.pinned && entry.id !== currentListId,
-      ),
-    ];
-
-    return ordered;
-  }, [currentList, currentListId, lists]);
+  const activeLists = useMemo(
+    () => lists.filter((entry) => !entry.deletedAt && !entry.archivedAt),
+    [lists],
+  );
   const primaryDestination = primaryAddDestinationForContext(context);
   const [rawText, setRawText] = useState('');
   const [showDestinationPicker, setShowDestinationPicker] = useState(false);
   const [selectedDestination, setSelectedDestination] = useState<AddDestination>(
     primaryDestination,
   );
-  const [selectedListId, setSelectedListId] = useState<string | null>(
-    currentList?.id ?? availableLists[0]?.id ?? null,
-  );
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [listSearch, setListSearch] = useState('');
   const [chosenDate, setChosenDate] = useState<DateKey>(defaults.chosenDate);
   const [chosenTime, setChosenTime] = useState(defaults.chosenTime);
   const [newListTitle, setNewListTitle] = useState('');
-  const [newListKind, setNewListKind] = useState<ListKind>('project');
 
   const parsed = splitCapturedText(rawText);
   const canSubmit = Boolean(parsed);
@@ -84,8 +113,46 @@ function QuickAddDialogBody({
     ? selectedDestination
     : primaryDestination;
   const currentListTitle = currentList?.title ?? null;
+
+  const listTargetGroups = useMemo(
+    () =>
+      buildListTargetGroups(activeLists, {
+        currentListId,
+        draftText: rawText,
+        search: listSearch,
+      }),
+    [activeLists, currentListId, listSearch, rawText],
+  );
+
+  const selectableLists = (() => {
+    const ordered = [
+      ...listTargetGroups.current,
+      ...listTargetGroups.suggested,
+      ...listTargetGroups.recent,
+      ...listTargetGroups.pinned,
+      ...listTargetGroups.search,
+    ];
+
+    const seen = new Set<string>();
+    return ordered.filter((list) => {
+      if (seen.has(list.id)) {
+        return false;
+      }
+
+      seen.add(list.id);
+      return true;
+    });
+  })();
+
+  const defaultListId = selectableLists[0]?.id ?? null;
+  const effectiveSelectedListId = selectableLists.some(
+    (list) => list.id === selectedListId,
+  )
+    ? selectedListId
+    : defaultListId;
+
   const selectedListTitle =
-    availableLists.find((entry) => entry.id === selectedListId)?.title ??
+    activeLists.find((entry) => entry.id === effectiveSelectedListId)?.title ??
     currentListTitle;
 
   const primaryActionLabel = destinationActionLabel(
@@ -100,7 +167,7 @@ function QuickAddDialogBody({
   const contextCaptureMode = (destination: AddDestination) =>
     isContextDestination(context, destination, {
       currentListId,
-      selectedListId,
+      selectedListId: effectiveSelectedListId,
     })
       ? 'context'
       : 'direct';
@@ -143,13 +210,13 @@ function QuickAddDialogBody({
   };
 
   const handleAddToExistingList = async (): Promise<void> => {
-    if (!parsed || !selectedListId) {
+    if (!parsed || !effectiveSelectedListId) {
       return;
     }
 
     await createListItem({
       body: parsed.body,
-      listId: selectedListId,
+      listId: effectiveSelectedListId,
       title: parsed.title,
     });
     onClose();
@@ -160,10 +227,11 @@ function QuickAddDialogBody({
       return;
     }
 
+    const title = newListTitle.trim();
     const listId = await createListWithFirstItem(
       {
-        title: newListTitle.trim(),
-        kind: newListKind,
+        title,
+        kind: inferListKind(title),
         lane: 'admin',
       },
       {
@@ -194,9 +262,11 @@ function QuickAddDialogBody({
 
   const showSaveToInboxSecondary = primaryDestination !== 'inbox';
   const showScheduleFields = activeDestination === 'scheduled';
-  const currentListOptionLabel = currentList
-    ? destinationLabel('list', currentList.title)
-    : null;
+
+  const selectListTarget = (listId: string): void => {
+    setSelectedDestination('list');
+    setSelectedListId(listId);
+  };
 
   return (
     <div className="dialog-stack">
@@ -222,56 +292,20 @@ function QuickAddDialogBody({
           <div className="field-stack">
             <span>Choose another place</span>
             <div className="chip-row">
-              {(
-                ['now', 'scheduled', 'undated', 'waiting'] as const
-              ).map((destination) => (
-                <button
-                  className={`chip ${
-                    selectedDestination === destination ? 'active' : ''
-                  }`}
-                  key={destination}
-                  onClick={() => setSelectedDestination(destination)}
-                  type="button"
-                >
-                  {destinationLabel(destination)}
-                </button>
-              ))}
-              {currentList ? (
-                <button
-                  className={`chip ${
-                    selectedDestination === 'list' &&
-                    selectedListId === currentList.id
-                      ? 'active'
-                      : ''
-                  }`}
-                  onClick={() => {
-                    setSelectedDestination('list');
-                    setSelectedListId(currentList.id);
-                  }}
-                  type="button"
-                >
-                  {currentListOptionLabel}
-                </button>
-              ) : null}
-              {availableLists
-                .filter((entry) => entry.id !== currentList?.id)
-                .map((list) => (
+              {(['now', 'scheduled', 'undated', 'waiting'] as const).map(
+                (destination) => (
                   <button
                     className={`chip ${
-                      selectedDestination === 'list' && selectedListId === list.id
-                        ? 'active'
-                        : ''
+                      selectedDestination === destination ? 'active' : ''
                     }`}
-                    key={list.id}
-                    onClick={() => {
-                      setSelectedDestination('list');
-                      setSelectedListId(list.id);
-                    }}
+                    key={destination}
+                    onClick={() => setSelectedDestination(destination)}
                     type="button"
                   >
-                    {list.title}
+                    {destinationLabel(destination)}
                   </button>
-                ))}
+                ),
+              )}
               <button
                 className={`chip ${selectedDestination === 'new-list' ? 'active' : ''}`}
                 onClick={() => setSelectedDestination('new-list')}
@@ -282,18 +316,107 @@ function QuickAddDialogBody({
             </div>
           </div>
 
-          {selectedDestination === 'list' && !selectedListId ? (
+          <div className="item-card day-result">
+            {listSearch.trim() ? (
+              <>
+                <label className="field-stack">
+                  <span>Find a list</span>
+                  <input
+                    onChange={(event) => setListSearch(event.target.value)}
+                    placeholder="Search all lists"
+                    type="search"
+                    value={listSearch}
+                  />
+                </label>
+                <ListTargetSection
+                  lists={listTargetGroups.search}
+                  onSelect={selectListTarget}
+                  selectedListId={
+                    selectedDestination === 'list' ? effectiveSelectedListId : null
+                  }
+                  title="Matching lists"
+                />
+                {!listTargetGroups.search.length ? (
+                  <div className="empty-inline">
+                    No matching lists yet. Create a new one if this needs its own
+                    home.
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <ListTargetSection
+                  lists={listTargetGroups.current}
+                  onSelect={selectListTarget}
+                  selectedListId={
+                    selectedDestination === 'list'
+                      ? effectiveSelectedListId
+                      : null
+                  }
+                  title="Current list"
+                />
+                <ListTargetSection
+                  lists={listTargetGroups.suggested}
+                  onSelect={selectListTarget}
+                  selectedListId={
+                    selectedDestination === 'list'
+                      ? effectiveSelectedListId
+                      : null
+                  }
+                  title="Suggested lists"
+                />
+                <ListTargetSection
+                  lists={listTargetGroups.recent}
+                  onSelect={selectListTarget}
+                  selectedListId={
+                    selectedDestination === 'list'
+                      ? effectiveSelectedListId
+                      : null
+                  }
+                  title="Recent lists"
+                />
+                <ListTargetSection
+                  lists={listTargetGroups.pinned}
+                  onSelect={selectListTarget}
+                  selectedListId={
+                    selectedDestination === 'list'
+                      ? effectiveSelectedListId
+                      : null
+                  }
+                  title="Pinned lists"
+                />
+                <label className="field-stack">
+                  <span>Find a list</span>
+                  <input
+                    onChange={(event) => setListSearch(event.target.value)}
+                    placeholder="Search all lists"
+                    type="search"
+                    value={listSearch}
+                  />
+                </label>
+                {!selectableLists.length ? (
+                  <div className="empty-inline">
+                    No lists yet. Create a new one if this belongs somewhere
+                    specific.
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          {selectedDestination === 'list' && !effectiveSelectedListId ? (
             <div className="empty-inline">
-              Pin a list or create a new one before sending this there.
+              Search for a list or create a new one first.
             </div>
           ) : null}
 
           {selectedDestination === 'new-list' ? (
             <div className="item-card day-result">
               <ListCreatorFields
-                kind={newListKind}
-                onKindChange={setNewListKind}
+                kind={inferListKind(newListTitle)}
+                onKindChange={() => undefined}
                 onTitleChange={setNewListTitle}
+                showKind={false}
                 title={newListTitle}
               />
             </div>
@@ -331,7 +454,10 @@ function QuickAddDialogBody({
             <>
               <button
                 className="button ghost"
-                onClick={() => setShowDestinationPicker(false)}
+                onClick={() => {
+                  setListSearch('');
+                  setShowDestinationPicker(false);
+                }}
                 type="button"
               >
                 Back
@@ -350,7 +476,7 @@ function QuickAddDialogBody({
                 className="button accent"
                 disabled={
                   !canSubmit ||
-                  (selectedDestination === 'list' && !selectedListId) ||
+                  (selectedDestination === 'list' && !effectiveSelectedListId) ||
                   (selectedDestination === 'new-list' && !newListTitle.trim())
                 }
                 onClick={() => void handleSubmitDestination(selectedDestination)}

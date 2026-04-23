@@ -7,25 +7,23 @@ import { ItemDetailsDialog } from '@/features/item-details/ItemDetailsDialog';
 const addFilesToItemMock = vi.fn();
 const deleteItemMock = vi.fn();
 const getAttachmentDownloadMock = vi.fn();
+const moveItemToListMock = vi.fn();
+const moveItemToNewListMock = vi.fn();
 const removeAttachmentMock = vi.fn();
 const replaceItemWithLatestSavedVersionMock = vi.fn();
 const saveItemMock = vi.fn();
-const sendInboxCaptureToListMock = vi.fn();
-const sendInboxCaptureToNewListMock = vi.fn();
 const toggleFocusMock = vi.fn();
 
 vi.mock('@/storage/local/api', () => ({
   addFilesToItem: (...args: unknown[]) => addFilesToItemMock(...args),
   deleteItem: (...args: unknown[]) => deleteItemMock(...args),
   getAttachmentDownload: (...args: unknown[]) => getAttachmentDownloadMock(...args),
+  moveItemToList: (...args: unknown[]) => moveItemToListMock(...args),
+  moveItemToNewList: (...args: unknown[]) => moveItemToNewListMock(...args),
   removeAttachment: (...args: unknown[]) => removeAttachmentMock(...args),
   replaceItemWithLatestSavedVersion: (...args: unknown[]) =>
     replaceItemWithLatestSavedVersionMock(...args),
   saveItem: (...args: unknown[]) => saveItemMock(...args),
-  sendInboxCaptureToList: (...args: unknown[]) =>
-    sendInboxCaptureToListMock(...args),
-  sendInboxCaptureToNewList: (...args: unknown[]) =>
-    sendInboxCaptureToNewListMock(...args),
   toggleFocus: (...args: unknown[]) => toggleFocusMock(...args),
 }));
 
@@ -54,11 +52,11 @@ describe('ItemDetailsDialog', () => {
     addFilesToItemMock.mockReset();
     deleteItemMock.mockReset();
     getAttachmentDownloadMock.mockReset();
+    moveItemToListMock.mockReset();
+    moveItemToNewListMock.mockReset();
     replaceItemWithLatestSavedVersionMock.mockReset();
     removeAttachmentMock.mockReset();
     saveItemMock.mockReset();
-    sendInboxCaptureToListMock.mockReset();
-    sendInboxCaptureToNewListMock.mockReset();
     toggleFocusMock.mockReset();
   });
 
@@ -180,7 +178,7 @@ describe('ItemDetailsDialog', () => {
   });
 
   it('can send an inbox capture into a pinned list', async () => {
-    sendInboxCaptureToListMock.mockResolvedValue(undefined);
+    moveItemToListMock.mockResolvedValue(undefined);
     const onClose = vi.fn();
 
     render(
@@ -218,11 +216,11 @@ describe('ItemDetailsDialog', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send to list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to list' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
-      expect(sendInboxCaptureToListMock).toHaveBeenCalledWith(
+      expect(moveItemToListMock).toHaveBeenCalledWith(
         '22222222-2222-4222-8222-222222222222',
         'list-1',
       );

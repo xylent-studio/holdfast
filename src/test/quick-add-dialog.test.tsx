@@ -169,7 +169,6 @@ describe('QuickAddDialog', () => {
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Groceries' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Replenishment' }));
     fireEvent.click(
       screen.getByRole('button', { name: 'Create list and add first item' }),
     );

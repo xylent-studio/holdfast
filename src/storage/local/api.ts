@@ -1451,25 +1451,59 @@ export async function createListItem(
   );
 }
 
-export async function sendInboxCaptureToList(
+function createListItemRecordFromItem(
+  item: ItemRecord,
+  listId: string,
+  position: number,
+  timestamp: string,
+): ListItemRecord {
+  return ListItemRecordSchema.parse({
+    ...createListItemRecord(
+      {
+        listId,
+        title: item.title,
+        body: item.body,
+        sourceItemId: item.id,
+      },
+      position,
+    ),
+    status: item.status === 'done' ? 'done' : 'open',
+    completedAt:
+      item.status === 'done' ? (item.completedAt ?? timestamp) : null,
+  });
+}
+
+function archiveItemRecord(item: ItemRecord, timestamp: string): ItemRecord {
+  return ItemRecordSchema.parse({
+    ...item,
+    status: 'archived',
+    archivedAt: item.archivedAt ?? timestamp,
+    updatedAt: timestamp,
+    syncState: 'pending',
+  });
+}
+
+export async function moveItemToList(
   itemId: string,
   listId: string,
 ): Promise<void> {
   await db.transaction(
     'rw',
     db.items,
+    db.dailyRecords,
     db.lists,
     db.listItems,
     db.mutationQueue,
     async () => {
-      const [item, list] = await Promise.all([
-        db.items.get(itemId),
+      const item = await db.items.get(itemId);
+      const [list, sourceListItem] = await Promise.all([
         db.lists.get(listId),
+        item?.sourceItemId ? db.listItems.get(item.sourceItemId) : Promise.resolve(null),
       ]);
       if (
         !item ||
         item.deletedAt ||
-        item.kind !== 'capture' ||
+        item.status === 'archived' ||
         !list ||
         list.deletedAt
       ) {
@@ -1477,31 +1511,78 @@ export async function sendInboxCaptureToList(
       }
 
       const timestamp = nowIso();
-      const position = await nextListItemPosition(listId);
-      const listItem = createListItemRecord(
-        {
-          listId,
+      const sourceBelongsToTargetList =
+        Boolean(sourceListItem) &&
+        sourceListItem!.listId === listId &&
+        sourceListItem!.promotedItemId === item.id;
+
+      if (sourceBelongsToTargetList) {
+        const restoredListItem = ListItemRecordSchema.parse({
+          ...sourceListItem,
           title: item.title,
           body: item.body,
-          sourceItemId: item.id,
-        },
-        position,
-      );
-      const archivedItem = ItemRecordSchema.parse({
-        ...item,
-        status: 'archived',
-        archivedAt: item.archivedAt ?? timestamp,
-        updatedAt: timestamp,
-        syncState: 'pending',
-      });
+          status: item.status === 'done' ? 'done' : 'open',
+          promotedItemId: null,
+          completedAt:
+            item.status === 'done'
+              ? (sourceListItem?.completedAt ?? item.completedAt ?? timestamp)
+              : null,
+          updatedAt: timestamp,
+          syncState: 'pending',
+        });
 
-      await db.listItems.add(listItem);
+        await db.listItems.put(restoredListItem);
+        await queueMutation(
+          createMutationRecord('listItem', restoredListItem.id, 'list-item.updated', {
+            listItem: restoredListItem,
+          }),
+        );
+      } else {
+        const position = await nextListItemPosition(listId);
+        const listItem = createListItemRecordFromItem(
+          item,
+          listId,
+          position,
+          timestamp,
+        );
+
+        await db.listItems.add(listItem);
+        await queueMutation(
+          createMutationRecord('listItem', listItem.id, 'list-item.created', {
+            listItem,
+          }),
+        );
+      }
+
+      if (
+        sourceListItem &&
+        sourceListItem.promotedItemId === item.id &&
+        !sourceBelongsToTargetList
+      ) {
+        const clearedSourceListItem = ListItemRecordSchema.parse({
+          ...sourceListItem,
+          promotedItemId: null,
+          updatedAt: timestamp,
+          syncState: 'pending',
+        });
+
+        await db.listItems.put(clearedSourceListItem);
+        await queueMutation(
+          createMutationRecord(
+            'listItem',
+            clearedSourceListItem.id,
+            'list-item.updated',
+            {
+              listItem: clearedSourceListItem,
+            },
+          ),
+        );
+      }
+
+      const archivedItem = archiveItemRecord(item, timestamp);
+
       await db.items.put(archivedItem);
-      await queueMutation(
-        createMutationRecord('listItem', listItem.id, 'list-item.created', {
-          listItem,
-        }),
-      );
+      await removeItemFromFocusEverywhere(item.id, { queueMutations: true });
       await queueMutation(
         createMutationRecord('item', item.id, 'item.updated', {
           item: archivedItem,
@@ -1511,7 +1592,14 @@ export async function sendInboxCaptureToList(
   );
 }
 
-export async function sendInboxCaptureToNewList(
+export async function sendInboxCaptureToList(
+  itemId: string,
+  listId: string,
+): Promise<void> {
+  await moveItemToList(itemId, listId);
+}
+
+export async function moveItemToNewList(
   itemId: string,
   input: CreateListInput,
 ): Promise<string | null> {
@@ -1520,32 +1608,27 @@ export async function sendInboxCaptureToNewList(
   await db.transaction(
     'rw',
     db.items,
+    db.dailyRecords,
     db.lists,
     db.listItems,
     db.mutationQueue,
     async () => {
       const item = await db.items.get(itemId);
-      if (!item || item.deletedAt || item.kind !== 'capture') {
+      const sourceListItem = item?.sourceItemId
+        ? await db.listItems.get(item.sourceItemId)
+        : null;
+      if (!item || item.deletedAt || item.status === 'archived') {
         return;
       }
 
       const timestamp = nowIso();
-      const listItem = createListItemRecord(
-        {
-          listId: listRecord.id,
-          title: item.title,
-          body: item.body,
-          sourceItemId: item.id,
-        },
+      const listItem = createListItemRecordFromItem(
+        item,
+        listRecord.id,
         0,
+        timestamp,
       );
-      const archivedItem = ItemRecordSchema.parse({
-        ...item,
-        status: 'archived',
-        archivedAt: item.archivedAt ?? timestamp,
-        updatedAt: timestamp,
-        syncState: 'pending',
-      });
+      const archivedItem = archiveItemRecord(item, timestamp);
 
       await db.lists.add(listRecord);
       await db.listItems.add(listItem);
@@ -1560,6 +1643,27 @@ export async function sendInboxCaptureToNewList(
           listItem,
         }),
       );
+      if (sourceListItem && sourceListItem.promotedItemId === item.id) {
+        const clearedSourceListItem = ListItemRecordSchema.parse({
+          ...sourceListItem,
+          promotedItemId: null,
+          updatedAt: timestamp,
+          syncState: 'pending',
+        });
+
+        await db.listItems.put(clearedSourceListItem);
+        await queueMutation(
+          createMutationRecord(
+            'listItem',
+            clearedSourceListItem.id,
+            'list-item.updated',
+            {
+              listItem: clearedSourceListItem,
+            },
+          ),
+        );
+      }
+      await removeItemFromFocusEverywhere(item.id, { queueMutations: true });
       await queueMutation(
         createMutationRecord('item', item.id, 'item.updated', {
           item: archivedItem,
@@ -1570,6 +1674,38 @@ export async function sendInboxCaptureToNewList(
 
   const createdList = await db.lists.get(listRecord.id);
   return createdList ? listRecord.id : null;
+}
+
+export async function sendInboxCaptureToNewList(
+  itemId: string,
+  input: CreateListInput,
+): Promise<string | null> {
+  return moveItemToNewList(itemId, input);
+}
+
+export async function reopenAllDoneListItems(listId: string): Promise<void> {
+  await db.transaction('rw', db.listItems, db.mutationQueue, async () => {
+    const doneItems = await db.listItems.where('listId').equals(listId).toArray();
+
+    for (const item of doneItems.filter(
+      (entry) => !entry.deletedAt && entry.status === 'done',
+    )) {
+      const updated = ListItemRecordSchema.parse({
+        ...item,
+        status: 'open',
+        completedAt: null,
+        updatedAt: nowIso(),
+        syncState: 'pending',
+      });
+
+      await db.listItems.put(updated);
+      await queueMutation(
+        createMutationRecord('listItem', updated.id, 'list-item.updated', {
+          listItem: updated,
+        }),
+      );
+    }
+  });
 }
 
 export async function updateList(

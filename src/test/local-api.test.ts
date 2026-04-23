@@ -12,6 +12,9 @@ import {
   deleteList,
   deleteItem,
   getHoldfastSnapshot,
+  moveItemToList,
+  promoteListItemToNow,
+  reopenAllDoneListItems,
   removeDataFromDevice,
   sendInboxCaptureToList,
   sendInboxCaptureToNewList,
@@ -356,6 +359,106 @@ describe('list creation and capture transfer flows', () => {
     });
     expect(updatedCapture).toMatchObject({
       status: 'archived',
+    });
+  });
+
+  it('can move a top-level task into an existing list and archive the original item', async () => {
+    await createItem({
+      title: 'Printer ink',
+      kind: 'task',
+      lane: 'admin',
+      status: 'upcoming',
+      body: 'Black first',
+      sourceText: 'Printer ink\n\nBlack first',
+      sourceItemId: null,
+      captureMode: 'direct',
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+    await createList({
+      title: 'Errands',
+      kind: 'project',
+      lane: 'home',
+    });
+
+    const [item] = await db.items.toArray();
+    const [list] = await db.lists.toArray();
+
+    await moveItemToList(item!.id, list!.id);
+
+    const updatedItem = await db.items.get(item!.id);
+    const [listItem] = await db.listItems.where('listId').equals(list!.id).toArray();
+
+    expect(updatedItem).toMatchObject({
+      status: 'archived',
+      archivedAt: expect.any(String),
+    });
+    expect(listItem).toMatchObject({
+      title: 'Printer ink',
+      body: 'Black first',
+      sourceItemId: item!.id,
+      status: 'open',
+    });
+  });
+
+  it('restores a promoted list item back into its original list without creating a duplicate', async () => {
+    await createList({
+      title: 'Groceries',
+      kind: 'replenishment',
+      lane: 'home',
+    });
+
+    const [list] = await db.lists.toArray();
+    await createListItem({
+      listId: list!.id,
+      title: 'Eggs',
+      body: 'Check pantry first',
+    });
+
+    const [originalListItem] = await db.listItems.toArray();
+    await promoteListItemToNow(originalListItem!.id, CURRENT_DATE);
+
+    const promotedListItem = await db.listItems.get(originalListItem!.id);
+    expect(promotedListItem?.promotedItemId).toBeTruthy();
+
+    await moveItemToList(promotedListItem!.promotedItemId!, list!.id);
+
+    const restoredListItem = await db.listItems.get(originalListItem!.id);
+    const allListItems = await db.listItems.where('listId').equals(list!.id).toArray();
+    const promotedItem = await db.items.get(promotedListItem!.promotedItemId!);
+
+    expect(allListItems).toHaveLength(1);
+    expect(restoredListItem).toMatchObject({
+      title: 'Eggs',
+      body: 'Check pantry first',
+      promotedItemId: null,
+      status: 'open',
+    });
+    expect(promotedItem).toMatchObject({
+      status: 'archived',
+    });
+  });
+
+  it('can reopen all done checklist items together', async () => {
+    await createList({
+      title: 'Weekend prep',
+      kind: 'checklist',
+      lane: 'admin',
+    });
+
+    const [list] = await db.lists.toArray();
+    await createListItem({ listId: list!.id, title: 'Pack charger' });
+
+    const [listItem] = await db.listItems.toArray();
+    await updateListItem(listItem!.id, { status: 'done' });
+    await reopenAllDoneListItems(list!.id);
+
+    const reopened = await db.listItems.get(listItem!.id);
+
+    expect(reopened).toMatchObject({
+      status: 'open',
+      completedAt: null,
     });
   });
 });

@@ -180,6 +180,11 @@ When a capture becomes a list item:
 - the list item should preserve the original capture id as `sourceItemId`
 - the original capture should archive out of active circulation instead of lingering as a duplicate open thing
 
+When a top-level task or note moves into a list:
+- the resulting list item should preserve the original item id as `sourceItemId`
+- the original task or note should archive out of active circulation instead of lingering as a duplicate open thing
+- if the top-level item originally came from that same list, the product should prefer restoring the original list item over creating a duplicate
+
 The product should not require the user to decide task-versus-note before the thought is safely caught.
 
 ## Scheduling Relationship

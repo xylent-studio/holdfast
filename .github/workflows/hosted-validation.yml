@@ -1,9 +1,7 @@
-name: Hosted Validation
+name: Hosted Smoke
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '23 11 * * *'
 
 jobs:
   hosted-smoke:

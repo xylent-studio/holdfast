@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react';
 
 import { ITEM_KIND_LABELS } from '@/domain/constants';
+import { buildListTargetGroups, inferListKind } from '@/domain/logic/list-targets';
 import type { DateKey } from '@/domain/dates';
-import type { ItemKind, ItemStatus, ListKind } from '@/domain/schemas/records';
+import type { ItemKind, ItemStatus } from '@/domain/schemas/records';
 import {
   addFilesToItem,
   deleteItem,
   getAttachmentDownload,
+  moveItemToList,
+  moveItemToNewList,
   removeAttachment,
   replaceItemWithLatestSavedVersion,
   saveItem,
-  sendInboxCaptureToList,
-  sendInboxCaptureToNewList,
   toggleFocus,
   type HoldfastSnapshot,
   type ItemWithAttachments,
@@ -60,10 +61,6 @@ function initialPlacement(item: ItemWithAttachments): PlacementChoice {
     return 'archive';
   }
 
-  if (item.kind === 'capture') {
-    return 'inbox';
-  }
-
   if (item.status === 'today') {
     return 'now';
   }
@@ -77,6 +74,40 @@ function initialPlacement(item: ItemWithAttachments): PlacementChoice {
   }
 
   return 'inbox';
+}
+
+function ListTargetSection({
+  title,
+  lists,
+  selectedListId,
+  onSelect,
+}: {
+  title: string;
+  lists: HoldfastSnapshot['lists'];
+  selectedListId: string | null;
+  onSelect: (listId: string) => void;
+}) {
+  if (!lists.length) {
+    return null;
+  }
+
+  return (
+    <div className="field-stack">
+      <span>{title}</span>
+      <div className="chip-row">
+        {lists.map((list) => (
+          <button
+            className={`chip ${selectedListId === list.id ? 'active' : ''}`}
+            key={list.id}
+            onClick={() => onSelect(list.id)}
+            type="button"
+          >
+            {list.title}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function ItemDetailsDialog({
@@ -99,18 +130,16 @@ export function ItemDetailsDialog({
   );
   const [scheduledTime, setScheduledTime] = useState(item.scheduledTime ?? '');
   const [markDone, setMarkDone] = useState(item.status === 'done');
-  const availableLists = useMemo(
-    () => lists.filter((entry) => !entry.deletedAt && entry.pinned),
+  const activeLists = useMemo(
+    () => lists.filter((entry) => !entry.deletedAt && !entry.archivedAt),
     [lists],
   );
   const [listTargetMode, setListTargetMode] = useState<'existing' | 'new'>(
-    availableLists.length ? 'existing' : 'new',
+    activeLists.length ? 'existing' : 'new',
   );
-  const [selectedListId, setSelectedListId] = useState<string | null>(
-    availableLists[0]?.id ?? null,
-  );
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [listSearch, setListSearch] = useState('');
   const [newListTitle, setNewListTitle] = useState('');
-  const [newListKind, setNewListKind] = useState<ListKind>('project');
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<
@@ -119,8 +148,46 @@ export function ItemDetailsDialog({
   const [replacingConflict, setReplacingConflict] = useState(false);
 
   const isConflict = item.syncState === 'conflict';
+  const listTargetGroups = useMemo(
+    () =>
+      buildListTargetGroups(activeLists, {
+        draftText: [title, body].filter(Boolean).join('\n\n'),
+        search: listSearch,
+      }),
+    [activeLists, body, listSearch, title],
+  );
+  const selectableLists = (() => {
+    const ordered = [
+      ...listTargetGroups.current,
+      ...listTargetGroups.suggested,
+      ...listTargetGroups.recent,
+      ...listTargetGroups.pinned,
+      ...listTargetGroups.search,
+    ];
+
+    const seen = new Set<string>();
+    return ordered.filter((list) => {
+      if (seen.has(list.id)) {
+        return false;
+      }
+
+      seen.add(list.id);
+      return true;
+    });
+  })();
+  const defaultListId = selectableLists[0]?.id ?? null;
+  const effectiveSelectedListId = selectableLists.some(
+    (list) => list.id === selectedListId,
+  )
+    ? selectedListId
+    : defaultListId;
+  const effectiveListTargetMode =
+    activeLists.length || listTargetMode === 'new' ? listTargetMode : 'new';
+  const inferredNewListKind = inferListKind(newListTitle);
+
   const selectedListTitle =
-    availableLists.find((entry) => entry.id === selectedListId)?.title ?? null;
+    activeLists.find((entry) => entry.id === effectiveSelectedListId)?.title ??
+    null;
   const showsNowByDateMessage =
     kind !== 'capture' &&
     item.status === 'upcoming' &&
@@ -136,11 +203,11 @@ export function ItemDetailsDialog({
   };
 
   const handleSave = async (): Promise<void> => {
-    if (kind === 'capture' && placement === 'list') {
-      if (listTargetMode === 'new') {
-        const listId = await sendInboxCaptureToNewList(item.id, {
+    if (placement === 'list') {
+      if (effectiveListTargetMode === 'new') {
+        const listId = await moveItemToNewList(item.id, {
           title: newListTitle.trim(),
-          kind: newListKind,
+          kind: inferredNewListKind,
           lane: 'admin',
         });
         if (listId) {
@@ -150,11 +217,25 @@ export function ItemDetailsDialog({
         return;
       }
 
-      if (!selectedListId) {
+      if (!effectiveSelectedListId) {
         return;
       }
 
-      await sendInboxCaptureToList(item.id, selectedListId);
+      await saveItem(item.id, {
+        title,
+        body,
+        kind,
+        lane: item.lane,
+        status:
+          markDone && kind === 'task'
+            ? 'done'
+            : kind === 'capture'
+              ? 'inbox'
+              : 'inbox',
+        scheduledDate: null,
+        scheduledTime: null,
+      });
+      await moveItemToList(item.id, effectiveSelectedListId);
       onClose();
       return;
     }
@@ -250,6 +331,11 @@ export function ItemDetailsDialog({
     setDownloadingAttachmentId(null);
   };
 
+  const selectListTarget = (listId: string): void => {
+    setListTargetMode('existing');
+    setSelectedListId(listId);
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Item details">
       <div className="dialog-stack">
@@ -325,15 +411,14 @@ export function ItemDetailsDialog({
             >
               Keep in Inbox
             </button>
-            {kind === 'capture' ? (
-              <button
-                className={`chip ${placement === 'list' ? 'active' : ''}`}
-                onClick={() => handlePlacementChange('list')}
-                type="button"
-              >
-                Send to list
-              </button>
-            ) : (
+            <button
+              className={`chip ${placement === 'list' ? 'active' : ''}`}
+              onClick={() => handlePlacementChange('list')}
+              type="button"
+            >
+              Move to list
+            </button>
+            {kind !== 'capture' ? (
               <>
                 <button
                   className={`chip ${placement === 'now' ? 'active' : ''}`}
@@ -364,7 +449,7 @@ export function ItemDetailsDialog({
                   Waiting on
                 </button>
               </>
-            )}
+            ) : null}
             <button
               className={`chip ${placement === 'archive' ? 'active' : ''}`}
               onClick={() => handlePlacementChange('archive')}
@@ -375,7 +460,7 @@ export function ItemDetailsDialog({
           </div>
         </div>
 
-        {kind !== 'capture' && kind === 'task' ? (
+        {kind === 'task' ? (
           <div className="field-stack">
             <span>Task state</span>
             <div className="chip-row">
@@ -419,28 +504,18 @@ export function ItemDetailsDialog({
           </div>
         ) : null}
 
-        {kind === 'capture' && placement === 'list' ? (
+        {placement === 'list' ? (
           <div className="item-card day-result">
             <div className="field-stack">
               <span>Choose a list</span>
               <div className="chip-row">
-                {availableLists.map((list) => (
-                  <button
-                    className={`chip ${
-                      listTargetMode === 'existing' && selectedListId === list.id
-                        ? 'active'
-                        : ''
-                    }`}
-                    key={list.id}
-                    onClick={() => {
-                      setListTargetMode('existing');
-                      setSelectedListId(list.id);
-                    }}
-                    type="button"
-                  >
-                    {list.title}
-                  </button>
-                ))}
+                <button
+                  className={`chip ${listTargetMode === 'existing' ? 'active' : ''}`}
+                  onClick={() => setListTargetMode('existing')}
+                  type="button"
+                >
+                  Existing list
+                </button>
                 <button
                   className={`chip ${listTargetMode === 'new' ? 'active' : ''}`}
                   onClick={() => setListTargetMode('new')}
@@ -450,19 +525,84 @@ export function ItemDetailsDialog({
                 </button>
               </div>
             </div>
-            {listTargetMode === 'existing' && !selectedListTitle ? (
-              <div className="empty-inline">
-                Pin a list or create a new one first.
-              </div>
-            ) : null}
-            {listTargetMode === 'new' ? (
+            {listTargetMode === 'existing' ? (
+              <>
+                {listSearch.trim() ? (
+                  <>
+                    <label className="field-stack">
+                      <span>Find a list</span>
+                      <input
+                        onChange={(event) => setListSearch(event.target.value)}
+                        placeholder="Search all lists"
+                        type="search"
+                        value={listSearch}
+                      />
+                    </label>
+                    <ListTargetSection
+                      lists={listTargetGroups.search}
+                      onSelect={selectListTarget}
+                      selectedListId={effectiveSelectedListId}
+                      title="Matching lists"
+                    />
+                    {!listTargetGroups.search.length ? (
+                      <div className="empty-inline">
+                        No matching lists yet. Create a new one if this belongs
+                        somewhere new.
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <ListTargetSection
+                      lists={listTargetGroups.suggested}
+                      onSelect={selectListTarget}
+                      selectedListId={effectiveSelectedListId}
+                      title="Suggested lists"
+                    />
+                    <ListTargetSection
+                      lists={listTargetGroups.recent}
+                      onSelect={selectListTarget}
+                      selectedListId={effectiveSelectedListId}
+                      title="Recent lists"
+                    />
+                    <ListTargetSection
+                      lists={listTargetGroups.pinned}
+                      onSelect={selectListTarget}
+                      selectedListId={effectiveSelectedListId}
+                      title="Pinned lists"
+                    />
+                    <label className="field-stack">
+                      <span>Find a list</span>
+                      <input
+                        onChange={(event) => setListSearch(event.target.value)}
+                        placeholder="Search all lists"
+                        type="search"
+                        value={listSearch}
+                      />
+                    </label>
+                    {!selectableLists.length ? (
+                      <div className="empty-inline">
+                        No lists yet. Create a new one if this needs its own
+                        home.
+                      </div>
+                    ) : null}
+                  </>
+                )}
+                {!selectedListTitle ? (
+                  <div className="empty-inline">
+                    Search for a list or create a new one first.
+                  </div>
+                ) : null}
+              </>
+            ) : (
               <ListCreatorFields
-                kind={newListKind}
-                onKindChange={setNewListKind}
+                kind={inferredNewListKind}
+                onKindChange={() => undefined}
                 onTitleChange={setNewListTitle}
+                showKind={false}
                 title={newListTitle}
               />
-            ) : null}
+            )}
           </div>
         ) : null}
 
@@ -484,12 +624,7 @@ export function ItemDetailsDialog({
             </button>
             <button
               className={`chip ${kind === 'task' ? 'active' : ''}`}
-              onClick={() => {
-                setKind('task');
-                if (placement === 'list') {
-                  setPlacement('inbox');
-                }
-              }}
+              onClick={() => setKind('task')}
               type="button"
             >
               Task
@@ -499,9 +634,6 @@ export function ItemDetailsDialog({
               onClick={() => {
                 setKind('note');
                 setMarkDone(false);
-                if (placement === 'list') {
-                  setPlacement('inbox');
-                }
               }}
               type="button"
             >
@@ -580,10 +712,10 @@ export function ItemDetailsDialog({
             <button
               className="button accent"
               disabled={
-                kind === 'capture' &&
                 placement === 'list' &&
-                ((listTargetMode === 'existing' && !selectedListId) ||
-                  (listTargetMode === 'new' && !newListTitle.trim()))
+                ((effectiveListTargetMode === 'existing' &&
+                  !effectiveSelectedListId) ||
+                  (effectiveListTargetMode === 'new' && !newListTitle.trim()))
               }
               onClick={() => void handleSave()}
               type="button"

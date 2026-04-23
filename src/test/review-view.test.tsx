@@ -228,13 +228,13 @@ describe('ReviewView', () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole('searchbox'), {
+    fireEvent.change(screen.getByLabelText('Search'), {
       target: { value: 'coffee' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Details' }));
     expect(onOpenItem).toHaveBeenCalledWith('item-1');
 
-    fireEvent.change(screen.getByRole('searchbox'), {
+    fireEvent.change(screen.getByLabelText('Search'), {
       target: { value: 'shipped' },
     });
     fireEvent.click(screen.getAllByRole('button', { name: 'Open day' })[0]);
@@ -293,7 +293,7 @@ describe('ReviewView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show' }));
     fireEvent.click(screen.getByRole('button', { name: 'Show matches' }));
-    expect(screen.getByRole('searchbox')).toHaveValue('Buy coffee');
+    expect(screen.getByLabelText('Search')).toHaveValue('Buy coffee');
   });
 
   it('keeps secondary history and pattern aids collapsed by default', () => {
@@ -331,7 +331,7 @@ describe('ReviewView', () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole('searchbox'), {
+    fireEvent.change(screen.getByLabelText('Search'), {
       target: { value: 'groceries' },
     });
     fireEvent.click(screen.getAllByRole('button', { name: 'Open list' })[0]);

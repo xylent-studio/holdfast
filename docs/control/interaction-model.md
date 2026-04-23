@@ -181,7 +181,8 @@ The default Add surface should:
 - default its primary submit to the current surface when the destination is already obvious
 - keep `Save to Inbox` available as the calm fallback when destination is unclear
 - reveal `Choose another place` only after the draft is safely caught
-- expose `Now`, `Scheduled`, `Undated`, `Waiting on`, pinned lists, and `New list...` as alternate destinations
+- keep global Add's primary submit as `Save to Inbox`; inferred list suggestions may rank inside target picking, but they should not silently replace the primary global action
+- expose `Now`, `Scheduled`, `Undated`, `Waiting on`, the current list when relevant, suggested lists, recent lists, pinned lists, searchable all lists, and `New list...` as alternate destinations
 - avoid turning capture into filing
 
 ## List and object surface rules
@@ -195,6 +196,7 @@ Lists should be accessed through:
 
 Review can also be the lightweight place to start a new empty list surface when the user is intentionally creating one.
 Add can quick-create a list only when the user intentionally chooses `New list...` as the destination for the current draft.
+Fast Add list creation should ask only for a title and infer the list kind only when the answer is obvious enough to help immediately.
 
 Lists should not:
 - casually create a `Lists` nav tab just because the data model can support one

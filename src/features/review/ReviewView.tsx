@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import { LIST_KIND_LABELS } from '@/domain/constants';
+import { searchLists } from '@/domain/logic/list-targets';
 import type { DateKey } from '@/domain/dates';
 import type { ListKind } from '@/domain/schemas/records';
 import {
@@ -41,6 +42,7 @@ export function ReviewView({
   const [isCreatingList, setIsCreatingList] = useState(false);
   const [listTitle, setListTitle] = useState('');
   const [listKind, setListKind] = useState<ListKind>('project');
+  const [librarySearch, setLibrarySearch] = useState('');
   const [listCreateBusy, setListCreateBusy] = useState(false);
   const [listCreateError, setListCreateError] = useState<string | null>(null);
   const repeated = useMemo(
@@ -86,9 +88,26 @@ export function ReviewView({
     [currentDate, snapshot.dailyRecords, snapshot.items],
   );
   const listSummaries = useMemo(
-    () => reviewListSummaries(snapshot.lists, snapshot.listItems),
+    () => reviewListSummaries(snapshot.lists, snapshot.listItems, Number.MAX_SAFE_INTEGER),
     [snapshot.listItems, snapshot.lists],
   );
+  const pinnedListSummaries = useMemo(
+    () => listSummaries.filter((entry) => entry.list.pinned),
+    [listSummaries],
+  );
+  const recentListSummaries = useMemo(
+    () => listSummaries.filter((entry) => !entry.list.pinned).slice(0, 4),
+    [listSummaries],
+  );
+  const libraryResults = useMemo(() => {
+    if (!librarySearch.trim()) {
+      return listSummaries;
+    }
+
+    const matches = searchLists(snapshot.lists, librarySearch);
+    const matchIds = new Set(matches.map((list) => list.id));
+    return listSummaries.filter((entry) => matchIds.has(entry.list.id));
+  }, [librarySearch, listSummaries, snapshot.lists]);
 
   const handleOpenListCreator = (): void => {
     setIsCreatingList(true);
@@ -348,8 +367,8 @@ export function ReviewView({
       <Panel>
         <div className="panel-header split">
           <div>
-            <h2>Lists</h2>
-            <p>Pinned and active list surfaces you can return to quickly.</p>
+            <h2>Library</h2>
+            <p>Keep search first, then use lists as a quieter way back in.</p>
           </div>
           <div className="dialog-actions">
             <button
@@ -394,33 +413,118 @@ export function ReviewView({
           </div>
         ) : null}
         {listSummaries.length ? (
-          <div className="grid two">
-            {listSummaries.map((entry) => (
-              <div className="item-card day-result" key={entry.list.id}>
-                <div className="eyebrow">
-                  {LIST_KIND_LABELS[entry.list.kind]} list
-                  {entry.list.pinned ? ' | pinned' : ''}
-                </div>
-                <div className="item-title-row">
-                  <h3>{entry.list.title}</h3>
-                  <span className="chip small">{entry.openCount} open</span>
-                </div>
-                <p>
-                  {entry.previewTitles.length
-                    ? entry.previewTitles.join(' | ')
-                    : 'Nothing open right now.'}
-                </p>
-                <div className="dialog-actions">
-                  <button
-                    className="button ghost small"
-                    onClick={() => onOpenList(entry.list.id)}
-                    type="button"
-                  >
-                    Open list
-                  </button>
+          <div className="stack">
+            {pinnedListSummaries.length ? (
+              <div className="stack compact">
+                <div className="eyebrow">Pinned</div>
+                <div className="grid two">
+                  {pinnedListSummaries.map((entry) => (
+                    <div className="item-card day-result" key={`pinned-${entry.list.id}`}>
+                      <div className="eyebrow">
+                        {LIST_KIND_LABELS[entry.list.kind]} list | pinned
+                      </div>
+                      <div className="item-title-row">
+                        <h3>{entry.list.title}</h3>
+                        <span className="chip small">{entry.openCount} open</span>
+                      </div>
+                      <p>
+                        {entry.previewTitles.length
+                          ? entry.previewTitles.join(' | ')
+                          : 'Nothing open right now.'}
+                      </p>
+                      <div className="dialog-actions">
+                        <button
+                          className="button ghost small"
+                          onClick={() => onOpenList(entry.list.id)}
+                          type="button"
+                        >
+                          Open list
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
+            ) : null}
+
+            {recentListSummaries.length ? (
+              <div className="stack compact">
+                <div className="eyebrow">Recent</div>
+                <div className="grid two">
+                  {recentListSummaries.map((entry) => (
+                    <div className="item-card day-result" key={`recent-${entry.list.id}`}>
+                      <div className="eyebrow">{LIST_KIND_LABELS[entry.list.kind]} list</div>
+                      <div className="item-title-row">
+                        <h3>{entry.list.title}</h3>
+                        <span className="chip small">{entry.openCount} open</span>
+                      </div>
+                      <p>
+                        {entry.previewTitles.length
+                          ? entry.previewTitles.join(' | ')
+                          : 'Nothing open right now.'}
+                      </p>
+                      <div className="dialog-actions">
+                        <button
+                          className="button ghost small"
+                          onClick={() => onOpenList(entry.list.id)}
+                          type="button"
+                        >
+                          Open list
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="stack compact">
+              <div className="eyebrow">All lists</div>
+              <label className="field-stack">
+                <span>Find a list</span>
+                <input
+                  onChange={(event) => setLibrarySearch(event.target.value)}
+                  placeholder="Search lists"
+                  type="search"
+                  value={librarySearch}
+                />
+              </label>
+              {libraryResults.length ? (
+                <div className="stack compact">
+                  {libraryResults.map((entry) => (
+                    <div className="item-card day-result" key={`library-${entry.list.id}`}>
+                      <div className="item-title-row">
+                        <h3>{entry.list.title}</h3>
+                        <div className="chip-row">
+                          <span className="chip small">
+                            {LIST_KIND_LABELS[entry.list.kind]}
+                          </span>
+                          {entry.list.pinned ? (
+                            <span className="chip small">Pinned</span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <p>
+                        {entry.previewTitles.length
+                          ? entry.previewTitles.join(' | ')
+                          : 'Nothing open right now.'}
+                      </p>
+                      <div className="dialog-actions">
+                        <button
+                          className="button ghost small"
+                          onClick={() => onOpenList(entry.list.id)}
+                          type="button"
+                        >
+                          Open list
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState>No matching lists.</EmptyState>
+              )}
+            </div>
           </div>
         ) : (
           <EmptyState>No active lists to revisit yet.</EmptyState>

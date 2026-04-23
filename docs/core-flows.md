@@ -65,8 +65,9 @@ Rules:
   - `Upcoming > Waiting on` -> `Add to Waiting on`
   - `List` -> `Add to <list>`
   - global surfaces -> `Save to Inbox`
-- `Choose another place` should expose `Now`, `Scheduled`, `Undated`, `Waiting on`, pinned lists, and `New list...`
+- `Choose another place` should expose `Now`, `Scheduled`, `Undated`, `Waiting on`, the current list when relevant, suggested lists, recent lists, pinned lists, searchable all lists, and `New list...`
 - Add can quick-create a new list and use the captured draft as the first list item
+- fast Add list creation should ask only for the list title, infer the kind when it is obvious, and otherwise fall back to `project`
 - `Upcoming` should surface dated items as `Scheduled` and undated items as `Undated`
 - original source context should survive reshaping
 
@@ -118,6 +119,7 @@ Rules:
 - list items stay attached to their list surface by default
 - they become top-level tasks only through explicit promotion
 - a capture can be sent to a list, preserving `sourceItemId`, while the original capture archives out of active circulation
+- a top-level task or note can also move into a list, preserving `sourceItemId` and archiving the original out of active circulation
 - recurring checklists should grow toward template-plus-run behavior
 - reference collections should preserve things without pretending everything is actionable
 - Review can create a new empty list surface without adding a new top-level navigation model
@@ -144,6 +146,13 @@ Review should include retrieval for:
 - attachments and preserved context
 
 Review should also be the first honest place to revisit list surfaces before Holdfast ever grows a separate list home.
+
+Inside Review, list access should stay quieter than search:
+
+- search remains the first move
+- the list library should stay secondary
+- pinned and recent lists can surface directly
+- all lists should stay searchable without forcing a top-level `Lists` tab
 
 Secondary pattern aids such as recent days, repeating loops, and overdue pressure should stay available, but they should not crowd the default retrieval surface.
 

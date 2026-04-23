@@ -106,6 +106,7 @@ Holdfast is not:
 - direct placement works when the destination is already obvious
 - routines and day support stay quiet unless the user wants them
 - review stays decision-relevant, not analytical theater
+- global Add keeps `Save to Inbox` as the default outcome; smarter list routing should show ranked suggestions without quietly hijacking that primary action
 - lists stay contextual, searchable, and quick-creatable without becoming a second nav spine
 - the normal long-term experience is signed-in and synced
 - first-time sign-in should be one tap or a magic link, not a form wall

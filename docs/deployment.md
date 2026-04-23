@@ -22,7 +22,7 @@ As of April 23, 2026, after a fresh manual hosted validation pass:
 
 These hosted claims are not continuously proven by the default GitHub Actions CI job. The repo has hosted auth/sync smoke coverage, but those suites are env-gated because they need real hosted URLs and secrets. Re-run the hosted smoke commands before relying on the hosted state after unrelated changes.
 
-The repo now also includes `.github/workflows/hosted-validation.yml` for scheduled or manual hosted verification when the required GitHub secrets are configured.
+The repo now also includes `.github/workflows/hosted-validation.yml` for manual hosted verification when the required GitHub secrets are configured.
 
 ## Chosen Hosting Direction
 
@@ -54,7 +54,7 @@ Important constraint:
 
 That means if Git integration becomes a must-have later, replace the production Pages project intentionally and reattach the custom hostname on purpose.
 
-## Hosted Validation Track
+## Hosted Validation Fallback
 
 Holdfast still keeps a separate disposable Pages project for hosted smoke:
 
@@ -62,11 +62,11 @@ Holdfast still keeps a separate disposable Pages project for hosted smoke:
 - validation origin: `https://holdfast-validation.pages.dev`
 - current repo command: `npm run cf:pages:validate`
 
-This stays separate from production.
+This stays separate from production, and it is not part of the normal release path.
 
 Why:
 
-- it lets the repo exercise risky hosted auth/callback/offline behavior without touching the public hostname
+- it lets the repo exercise risky hosted callback/offline behavior without touching the public hostname
 - it keeps a disposable smoke surface available even though production now exists
 - it isolates validation runs from the production domain when needed
 
@@ -85,6 +85,7 @@ Rules:
 - do not assume validation auth smoke will pass while Supabase Auth URL configuration is pinned to production
 - do not treat staging auth as available until the staging Supabase project, auth config, and hosted smoke checks are all in place
 - keep production release gates tied to trust, not to the existence of a hosted URL
+- prefer staging for any release candidate that might reasonably ship
 
 ## Staging Track
 
@@ -114,7 +115,9 @@ The repo now includes:
 - project-local `wrangler`
 - `wrangler.jsonc` for source-controlled Pages configuration
 - a repo-local Pages deployment helper at `scripts/pages-validation.mjs`
-- npm scripts for validation and production Pages status, deploy, and smoke
+- a repo-local release helper at `scripts/release-flow.mjs`
+- npm scripts for validation, staging, and production Pages status, deploy, and smoke
+- npm scripts for intentional `release:staging` and `release:prod` passes
 - Playwright smoke that can run locally or against a hosted URL
 - pinned local Node version files for reproducible builds
 
@@ -152,7 +155,7 @@ Expected use:
 
 - validate risky auth and sync changes on staging first
 - keep production as the public trusted lane
-- use validation for disposable shell/offline checks when production or staging should stay untouched
+- use validation only for disposable shell/offline checks when production or staging should stay untouched
 
 Fastest repeatable setup path:
 
@@ -208,14 +211,20 @@ Current repo/backend foundation already includes:
 
 ## Release Sequence
 
-1. Keep using the disposable validation project for risky hosted smoke.
-2. Use the staging project for hosted auth, sync, shell, and offline smoke before production.
-3. Keep the production project deployed from the repo helper: `npm run cf:pages:prod:deploy`.
-4. Run hosted smoke tests across validation, staging, and production hostnames as appropriate.
+1. Run `npm run release:staging` for a release candidate pass.
+2. That staging pass should cover local lint, typecheck, unit tests, local Playwright, staging deploy, staging auth smoke, and staging sync smoke.
+3. Review the staged build on `https://holdfast-staging.pages.dev`.
+4. Promote intentionally with `npm run release:prod` only after the staging lane passes and the current work is approved.
+5. Production deploys now refuse release-affecting dirty files by default. The helper ignores the unrelated local-only `scripts/rehydrate-agent.ps1` dirtiness, but everything else should be committed or stashed first.
+6. Keep the validation project out of the normal release path. Use it only when staging or production should remain untouched.
+7. Verify service-worker install/update and offline shell behavior on the hosted build when the release changes those surfaces.
+8. Run broader multi-device sync, offline, and attachment smoke on real accounts when auth, sync, or attachment behavior changes materially.
+9. Decide later whether to keep or redirect the `*.pages.dev` hostnames.
+10. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
 
-## GitHub Hosted Validation Secrets
+## GitHub Hosted Smoke Secrets
 
-To let GitHub Actions run the hosted staging and production smoke lane, configure:
+To let GitHub Actions run the hosted staging and production smoke lane on demand, configure:
 
 - `CLOUDFLARE_API_TOKEN`
 - `SUPABASE_ACCESS_TOKEN`
@@ -224,12 +233,7 @@ To let GitHub Actions run the hosted staging and production smoke lane, configur
 - `PLAYWRIGHT_PROD_SUPABASE_URL`
 - `PLAYWRIGHT_PROD_SUPABASE_ANON_KEY`
 
-That secret-backed workflow is separate from the default CI job on purpose. Default CI stays secretless and fast; hosted validation proves the real staged and production lanes.
-5. Promote risky auth/sync changes from staging to production only after the staging lane passes.
-6. Verify service-worker install/update and offline shell behavior on the hosted build.
-7. Run broader multi-device sync, offline, and attachment smoke on real accounts.
-8. Decide whether to keep or redirect the `*.pages.dev` hostnames.
-9. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
+That secret-backed workflow is separate from the default CI job on purpose. Default CI stays secretless and fast; the manual hosted smoke workflow gives you a repo-native way to re-check the real staged and production lanes without spending those minutes on every push.
 
 ## Current Hosted State
 
@@ -255,6 +259,8 @@ That secret-backed workflow is separate from the default CI job on purpose. Defa
 - `npm run cf:pages:auth-preflight`
 - `npm run cf:pages:auth-smoke`
 - `npm run cf:pages:validate`
+- `npm run release:staging`
+- `npm run release:prod`
 - `npm run cf:pages:staging:status`
 - `npm run cf:pages:staging:deploy`
 - `npm run cf:pages:staging:smoke`

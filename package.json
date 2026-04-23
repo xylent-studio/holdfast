@@ -18,6 +18,8 @@
     "test:e2e:hosted": "node scripts/pages-validation.mjs --smoke",
     "test:e2e:ui": "npm run build && playwright test --ui",
     "test:watch": "vitest",
+    "release:staging": "node scripts/release-flow.mjs --lane staging --env-file .env.staging.local",
+    "release:prod": "node scripts/release-flow.mjs --lane production",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "cloudflare": "wrangler",

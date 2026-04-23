@@ -7,6 +7,7 @@ interface ListCreatorFieldsProps {
   kind: ListKind;
   onKindChange: (kind: ListKind) => void;
   onTitleChange: (value: string) => void;
+  showKind?: boolean;
   title: string;
   titleLabel?: string;
   titlePlaceholder?: string;
@@ -17,6 +18,7 @@ export function ListCreatorFields({
   kind,
   onKindChange,
   onTitleChange,
+  showKind = true,
   title,
   titleLabel = 'Title',
   titlePlaceholder = 'Groceries, project, or reference',
@@ -34,22 +36,24 @@ export function ListCreatorFields({
           value={title}
         />
       </label>
-      <div className="field-stack">
-        <span>Kind</span>
-        <div className="chip-row">
-          {LIST_KIND_OPTIONS.map((option) => (
-            <button
-              className={`chip ${kind === option ? 'active' : ''}`}
-              disabled={disabled}
-              key={option}
-              onClick={() => onKindChange(option)}
-              type="button"
-            >
-              {LIST_KIND_LABELS[option]}
-            </button>
-          ))}
+      {showKind ? (
+        <div className="field-stack">
+          <span>Kind</span>
+          <div className="chip-row">
+            {LIST_KIND_OPTIONS.map((option) => (
+              <button
+                className={`chip ${kind === option ? 'active' : ''}`}
+                disabled={disabled}
+                key={option}
+                onClick={() => onKindChange(option)}
+                type="button"
+              >
+                {LIST_KIND_LABELS[option]}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </>
   );
 }
