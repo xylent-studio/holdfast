@@ -11,6 +11,8 @@ const signOutMock = vi.fn();
 const removeDataFromDeviceMock = vi.fn();
 const updateSettingsMock = vi.fn();
 const updateWeeklyRecordMock = vi.fn();
+let mockedIsOnline = true;
+let mockedPendingMutationCount = 0;
 let mockedSession: { user: { id: string } } | null = {
   user: { id: 'user-1' },
 };
@@ -31,8 +33,8 @@ vi.mock('@/app/auth/useAuth', () => ({
 
 vi.mock('@/app/sync/useSync', () => ({
   useSync: () => ({
-    isOnline: true,
-    pendingMutationCount: 0,
+    isOnline: mockedIsOnline,
+    pendingMutationCount: mockedPendingMutationCount,
     retrySync: retrySyncMock,
   }),
 }));
@@ -162,6 +164,8 @@ describe('SettingsView', () => {
     removeDataFromDeviceMock.mockReset();
     updateSettingsMock.mockReset();
     updateWeeklyRecordMock.mockReset();
+    mockedIsOnline = true;
+    mockedPendingMutationCount = 0;
     mockedSession = { user: { id: 'user-1' } };
     mockedEmail = 'justin@example.com';
     mockedDisplayName = 'Justin';
@@ -216,7 +220,7 @@ describe('SettingsView', () => {
       screen.getByText('Sign in again to keep this device in sync.'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("We'll keep what's already here and sync it to your account."),
+      screen.getByText("We'll keep what's already here and attach it to your account here first."),
     ).toBeInTheDocument();
     expect(screen.getByText('Signed out on this device')).toBeInTheDocument();
   });
@@ -261,5 +265,30 @@ describe('SettingsView', () => {
     });
 
     confirmMock.mockRestore();
+  });
+
+  it('uses unambiguous sync status labels for retry and queued local changes', () => {
+    const snapshot = makeSnapshot();
+
+    mockedPendingMutationCount = 2;
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      lastSyncedAt: '2026-04-20T09:00:00.000Z',
+    };
+    const view = render(
+      <SettingsView currentDate="2026-04-20" snapshot={snapshot} />,
+    );
+    expect(screen.getByText('Waiting to sync')).toBeInTheDocument();
+
+    view.unmount();
+    mockedPendingMutationCount = 0;
+    mockedIsOnline = true;
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      mode: 'error',
+    };
+
+    render(<SettingsView currentDate="2026-04-20" snapshot={snapshot} />);
+    expect(screen.getByText('Sync needs retry')).toBeInTheDocument();
   });
 });

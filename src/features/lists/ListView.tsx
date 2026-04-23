@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { LIST_KIND_LABELS } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import {
+  createTaskFromListItem,
   createListItem,
   deleteListItem,
   promoteListItemToNow,
@@ -18,6 +19,7 @@ import { Panel } from '@/shared/ui/Panel';
 
 interface ListViewProps {
   currentDate: DateKey;
+  highlightListItemId?: string | null;
   listId: string;
   onOpenItem: (itemId: string) => void;
   snapshot: HoldfastSnapshot;
@@ -25,11 +27,13 @@ interface ListViewProps {
 
 export function ListView({
   currentDate,
+  highlightListItemId = null,
   listId,
   onOpenItem,
   snapshot,
 }: ListViewProps) {
   const [draft, setDraft] = useState('');
+  const [doneOpen, setDoneOpen] = useState(false);
   const [listConflictBusy, setListConflictBusy] = useState(false);
   const [listConflictError, setListConflictError] = useState<string | null>(null);
   const [listItemConflictBusyId, setListItemConflictBusyId] = useState<
@@ -51,6 +55,7 @@ export function ListView({
   );
   const openItems = items.filter((entry) => entry.status === 'open');
   const doneItems = items.filter((entry) => entry.status === 'done');
+  const archivedItems = items.filter((entry) => entry.status === 'archived');
   const listDescription = (() => {
     if (!list) {
       return '';
@@ -65,9 +70,19 @@ export function ListView({
         return 'Keep saved things close without pretending they all belong in Now.';
       case 'project':
       default:
-        return 'Keep a living list without turning it into a second navigation system.';
+        return 'Keep a living list without turning it into command clutter.';
     }
   })();
+
+  useEffect(() => {
+    if (!highlightListItemId) {
+      return;
+    }
+
+    document
+      .querySelector<HTMLElement>(`[data-list-item-id="${highlightListItemId}"]`)
+      ?.scrollIntoView({ block: 'center' });
+  }, [highlightListItemId]);
 
   if (!list) {
     return (
@@ -79,6 +94,11 @@ export function ListView({
       </Panel>
     );
   }
+
+  const currentListDescription =
+    list.kind === 'reference'
+      ? 'What is still worth keeping close here.'
+      : 'What still belongs on this list right now.';
 
   const handleQuickAdd = async (): Promise<void> => {
     if (!draft.trim()) {
@@ -172,7 +192,7 @@ export function ListView({
         status: current.status,
         position: current.position,
         sourceItemId: current.sourceItemId,
-        promotedItemId: current.promotedItemId,
+        nowDate: current.nowDate,
       });
     } catch (error) {
       setListItemConflictErrorId(listItemId);
@@ -187,9 +207,6 @@ export function ListView({
   };
 
   const renderListItemCard = (entry: (typeof items)[number]) => {
-    const promotedItem = entry.promotedItemId
-      ? snapshot.items.find((item) => item.id === entry.promotedItemId) ?? null
-      : null;
     const sourceItem = entry.sourceItemId
       ? snapshot.items.find((item) => item.id === entry.sourceItemId) ?? null
       : null;
@@ -199,22 +216,29 @@ export function ListView({
       listItemConflictErrorId === entry.id ? listItemConflictError : null;
 
     return (
-      <div className="item-card day-result" key={entry.id}>
+      <div
+        className={`item-card day-result ${
+          highlightListItemId === entry.id ? 'focus' : ''
+        }`}
+        data-list-item-id={entry.id}
+        key={entry.id}
+      >
         <div className="item-title-row">
           <h3>{entry.title}</h3>
           <div className="chip-row">
             {isConflict ? <span className="chip small">Needs attention</span> : null}
-            {promotedItem ? <span className="chip small">In Now</span> : null}
+            {entry.nowDate ? <span className="chip small">In Now</span> : null}
             {entry.status === 'done' ? (
               <span className="chip small">Done</span>
+            ) : null}
+            {entry.status === 'archived' ? (
+              <span className="chip small">Archived</span>
             ) : null}
           </div>
         </div>
         {entry.body.trim() ? (
           <p>{entry.body}</p>
-        ) : (
-          <p>Still attached to this list surface.</p>
-        )}
+        ) : null}
         {isConflict ? (
           <div className="recovery-note">
             <strong>This list item changed in two places.</strong>
@@ -264,13 +288,13 @@ export function ListView({
             </button>
           )}
           {entry.status === 'open' && list.kind !== 'reference' ? (
-            promotedItem ? (
+            entry.nowDate ? (
               <button
                 className="button ghost small"
-                onClick={() => onOpenItem(promotedItem.id)}
+                onClick={() => void updateListItem(entry.id, { nowDate: null })}
                 type="button"
               >
-                Open task
+                Remove from Now
               </button>
             ) : (
               <button
@@ -281,6 +305,21 @@ export function ListView({
                 Send to Now
               </button>
             )
+          ) : null}
+          {entry.status === 'open' && list.kind !== 'reference' ? (
+            <button
+              className="button ghost small"
+              onClick={() =>
+                void createTaskFromListItem(entry.id, currentDate).then((itemId) => {
+                  if (itemId) {
+                    onOpenItem(itemId);
+                  }
+                })
+              }
+              type="button"
+            >
+              Create task
+            </button>
           ) : null}
           {entry.status === 'done' && list.kind === 'replenishment' ? (
             <button
@@ -298,7 +337,7 @@ export function ListView({
               Add again
             </button>
           ) : null}
-          {sourceItem ? (
+          {sourceItem && entry.status !== 'archived' ? (
             <button
               className="button ghost small"
               onClick={() => onOpenItem(sourceItem.id)}
@@ -307,7 +346,7 @@ export function ListView({
               Open original
             </button>
           ) : null}
-          {entry.status === 'open' ? (
+          {entry.status !== 'archived' ? (
             <button
               className="button danger small"
               onClick={() => void deleteListItem(entry.id)}
@@ -331,6 +370,12 @@ export function ListView({
             <p>{listDescription}</p>
           </div>
           <div className="chip-row">
+            <span className="chip small">
+              {openItems.length} current
+            </span>
+            {doneItems.length ? (
+              <span className="chip small">{doneItems.length} done</span>
+            ) : null}
             {list.syncState === 'conflict' ? (
               <span className="chip small">Needs attention</span>
             ) : null}
@@ -402,40 +447,63 @@ export function ListView({
 
       <Panel>
         <div className="panel-header">
-          <h2>Open</h2>
-          <p>What is still active in this list.</p>
+          <h2>Current</h2>
+          <p>{currentListDescription}</p>
         </div>
         {openItems.length ? (
           <div className="item-list">{openItems.map(renderListItemCard)}</div>
         ) : (
-          <EmptyState>Nothing open in this list right now.</EmptyState>
+          <EmptyState>Nothing current in this list right now.</EmptyState>
         )}
       </Panel>
 
-      <Panel>
-        <div className="panel-header split">
-          <div>
-            <h2>Done history</h2>
-            <p>What this list already carried through.</p>
-          </div>
-          {list.kind === 'checklist' && doneItems.length ? (
+      {doneItems.length ? (
+        <Panel>
+          <div className="panel-header split">
+            <div>
+              <h2>Done</h2>
+              <p>What this list already carried through.</p>
+            </div>
             <div className="dialog-actions">
+              {list.kind === 'checklist' ? (
+                <button
+                  className="button ghost small"
+                  onClick={() => void reopenAllDoneListItems(list.id)}
+                  type="button"
+                >
+                  Reopen all done
+                </button>
+              ) : null}
               <button
                 className="button ghost small"
-                onClick={() => void reopenAllDoneListItems(list.id)}
+                onClick={() => setDoneOpen((current) => !current)}
                 type="button"
               >
-                Reopen all done
+                {doneOpen ? 'Hide done' : `Show done (${doneItems.length})`}
               </button>
             </div>
-          ) : null}
-        </div>
-        {doneItems.length ? (
-          <div className="item-list">{doneItems.map(renderListItemCard)}</div>
-        ) : (
-          <EmptyState>No done history here yet.</EmptyState>
-        )}
-      </Panel>
+          </div>
+          {doneOpen ? (
+            <div className="item-list">{doneItems.map(renderListItemCard)}</div>
+          ) : (
+            <div className="empty-inline">
+              Done items stay out of the way until you need them.
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
+      {archivedItems.length ? (
+        <Panel>
+          <div className="panel-header">
+            <h2>Archived</h2>
+            <p>Older list items kept for retrieval, not current work.</p>
+          </div>
+          <div className="item-list">
+            {archivedItems.map(renderListItemCard)}
+          </div>
+        </Panel>
+      ) : null}
     </div>
   );
 }

@@ -106,7 +106,7 @@ Key fields:
 - `status`
 - `position`
 - `sourceItemId`
-- `promotedItemId`
+- `nowDate`
 - `completedAt`
 - `archivedAt`
 - `deletedAt`
@@ -233,7 +233,7 @@ Notes:
 
 - workspace ownership is intentionally separate from sync transport health
 - wrong-account protection and signed-out recovery are driven from this record, not from `syncState`
-- a restored backup now detaches the workspace locally until the user explicitly re-attaches it to an account again
+- a restored backup stays local-only while signed out, but it auto-attaches when the user restores while signed in or signs in later with the same account
 
 ### PrototypeRecoverySessionRecord
 
@@ -327,9 +327,10 @@ The new model intentionally separates those concerns.
 
 Current extension direction:
 
-- keep the existing `Now / Inbox / Upcoming / Review` spine intact
+- keep the `Now / Inbox / Upcoming / Review / Lists` spine intact
 - add raw-capture preservation without forcing immediate classification
-- add first-class list primitives without creating a second navigation model
+- make list promotion honest through `ListItemRecord.nowDate` instead of duplicate top-level task projections
+- keep lists contextual while also giving them a quiet top-level library home
 - preserve migration sanity by evolving the schema deliberately rather than smuggling list semantics into the existing task/note shape
 
 ## Manual Backup Export
@@ -367,7 +368,7 @@ Current restore behavior is deliberate:
 - the last restore records an on-device undo snapshot so the user can reverse it cleanly
 - the mutation queue is rebuilt from the final restored state so signed-in sync can catch up honestly
 - pre-existing non-acknowledged deletions that still matter stay queued instead of being erased by the rebuild
-- restore clears remote pull cursors and detaches the workspace locally until the user explicitly re-attaches it again
+- restore clears remote pull cursors and rebuilds sync state so the restored workspace can attach honestly on the next valid sign-in
 
 Attachment behavior during restore:
 

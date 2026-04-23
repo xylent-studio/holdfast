@@ -48,7 +48,7 @@ If the device already holds meaningful local work, Holdfast should open that wor
 User-facing promise:
 
 - keep what is already here
-- sync it to the account after sign-in
+- attach it to the account after sign-in, then let sync catch up honestly
 - do not make sign-in feel like a threat to existing data
 
 ### Callback and restore
@@ -126,7 +126,7 @@ When a device-guest workspace signs in:
 
 Default user-facing line:
 
-- `We'll keep what's already here and sync it to your account.`
+- `We'll keep what's already here and attach it to your account here first.`
 
 ## Ownership Direction
 
@@ -141,7 +141,13 @@ Local foundation for that direction remains:
 - `workspaceState.ownershipState` tracks whether this device is still a local guest workspace or a member-owned workspace
 - `workspaceState.boundUserId` keeps the account currently attached to this device workspace
 - `workspaceState.authPromptState` tracks whether signed-out UI should stay calm, ask for recovery, or block the wrong-account path
-- `workspaceState.attachState` tracks whether sync is actively attached or whether a restored workspace must stay local until the user explicitly re-attaches it
+- `workspaceState.attachState` tracks whether sync is actively attached or whether the device is still in a local-only restored state before sign-in
+
+Restore direction:
+
+- restoring while signed in should re-attach that workspace to the current account and let sync catch up
+- restoring while signed out should stay local until the user signs in
+- when the user signs in after a restore, the restored workspace should attach automatically unless wrong-account protection blocks it
 
 Current safety guard:
 

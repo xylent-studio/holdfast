@@ -1,40 +1,37 @@
-import { useMemo, useState } from 'react';
-
-import { READINESS_CHECKS } from '@/domain/constants';
+import { useMemo } from 'react';
 import type { DateKey } from '@/domain/dates';
 import {
   carrySuggestions,
   getFocusItems,
   getQueueItemsForToday,
   itemMeta,
-  itemsForToday,
+  listItemsForNow,
   overdueItems,
 } from '@/domain/logic/selectors';
 import {
-  seedLaunchFromYesterday,
-  startDay,
-  toggleFocus,
-  toggleReadiness,
+  moveItemToNow,
+  setItemFocus,
   toggleTaskDone,
+  updateListItem,
 } from '@/storage/local/api';
 import type { HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
 import { Panel } from '@/shared/ui/Panel';
-import { StatCard } from '@/shared/ui/StatCard';
-
-import { FinishDayDialog } from './FinishDayDialog';
 
 interface NowViewProps {
   currentDate: DateKey;
   onOpenItem: (itemId: string) => void;
+  onOpenList: (listId: string, highlightListItemId?: string | null) => void;
   snapshot: HoldfastSnapshot;
 }
 
-export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
-  const [closeDayOpen, setCloseDayOpen] = useState(false);
-  const [dayToolsOpen, setDayToolsOpen] = useState(false);
-
+export function NowView({
+  currentDate,
+  onOpenItem,
+  onOpenList,
+  snapshot,
+}: NowViewProps) {
   const focusItems = useMemo(
     () => getFocusItems(snapshot.currentDay, snapshot.items),
     [snapshot.currentDay, snapshot.items],
@@ -46,61 +43,22 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
   );
   const todayNotes = queueItems.filter((item) => item.kind === 'note');
   const todayTasks = queueItems.filter((item) => item.kind === 'task');
-  const readinessCount = Object.values(snapshot.currentDay.readiness).filter(
-    Boolean,
-  ).length;
-  const readinessComplete = readinessCount === READINESS_CHECKS.length;
-  const pendingRoutineCount = snapshot.routines.filter(
-    (routine) =>
-      routine.active &&
-      routine.weekdays.includes(new Date(`${currentDate}T00:00:00`).getDay()) &&
-      !snapshot.currentDay.seededRoutineIds.includes(routine.id),
-  ).length;
+  const listItems = useMemo(
+    () => listItemsForNow(snapshot.listItems, currentDate),
+    [currentDate, snapshot.listItems],
+  );
   const carry = carrySuggestions(snapshot.dailyRecords, currentDate);
   const overdue = overdueItems(snapshot.items, currentDate);
-  const closeDayKey = `${snapshot.currentDay.date}-${snapshot.currentDay.updatedAt}-${closeDayOpen ? 'open' : 'closed'}`;
-  const dayToolsSummary = [
-    snapshot.currentDay.startedAt ? 'Day started' : 'Not started',
-    pendingRoutineCount
-      ? `${pendingRoutineCount} routine${pendingRoutineCount === 1 ? '' : 's'} ready`
-      : null,
-    `Basics ${readinessCount}/${READINESS_CHECKS.length}`,
-    snapshot.currentDay.closedAt ? 'Closeout saved' : null,
-  ]
-    .filter(Boolean)
-    .join(' | ');
 
   return (
     <div className="stack">
       <Panel>
-        <div className="panel-header split">
+        <div className="panel-header">
           <div>
             <div className="eyebrow">Command view</div>
             <h1>Now</h1>
             <p>What matters now, without extra ceremony.</p>
           </div>
-          <div className="button-row">
-            <button
-              aria-expanded={dayToolsOpen}
-              className="button ghost"
-              onClick={() => setDayToolsOpen((value) => !value)}
-              type="button"
-            >
-              {dayToolsOpen ? 'Hide day tools' : 'Day tools'}
-            </button>
-          </div>
-        </div>
-        <div className="grid two">
-          <StatCard
-            detail="What deserves extra attention right now"
-            label="Focus"
-            value={focusItems.length}
-          />
-          <StatCard
-            detail="Open items in play for this date"
-            label="In play"
-            value={itemsForToday(snapshot.items, currentDate).length}
-          />
         </div>
         {carry.length ? (
           <div className="field-stack">
@@ -111,79 +69,9 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
                   Next start | {entry.text}
                 </span>
               ))}
-              {carry.length ? (
-                <button
-                  className="button ghost small"
-                  onClick={() => void seedLaunchFromYesterday(currentDate)}
-                  type="button"
-                >
-                  Use here
-                </button>
-              ) : null}
             </div>
           </div>
         ) : null}
-        <div className="chip-row">
-          <span className="chip">
-            {snapshot.currentDay.startedAt ? 'Day started' : 'Not started'}
-          </span>
-          <span className={`chip ${readinessComplete ? 'active' : ''}`}>
-            Basics {readinessCount}/{READINESS_CHECKS.length}
-          </span>
-          {pendingRoutineCount ? (
-            <span className="chip">
-              {pendingRoutineCount} routine
-              {pendingRoutineCount === 1 ? '' : 's'} ready
-            </span>
-          ) : null}
-          {snapshot.currentDay.closedAt ? (
-            <span className="chip">Closeout saved</span>
-          ) : null}
-        </div>
-        {dayToolsOpen ? (
-          <div className="stack compact">
-            <div className="button-row">
-              {!snapshot.currentDay.startedAt || pendingRoutineCount ? (
-                <button
-                  className="button accent"
-                  onClick={() => void startDay(currentDate)}
-                  type="button"
-                >
-                  {!snapshot.currentDay.startedAt
-                    ? 'Start day'
-                    : `Add ${pendingRoutineCount} routine${pendingRoutineCount === 1 ? '' : 's'}`}
-                </button>
-              ) : null}
-              <button
-                className="button ghost"
-                onClick={() => setCloseDayOpen(true)}
-                type="button"
-              >
-                Finish day
-              </button>
-            </div>
-            <div className="field-stack">
-              <span>Basics</span>
-              <div className="grid two">
-                {READINESS_CHECKS.map((entry) => (
-                  <button
-                    className={`toggle ${snapshot.currentDay.readiness[entry.key] ? 'active' : ''}`}
-                    key={entry.key}
-                    onClick={() => void toggleReadiness(currentDate, entry.key)}
-                    type="button"
-                  >
-                    <span>{entry.label}</span>
-                    <span>
-                      {snapshot.currentDay.readiness[entry.key] ? 'Done' : 'Open'}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="empty-inline">{dayToolsSummary}</div>
-        )}
       </Panel>
 
       <Panel>
@@ -200,7 +88,7 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
                 key={item.id}
                 meta={itemMeta(item, currentDate, item.attachments)}
                 onOpen={() => onOpenItem(item.id)}
-                onPrimaryAction={() => void toggleFocus(currentDate, item.id)}
+                onPrimaryAction={() => void setItemFocus(currentDate, item.id, false)}
                 onToggleDone={
                   item.kind === 'task'
                     ? () => void toggleTaskDone(item.id, currentDate)
@@ -228,7 +116,7 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
                 key={item.id}
                 meta={itemMeta(item, currentDate, item.attachments)}
                 onOpen={() => onOpenItem(item.id)}
-                onPrimaryAction={() => void toggleFocus(currentDate, item.id)}
+                onPrimaryAction={() => void setItemFocus(currentDate, item.id, true)}
                 primaryActionLabel="Add focus"
               />
             ))}
@@ -242,7 +130,7 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
                 key={item.id}
                 meta={itemMeta(item, currentDate, item.attachments)}
                 onOpen={() => onOpenItem(item.id)}
-                onPrimaryAction={() => void toggleFocus(currentDate, item.id)}
+                onPrimaryAction={() => void setItemFocus(currentDate, item.id, true)}
                 onToggleDone={() => void toggleTaskDone(item.id, currentDate)}
                 primaryActionLabel="Add focus"
               />
@@ -255,10 +143,56 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
 
       <Panel>
         <div className="panel-header">
+          <h2>From lists</h2>
+          <p>List items you pulled into Now without creating duplicate tasks.</p>
+        </div>
+        {listItems.length ? (
+          <div className="item-list">
+            {listItems.map((item) => {
+              const list = snapshot.lists.find((entry) => entry.id === item.listId);
+              return (
+                <div className="item-card day-result" key={item.id}>
+                  <div className="eyebrow">
+                    {list ? `List | ${list.title}` : 'List item'}
+                  </div>
+                  <div className="item-title-row">
+                    <h3>{item.title}</h3>
+                    <span className="chip small">In Now</span>
+                  </div>
+                  {item.body.trim() ? <p>{item.body}</p> : null}
+                  <div className="dialog-actions">
+                    <button
+                      className="button ghost small"
+                      onClick={() => void updateListItem(item.id, { nowDate: null })}
+                      type="button"
+                    >
+                      Remove from Now
+                    </button>
+                    {list ? (
+                      <button
+                        className="button ghost small"
+                        onClick={() => onOpenList(list.id, item.id)}
+                        type="button"
+                      >
+                        Open list
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState>No list items in Now.</EmptyState>
+        )}
+      </Panel>
+
+      {overdue.length ? (
+        <Panel>
+        <div className="panel-header">
           <h2>Overdue</h2>
           <p>Still open from before this date.</p>
         </div>
-        {overdue.length ? (
           <div className="item-list">
             {overdue.map((item) => (
               <ItemCard
@@ -266,7 +200,7 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
                 key={item.id}
                 meta={itemMeta(item, currentDate, item.attachments)}
                 onOpen={() => onOpenItem(item.id)}
-                onPrimaryAction={() => void toggleFocus(currentDate, item.id)}
+                onPrimaryAction={() => void moveItemToNow(item.id, currentDate)}
                 onToggleDone={
                   item.kind === 'task'
                     ? () => void toggleTaskDone(item.id, currentDate)
@@ -276,18 +210,8 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
               />
             ))}
           </div>
-        ) : (
-          <EmptyState>Nothing overdue.</EmptyState>
-        )}
-      </Panel>
-
-      <FinishDayDialog
-        currentDate={currentDate}
-        day={snapshot.currentDay}
-        isOpen={closeDayOpen}
-        key={closeDayKey}
-        onClose={() => setCloseDayOpen(false)}
-      />
+        </Panel>
+      ) : null}
     </div>
   );
 }

@@ -269,6 +269,170 @@ export class HoldfastDatabase extends Dexie {
             };
           });
       });
+
+    this.version(7)
+      .stores({
+        items:
+          'id, status, kind, lane, scheduledDate, updatedAt, routineId, sourceItemId, deletedAt',
+        lists: 'id, kind, pinned, updatedAt, archivedAt, deletedAt',
+        listItems: 'id, listId, status, position, nowDate, updatedAt, deletedAt',
+        dailyRecords: 'date, updatedAt',
+        weeklyRecords: 'weekStart, updatedAt',
+        routines: 'id, active, updatedAt, deletedAt',
+        settings: 'id, updatedAt',
+        attachments: 'id, itemId, kind, updatedAt, deletedAt',
+        attachmentBlobs: 'id, createdAt',
+        mutationQueue: 'id, entity, entityId, status, createdAt',
+        prototypeRecoverySessions: 'id, createdAt, undoneAt',
+        workspaceRestoreSessions: 'id, createdAt, undoneAt',
+        syncState: 'id, updatedAt',
+        workspaceState: 'id, updatedAt',
+      })
+      .upgrade(async (tx) => {
+        type LegacyItemRow = Record<string, unknown> & {
+          id: string;
+          title?: string;
+          body?: string;
+          sourceItemId?: string | null;
+          status?: string;
+          scheduledDate?: string | null;
+          sourceDate?: string | null;
+          completedAt?: string | null;
+          archivedAt?: string | null;
+          updatedAt?: string;
+          deletedAt?: string | null;
+          syncState?: string;
+        };
+        type LegacyListItemRow = Record<string, unknown> & {
+          id: string;
+          title?: string;
+          body?: string;
+          status?: string;
+          completedAt?: string | null;
+          archivedAt?: string | null;
+          updatedAt?: string;
+          promotedItemId?: string | null;
+          nowDate?: string | null;
+          syncState?: string;
+        };
+
+        const stampSchemaVersion = async (tableName: string): Promise<void> => {
+          await tx
+            .table(tableName)
+            .toCollection()
+            .modify((record: Record<string, unknown>) => {
+              record.schemaVersion = 4;
+            });
+        };
+
+        await Promise.all([
+          stampSchemaVersion('items'),
+          stampSchemaVersion('lists'),
+          stampSchemaVersion('listItems'),
+          stampSchemaVersion('dailyRecords'),
+          stampSchemaVersion('weeklyRecords'),
+          stampSchemaVersion('routines'),
+          stampSchemaVersion('settings'),
+          stampSchemaVersion('attachments'),
+          stampSchemaVersion('attachmentBlobs'),
+          stampSchemaVersion('mutationQueue'),
+          stampSchemaVersion('prototypeRecoverySessions'),
+          stampSchemaVersion('workspaceRestoreSessions'),
+          stampSchemaVersion('syncState'),
+          stampSchemaVersion('workspaceState'),
+        ]);
+
+        const [items, listItems] = await Promise.all([
+          tx.table('items').toArray() as Promise<LegacyItemRow[]>,
+          tx.table('listItems').toArray() as Promise<LegacyListItemRow[]>,
+        ]);
+        const itemById = new Map(items.map((item) => [item.id, item]));
+        const migrationTimestamp = new Date().toISOString();
+
+        const migratedListItems = listItems.map((listItem) => {
+          const promotedItemId =
+            typeof listItem.promotedItemId === 'string'
+              ? listItem.promotedItemId
+              : null;
+          const promotedItem = promotedItemId
+            ? itemById.get(promotedItemId) ?? null
+            : null;
+          const promotedUpdatedAt = promotedItem?.updatedAt ?? '';
+          const listItemUpdatedAt = listItem.updatedAt ?? '';
+          const promotedIsNewer =
+            Boolean(promotedUpdatedAt) &&
+            promotedUpdatedAt.localeCompare(listItemUpdatedAt) > 0;
+          const projectedStatus =
+            promotedItem?.status === 'done'
+              ? 'done'
+              : promotedItem?.status === 'today'
+                ? 'open'
+                : null;
+          const needsConflict =
+            Boolean(promotedItem) &&
+            projectedStatus === null &&
+            promotedItem?.status !== 'archived';
+
+          return {
+            ...listItem,
+            title:
+              promotedIsNewer && promotedItem?.title
+                ? promotedItem.title
+                : (listItem.title ?? ''),
+            body:
+              promotedIsNewer && promotedItem?.body !== undefined
+                ? promotedItem.body
+                : (listItem.body ?? ''),
+            status:
+              projectedStatus && promotedIsNewer
+                ? projectedStatus
+                : (listItem.status ?? 'open'),
+            nowDate:
+              promotedItem?.status === 'today'
+                ? promotedItem.scheduledDate ?? promotedItem.sourceDate ?? null
+                : (listItem.nowDate ?? null),
+            completedAt:
+              projectedStatus === 'done' && promotedIsNewer
+                ? promotedItem?.completedAt ?? listItem.completedAt ?? null
+                : (listItem.completedAt ?? null),
+            updatedAt:
+              promotedIsNewer && promotedUpdatedAt
+                ? promotedUpdatedAt
+                : (listItem.updatedAt ?? migrationTimestamp),
+            syncState:
+              needsConflict || promotedItem?.syncState === 'conflict'
+                ? 'conflict'
+                : (listItem.syncState ?? 'pending'),
+            promotedItemId: undefined,
+            schemaVersion: 4,
+          };
+        });
+
+        const archivedProjectionItems = items.map((item) => {
+          const sourceListItem = listItems.find(
+            (listItem) => listItem.promotedItemId === item.id,
+          );
+          if (!sourceListItem) {
+            return item;
+          }
+
+          return {
+            ...item,
+            status: 'archived',
+            archivedAt:
+              typeof item.archivedAt === 'string'
+                ? item.archivedAt
+                : migrationTimestamp,
+            updatedAt: migrationTimestamp,
+            schemaVersion: 4,
+          };
+        });
+
+        await Promise.all([
+          tx.table('listItems').bulkPut(migratedListItems),
+          tx.table('items').bulkPut(archivedProjectionItems),
+        ]);
+      });
   }
 }
 

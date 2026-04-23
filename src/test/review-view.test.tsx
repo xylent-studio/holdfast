@@ -1,23 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
 import { ReviewView } from '@/features/review/ReviewView';
 import type { HoldfastSnapshot } from '@/storage/local/api';
 import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
-
-const createListMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@/storage/local/api', async () => {
-  const actual = await vi.importActual<typeof import('@/storage/local/api')>(
-    '@/storage/local/api',
-  );
-
-  return {
-    ...actual,
-    createList: createListMock,
-  };
-});
 
 function makeSnapshot(): HoldfastSnapshot {
   return {
@@ -75,7 +62,7 @@ function makeSnapshot(): HoldfastSnapshot {
         status: 'open',
         position: 0,
         sourceItemId: null,
-        promotedItemId: null,
+        nowDate: null,
         completedAt: null,
         archivedAt: null,
         createdAt: '2026-04-20T08:00:00.000Z',
@@ -209,10 +196,6 @@ function makeSnapshot(): HoldfastSnapshot {
 }
 
 describe('ReviewView', () => {
-  beforeEach(() => {
-    createListMock.mockReset();
-  });
-
   it('opens item matches and lets day matches jump back into Now', () => {
     const onOpenItem = vi.fn();
     const onJumpToDate = vi.fn();
@@ -241,35 +224,21 @@ describe('ReviewView', () => {
     expect(onJumpToDate).toHaveBeenCalledWith('2026-04-19');
   });
 
-  it('creates a new list from Review and opens it immediately', async () => {
-    createListMock.mockResolvedValue('list-2');
-    const onOpenList = vi.fn();
-
+  it('keeps Review retrieval-first instead of showing list-creation controls', async () => {
     render(
       <ReviewView
         currentDate="2026-04-20"
         onJumpToDate={vi.fn()}
-        onOpenList={onOpenList}
+        onOpenList={vi.fn()}
         onOpenItem={vi.fn()}
         snapshot={makeSnapshot()}
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'New list' }));
-    fireEvent.change(screen.getByLabelText('Title'), {
-      target: { value: 'Weekend prep' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Checklist' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Create list' }));
-
-    await waitFor(() => {
-      expect(createListMock).toHaveBeenCalledWith({
-        title: 'Weekend prep',
-        kind: 'checklist',
-        lane: 'admin',
-      });
-      expect(onOpenList).toHaveBeenCalledWith('list-2');
-    });
+    expect(
+      screen.queryByRole('button', { name: 'New list' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeVisible();
   });
 
   it('turns repeating loops into search actions', () => {
@@ -310,7 +279,7 @@ describe('ReviewView', () => {
     expect(screen.getByRole('heading', { name: 'More trails' })).toBeVisible();
     expect(
       screen.getByText(
-        'Search and list surfaces stay up front. Open this only when you need a wider trail.',
+        'Search stays primary. Open this only when you need a wider trail.',
       ),
     ).toBeVisible();
     expect(
@@ -336,7 +305,8 @@ describe('ReviewView', () => {
     });
     fireEvent.click(screen.getAllByRole('button', { name: 'Open list' })[0]);
 
-    expect(onOpenList).toHaveBeenCalledWith('list-1');
+    expect(onOpenList).toHaveBeenCalled();
+    expect(onOpenList.mock.calls[0]?.[0]).toBe('list-1');
   });
 
   it('surfaces conflicted records as needs-attention work', () => {

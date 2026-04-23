@@ -22,7 +22,7 @@ If a patch fails earlier layers, later layers do not save it.
 ## 1. Product truth
 Ask:
 - Does this make Holdfast feel more like itself, or more generic?
-- Does it preserve the Now / Inbox / Upcoming / Review spine?
+- Does it preserve the Now / Inbox / Upcoming / Review / Lists spine?
 - Is it protecting the real product intent or cargo-culting prototype behavior?
 - Did the change add productivity-app sludge, dashboard energy, or PM-tool patterns?
 - Does this help the user act, trust, and continue — or just add software?

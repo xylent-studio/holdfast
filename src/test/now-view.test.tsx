@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
@@ -189,7 +189,7 @@ function makeSnapshot(items: ItemWithAttachments[] = []): HoldfastSnapshot {
 }
 
 describe('NowView', () => {
-  it('keeps day tools secondary and only surfaces yesterday seed inline', () => {
+  it('keeps day support out of the main surface and only surfaces yesterday seed inline', () => {
     render(
       <NowView
         currentDate="2026-04-20"
@@ -201,11 +201,9 @@ describe('NowView', () => {
     expect(screen.getByText('Next start | Start with coffee')).toBeInTheDocument();
     expect(screen.queryByText('Buy batteries')).not.toBeInTheDocument();
     expect(screen.queryByText('Water')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Day tools' }));
-
-    expect(screen.getByText('Water')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start day' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Day tools' }),
+    ).not.toBeInTheDocument();
   });
 
   it('keeps due-today planned work in Now, future work out of Now, and removes Next up', () => {

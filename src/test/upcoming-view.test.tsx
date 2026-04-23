@@ -156,11 +156,11 @@ function renderUpcoming(initialEntry = '/upcoming') {
 }
 
 describe('UpcomingView', () => {
-  it('defaults to scheduled and keeps due-today work out of Upcoming', () => {
+  it('defaults to scheduled and shows scheduled work from the selected date forward', () => {
     renderUpcoming();
 
-    expect(screen.getByText('Tomorrow')).toBeInTheDocument();
-    expect(screen.queryByText('Due today')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Due today' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tomorrow' })).toBeInTheDocument();
   });
 
   it('uses the url-backed section filter and lets the user switch sections', () => {

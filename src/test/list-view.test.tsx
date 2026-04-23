@@ -7,6 +7,7 @@ import type { HoldfastSnapshot } from '@/storage/local/api';
 import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
 const createListItemMock = vi.fn();
+const createTaskFromListItemMock = vi.fn();
 const deleteListItemMock = vi.fn();
 const promoteListItemToNowMock = vi.fn();
 const replaceListItemWithLatestSavedVersionMock = vi.fn();
@@ -16,6 +17,8 @@ const updateListItemMock = vi.fn();
 
 vi.mock('@/storage/local/api', () => ({
   createListItem: (...args: unknown[]) => createListItemMock(...args),
+  createTaskFromListItem: (...args: unknown[]) =>
+    createTaskFromListItemMock(...args),
   deleteListItem: (...args: unknown[]) => deleteListItemMock(...args),
   promoteListItemToNow: (...args: unknown[]) => promoteListItemToNowMock(...args),
   replaceListItemWithLatestSavedVersion: (...args: unknown[]) =>
@@ -57,7 +60,7 @@ function makeSnapshot(): HoldfastSnapshot {
         status: 'open',
         position: 0,
         sourceItemId: null,
-        promotedItemId: null,
+        nowDate: null,
         completedAt: null,
         archivedAt: null,
         createdAt: '2026-04-20T08:00:00.000Z',
@@ -142,6 +145,7 @@ function makeSnapshot(): HoldfastSnapshot {
 describe('ListView', () => {
   beforeEach(() => {
     createListItemMock.mockReset();
+    createTaskFromListItemMock.mockReset();
     deleteListItemMock.mockReset();
     promoteListItemToNowMock.mockReset();
     replaceListItemWithLatestSavedVersionMock.mockReset();
@@ -199,7 +203,7 @@ describe('ListView', () => {
         status: 'open',
         position: 0,
         sourceItemId: null,
-        promotedItemId: null,
+        nowDate: null,
       });
     });
   });

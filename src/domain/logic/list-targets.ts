@@ -143,9 +143,5 @@ export function inferListKind(title: string): ListKind {
     return 'checklist';
   }
 
-  if (/(reference|recipe|recipes|reading|watchlist|ideas|resources|links)/.test(value)) {
-    return 'reference';
-  }
-
   return 'project';
 }

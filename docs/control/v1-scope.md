@@ -49,6 +49,7 @@ By the time V1 is done, a user should be able to:
 - Inbox
 - Upcoming
 - Review
+- Lists
 
 ### Core capture and object behavior
 
@@ -89,7 +90,7 @@ V1 is not done because the feature list exists. It is done when:
 - the app feels trustworthy
 - the sync model feels invisible in normal use
 - language sounds product-native
-- the four core areas feel purposeful and distinct
+- the five core areas feel purposeful and distinct
 - the app is harder to lose things in than real life already is
 - the app does not feel bloated
 
@@ -162,7 +163,7 @@ Must be:
 Should contain:
 
 - scheduled items
-- planned-later items
+- undated active items
 - waiting-on states
 
 Must not become:
@@ -196,6 +197,31 @@ Must not become:
 - analytics theater
 - vanity charts
 - a warehouse of dead data with no real decisions attached
+
+## Lists
+
+Purpose:
+
+- quiet library access for list surfaces
+
+Must be:
+
+- searchable
+- calm
+- secondary to command work
+
+Should contain:
+
+- pinned lists
+- recent lists
+- all-lists search
+- fast empty-list creation
+
+Must not become:
+
+- a second dashboard
+- generic database management
+- a dumping ground for every open thing
 
 ## Nice soon after V1
 

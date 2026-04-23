@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import type { DateKey } from '@/domain/dates';
@@ -10,8 +10,7 @@ import {
   undatedUpcomingItems,
   waitingItems,
 } from '@/domain/logic/selectors';
-import type { PlanSpan } from '@/domain/logic/selectors';
-import type { HoldfastSnapshot } from '@/storage/local/api';
+import { toggleTaskDone, type HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
 import { Panel } from '@/shared/ui/Panel';
@@ -24,9 +23,8 @@ interface UpcomingViewProps {
 
 export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [planSpan, setPlanSpan] = useState<PlanSpan>('week');
   const filter = parseUpcomingSection(searchParams.get('section'));
-  const scheduled = scheduledUpcomingItems(snapshot.items, currentDate, planSpan);
+  const scheduled = scheduledUpcomingItems(snapshot.items, currentDate);
   const undated = undatedUpcomingItems(snapshot.items);
   const waiting = waitingItems(snapshot.items);
   const scheduledGroups = useMemo(
@@ -43,21 +41,11 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
   return (
     <div className="stack">
       <Panel>
-        <div className="panel-header split">
+        <div className="panel-header">
           <div>
             <h1>Upcoming</h1>
-            <p>What is scheduled, left undated, or waiting on someone else.</p>
+            <p>What is scheduled, kept undated, or waiting on people, systems, or events.</p>
           </div>
-          {filter === 'scheduled' ? (
-            <div className="chip-row">
-              {(['day', 'week', 'month'] as const).map((span) => (
-                <button className={`chip ${planSpan === span ? 'active' : ''}`} key={span} onClick={() => setPlanSpan(span)} type="button">
-                  {span[0].toUpperCase()}
-                  {span.slice(1)}
-                </button>
-              ))}
-            </div>
-          ) : null}
         </div>
         <div className="chip-row">
           <button className={`chip ${filter === 'scheduled' ? 'active' : ''}`} onClick={() => handleFilterChange('scheduled')} type="button">
@@ -83,6 +71,11 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
                         key={item.id}
                         meta={itemMeta(item, currentDate, item.attachments)}
                         onOpen={() => onOpenItem(item.id)}
+                        onToggleDone={
+                          item.kind === 'task'
+                            ? () => void toggleTaskDone(item.id, currentDate)
+                            : undefined
+                        }
                       />
                     ))}
                   </div>
@@ -102,6 +95,11 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
                   key={item.id}
                   meta={itemMeta(item, currentDate, item.attachments)}
                   onOpen={() => onOpenItem(item.id)}
+                  onToggleDone={
+                    item.kind === 'task'
+                      ? () => void toggleTaskDone(item.id, currentDate)
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -118,6 +116,11 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
                   key={item.id}
                   meta={itemMeta(item, currentDate, item.attachments)}
                   onOpen={() => onOpenItem(item.id)}
+                  onToggleDone={
+                    item.kind === 'task'
+                      ? () => void toggleTaskDone(item.id, currentDate)
+                      : undefined
+                  }
                 />
               ))}
             </div>

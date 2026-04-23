@@ -72,10 +72,13 @@ describe('scheduledUpcomingItems', () => {
         }),
       ],
       '2026-04-18',
-      'week',
     );
 
-    expect(result.map((item) => item.title)).toEqual(['This week']);
+    expect(result.map((item) => item.title)).toEqual([
+      'Due today',
+      'This week',
+      'Next month',
+    ]);
   });
 });
 
@@ -182,7 +185,7 @@ function makeListItem(overrides: Partial<ListItemRecord>): ListItemRecord {
     status: 'open',
     position: 0,
     sourceItemId: null,
-    promotedItemId: null,
+    nowDate: null,
     completedAt: null,
     archivedAt: null,
     createdAt: '2026-04-18T08:00:00.000Z',

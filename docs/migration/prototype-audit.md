@@ -46,7 +46,7 @@ The prototype also mixed in UI and session state:
 
 ## Preserve
 
-- `Now / Inbox / Upcoming / Review` as the product spine
+- `Now / Inbox / Upcoming / Review` as the original product spine, with room for a later dedicated `Lists` library home
 - readiness as a short fixed checklist
 - routines as seeded structure, not hidden automation
 - finish-day carry-forward behavior

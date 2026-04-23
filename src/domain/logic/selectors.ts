@@ -2,7 +2,6 @@ import { ITEM_STATUS_LABELS, LANES } from '@/domain/constants';
 import {
   addDays,
   endOfWeek,
-  inWindow,
   niceDate,
   niceTime,
   startOfWeek,
@@ -18,27 +17,40 @@ import type {
 
 export type InboxFilter = 'unsorted' | 'archived';
 export type UpcomingFilter = 'scheduled' | 'undated' | 'waiting';
-export type PlanSpan = 'day' | 'week' | 'month';
 export type ReviewableItem = ItemRecord & {
   attachments?: AttachmentRecord[];
 };
+export type ReviewMatchReason =
+  | { field: 'title'; value?: string }
+  | { field: 'notes'; value?: string }
+  | { field: 'source'; value?: string }
+  | { field: 'attachment'; value?: string }
+  | { field: 'status'; value?: string }
+  | { field: 'listTitle'; value?: string }
+  | { field: 'dayNote'; value?: string };
 export type ReviewSearchResult<T extends ItemRecord = ItemRecord> =
-  | { type: 'item'; item: T }
+  | { type: 'item'; item: T; matchedOn: ReviewMatchReason[]; score: number }
   | {
       type: 'day';
       date: string;
       dailyRecord: DailyRecord;
+      matchedOn: ReviewMatchReason[];
+      score: number;
     }
   | {
       type: 'list';
       list: ListRecord;
       openCount: number;
       doneCount: number;
+      matchedOn: ReviewMatchReason[];
+      score: number;
     }
   | {
       type: 'listItem';
       list: ListRecord;
       listItem: ListItemRecord;
+      matchedOn: ReviewMatchReason[];
+      score: number;
     };
 
 export function normalizedText(value: string): string {
@@ -95,6 +107,20 @@ export function getQueueItemsForToday<T extends ItemRecord>(
   );
 }
 
+export function listItemsForNow<T extends ListItemRecord>(
+  listItems: T[],
+  currentDate: string,
+): T[] {
+  return listItems
+    .filter(
+      (item) =>
+        !item.deletedAt &&
+        item.status === 'open' &&
+        item.nowDate === currentDate,
+    )
+    .sort((left, right) => left.position - right.position);
+}
+
 export function overdueItems<T extends ItemRecord>(
   items: T[],
   currentDate: string,
@@ -138,7 +164,6 @@ export function conflictedListItems<T extends ListItemRecord>(
 export function scheduledUpcomingItems<T extends ItemRecord>(
   items: T[],
   currentDate: string,
-  span: PlanSpan,
 ): T[] {
   return items
     .filter(
@@ -147,8 +172,7 @@ export function scheduledUpcomingItems<T extends ItemRecord>(
         item.kind !== 'capture' &&
         item.status === 'upcoming' &&
         Boolean(item.scheduledDate) &&
-        item.scheduledDate > currentDate &&
-        inWindow(item.scheduledDate, currentDate, span),
+        item.scheduledDate >= currentDate,
     )
     .sort((left, right) =>
       `${left.scheduledDate ?? ''}${left.scheduledTime ?? ''}`.localeCompare(
@@ -277,6 +301,42 @@ export function searchWorkspace<T extends ReviewableItem>(
   listItems: ListItemRecord[],
   query: string,
 ): ReviewSearchResult<T>[] {
+  function includesNeedle(value: string | null | undefined): boolean {
+    return normalizedText(value ?? '').includes(needle);
+  }
+
+  function scoreReasons(reasons: ReviewMatchReason[]): number {
+    return reasons.reduce((total, reason) => {
+      switch (reason.field) {
+        case 'title':
+          return total + 10;
+        case 'listTitle':
+          return total + 8;
+        case 'notes':
+          return total + 6;
+        case 'source':
+        case 'attachment':
+          return total + 5;
+        case 'dayNote':
+          return total + 4;
+        case 'status':
+          return total + 3;
+      }
+    }, 0);
+  }
+
+  function uniqueReasons(reasons: ReviewMatchReason[]): ReviewMatchReason[] {
+    const seen = new Set<string>();
+    return reasons.filter((reason) => {
+      const key = `${reason.field}:${reason.value ?? ''}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }
+
   const needle = normalizedText(query);
   if (!needle) {
     return [];
@@ -284,43 +344,82 @@ export function searchWorkspace<T extends ReviewableItem>(
 
   const itemResults = items
     .filter((item) => !item.deletedAt)
-    .filter((item) =>
-      normalizedText(
-        [
-          item.title,
-          item.body,
-          item.sourceText ?? '',
-          ...(item.attachments ?? []).map((attachment) => attachment.name),
-          ITEM_STATUS_LABELS[item.status] ?? item.status,
-        ].join(' | '),
-      ).includes(needle),
-    )
-    .map((item) => ({ type: 'item', item }) as const satisfies ReviewSearchResult<T>);
+    .map((item) => {
+      const matchedOn = uniqueReasons([
+        ...(includesNeedle(item.title)
+          ? [{ field: 'title', value: item.title } satisfies ReviewMatchReason]
+          : []),
+        ...(includesNeedle(item.body)
+          ? [{ field: 'notes', value: item.body } satisfies ReviewMatchReason]
+          : []),
+        ...(includesNeedle(item.sourceText)
+          ? [{ field: 'source', value: item.sourceText ?? '' } satisfies ReviewMatchReason]
+          : []),
+        ...(item.attachments ?? [])
+          .filter((attachment) => includesNeedle(attachment.name))
+          .map(
+            (attachment) =>
+              ({
+                field: 'attachment',
+                value: attachment.name,
+              }) satisfies ReviewMatchReason,
+          ),
+        ...(includesNeedle(ITEM_STATUS_LABELS[item.status] ?? item.status)
+          ? [
+              {
+                field: 'status',
+                value: ITEM_STATUS_LABELS[item.status] ?? item.status,
+              } satisfies ReviewMatchReason,
+            ]
+          : []),
+      ]);
+
+      if (!matchedOn.length) {
+        return null;
+      }
+
+      return {
+        type: 'item',
+        item,
+        matchedOn,
+        score: scoreReasons(matchedOn),
+      } as const satisfies ReviewSearchResult<T>;
+    })
+    .filter((result): result is ReviewSearchResult<T> => Boolean(result));
 
   const dayResults = dailyRecords
-    .filter((record) =>
-      normalizedText(
-        [
-          record.launchNote,
-          record.closeWin,
-          record.closeCarry,
-          record.closeSeed,
-          record.closeNote,
-        ].join(' | '),
-      ).includes(needle),
-    )
-    .map(
-      (dailyRecord) =>
-        ({
-          type: 'day',
-          date: dailyRecord.date,
-          dailyRecord,
-        }) as const satisfies ReviewSearchResult<T>,
-    );
+    .map((dailyRecord) => {
+      const matchedValue = [
+        dailyRecord.launchNote,
+        dailyRecord.closeWin,
+        dailyRecord.closeCarry,
+        dailyRecord.closeSeed,
+        dailyRecord.closeNote,
+      ].find((value) => includesNeedle(value));
+      if (!matchedValue) {
+        return null;
+      }
+
+      const matchedOn = [
+        {
+          field: 'dayNote',
+          value: matchedValue,
+        } satisfies ReviewMatchReason,
+      ];
+
+      return {
+        type: 'day',
+        date: dailyRecord.date,
+        dailyRecord,
+        matchedOn,
+        score: scoreReasons(matchedOn),
+      } as const satisfies ReviewSearchResult<T>;
+    })
+    .filter((result): result is ReviewSearchResult<T> => Boolean(result));
 
   const activeLists = lists.filter((list) => !list.deletedAt);
   const activeListItems = listItems.filter(
-    (listItem) => !listItem.deletedAt && listItem.status !== 'archived',
+    (listItem) => !listItem.deletedAt,
   );
   const itemsByListId = new Map<string, ListItemRecord[]>();
   for (const listItem of activeListItems) {
@@ -330,10 +429,19 @@ export function searchWorkspace<T extends ReviewableItem>(
   }
 
   const listResults = activeLists
-    .filter((list) =>
-      normalizedText([list.title, list.kind].join(' | ')).includes(needle),
-    )
     .map((list) => {
+      const matchedOn = uniqueReasons([
+        ...(includesNeedle(list.title)
+          ? [{ field: 'listTitle', value: list.title } satisfies ReviewMatchReason]
+          : []),
+        ...(includesNeedle(list.kind)
+          ? [{ field: 'status', value: list.kind } satisfies ReviewMatchReason]
+          : []),
+      ]);
+      if (!matchedOn.length) {
+        return null;
+      }
+
       const relatedItems = itemsByListId.get(list.id) ?? [];
       return {
         type: 'list',
@@ -342,8 +450,11 @@ export function searchWorkspace<T extends ReviewableItem>(
           .length,
         doneCount: relatedItems.filter((entry) => entry.status === 'done')
           .length,
+        matchedOn,
+        score: scoreReasons(matchedOn),
       } as const satisfies ReviewSearchResult<T>;
-    });
+    })
+    .filter((result): result is ReviewSearchResult<T> => Boolean(result));
 
   const listLookup = new Map(activeLists.map((list) => [list.id, list]));
   const listItemResults = activeListItems
@@ -359,15 +470,34 @@ export function searchWorkspace<T extends ReviewableItem>(
         listItem: ListItemRecord;
       } => Boolean(entry.list),
     )
-    .filter(({ list, listItem }) =>
-      normalizedText(
-        [listItem.title, listItem.body, list.title, list.kind].join(' | '),
-      ).includes(needle),
-    )
-    .map(
-      ({ list, listItem }) =>
-        ({ type: 'listItem', list, listItem }) as const satisfies ReviewSearchResult<T>,
-    );
+    .map(({ list, listItem }) => {
+      const matchedOn = uniqueReasons([
+        ...(includesNeedle(listItem.title)
+          ? [{ field: 'title', value: listItem.title } satisfies ReviewMatchReason]
+          : []),
+        ...(includesNeedle(listItem.body)
+          ? [{ field: 'notes', value: listItem.body } satisfies ReviewMatchReason]
+          : []),
+        ...(includesNeedle(list.title)
+          ? [{ field: 'listTitle', value: list.title } satisfies ReviewMatchReason]
+          : []),
+        ...(includesNeedle(listItem.status)
+          ? [{ field: 'status', value: listItem.status } satisfies ReviewMatchReason]
+          : []),
+      ]);
+      if (!matchedOn.length) {
+        return null;
+      }
+
+      return {
+        type: 'listItem',
+        list,
+        listItem,
+        matchedOn,
+        score: scoreReasons(matchedOn),
+      } as const satisfies ReviewSearchResult<T>;
+    })
+    .filter((result): result is ReviewSearchResult<T> => Boolean(result));
 
   return [
     ...itemResults,
@@ -375,6 +505,9 @@ export function searchWorkspace<T extends ReviewableItem>(
     ...listResults,
     ...listItemResults,
   ].sort((left, right) => {
+    if (left.score !== right.score) {
+      return right.score - left.score;
+    }
     const leftTimestamp = (() => {
       switch (left.type) {
         case 'item':

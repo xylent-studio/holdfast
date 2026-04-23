@@ -7,6 +7,7 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from 'react-router-dom';
 
 import { AuthCallbackView } from '@/app/auth/AuthCallbackView';
@@ -27,7 +28,6 @@ import {
   addContextForLocation,
   currentListIdForPath,
 } from '@/domain/logic/capture';
-import { openItems } from '@/domain/logic/selectors';
 import { bootstrapHoldfast, useHoldfastSnapshot } from '@/storage/local/api';
 import { LoadingPanel } from '@/shared/ui/LoadingPanel';
 
@@ -51,6 +51,11 @@ const ListView = lazy(async () =>
     default: module.ListView,
   })),
 );
+const ListsHomeView = lazy(async () =>
+  import('@/features/lists/ListsHomeView').then((module) => ({
+    default: module.ListsHomeView,
+  })),
+);
 const SettingsView = lazy(async () =>
   import('@/features/settings/SettingsView').then((module) => ({
     default: module.SettingsView,
@@ -63,10 +68,12 @@ async function preloadCoreOfflineSurface(): Promise<void> {
 
 function RoutedListView({
   currentDate,
+  highlightListItemId,
   onOpenItem,
   snapshot,
 }: {
   currentDate: string;
+  highlightListItemId: string | null;
   onOpenItem: (itemId: string) => void;
   snapshot: NonNullable<ReturnType<typeof useHoldfastSnapshot>>;
 }) {
@@ -78,6 +85,7 @@ function RoutedListView({
   return (
     <ListView
       currentDate={currentDate}
+      highlightListItemId={highlightListItemId}
       listId={params.listId}
       onOpenItem={onOpenItem}
       snapshot={snapshot}
@@ -86,13 +94,23 @@ function RoutedListView({
 }
 
 function AppRoutes() {
-  const [currentDate, setCurrentDate] = useState(todayDateKey());
+  const today = todayDateKey();
+  const [nowDate, setNowDate] = useState(today);
+  const [upcomingDate, setUpcomingDate] = useState(today);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const snapshot = useHoldfastSnapshot(currentDate);
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const routeDate =
+    location.pathname === '/now'
+      ? nowDate
+      : location.pathname === '/upcoming'
+        ? upcomingDate
+        : todayDateKey();
+  const snapshot = useHoldfastSnapshot(routeDate);
 
   useEffect(() => {
     void bootstrapHoldfast();
@@ -111,6 +129,23 @@ function AppRoutes() {
     location.search,
   );
   const currentListId = currentListIdForPath(location.pathname);
+  const openList = (listId: string, highlightListItemId?: string | null): void => {
+    const nextSearchParams = new URLSearchParams();
+    if (highlightListItemId) {
+      nextSearchParams.set('item', highlightListItemId);
+    }
+
+    const suffix = nextSearchParams.toString();
+    navigate(`/lists/${listId}${suffix ? `?${suffix}` : ''}`);
+  };
+  const changeRouteDate = (value: string): void => {
+    if (location.pathname === '/upcoming') {
+      setUpcomingDate(value);
+      return;
+    }
+
+    setNowDate(value);
+  };
   const hasLocalData = snapshot ? hasMeaningfulLocalState(snapshot) : false;
   const shouldWaitForAuthGate =
     Boolean(snapshot) && auth.configured && !auth.isReady && !hasLocalData;
@@ -147,11 +182,10 @@ function AppRoutes() {
   return (
     <>
         <AppShell
-          currentDate={currentDate}
+          currentDate={routeDate}
           onAdd={() => setQuickAddOpen(true)}
-          onChangeDate={setCurrentDate}
+          onChangeDate={changeRouteDate}
           onOpenSettings={() => navigate('/settings')}
-          openCount={openItems(snapshot.items).length}
           showDateControls={
             location.pathname === '/now' || location.pathname === '/upcoming'
           }
@@ -171,8 +205,9 @@ function AppRoutes() {
               path="/now"
               element={
                 <NowView
-                  currentDate={currentDate}
+                  currentDate={nowDate}
                   onOpenItem={setSelectedItemId}
+                  onOpenList={openList}
                   snapshot={snapshot}
                 />
               }
@@ -181,7 +216,7 @@ function AppRoutes() {
               path="/inbox"
               element={
                 <InboxView
-                  currentDate={currentDate}
+                  currentDate={routeDate}
                   onOpenItem={setSelectedItemId}
                   snapshot={snapshot}
                 />
@@ -191,7 +226,7 @@ function AppRoutes() {
               path="/upcoming"
               element={
                 <UpcomingView
-                  currentDate={currentDate}
+                  currentDate={upcomingDate}
                   onOpenItem={setSelectedItemId}
                   snapshot={snapshot}
                 />
@@ -201,13 +236,22 @@ function AppRoutes() {
               path="/review"
               element={
                 <ReviewView
-                  currentDate={currentDate}
+                  currentDate={routeDate}
                   onJumpToDate={(date) => {
-                    setCurrentDate(date);
+                    setNowDate(date);
                     navigate('/now');
                   }}
                   onOpenItem={setSelectedItemId}
-                  onOpenList={(listId) => navigate(`/lists/${listId}`)}
+                  onOpenList={openList}
+                  snapshot={snapshot}
+                />
+              }
+            />
+            <Route
+              path="/lists"
+              element={
+                <ListsHomeView
+                  onOpenList={openList}
                   snapshot={snapshot}
                 />
               }
@@ -216,7 +260,8 @@ function AppRoutes() {
               path="/lists/:listId"
               element={
                 <RoutedListView
-                  currentDate={currentDate}
+                  currentDate={routeDate}
+                  highlightListItemId={searchParams.get('item')}
                   onOpenItem={setSelectedItemId}
                   snapshot={snapshot}
                 />
@@ -225,7 +270,7 @@ function AppRoutes() {
             <Route
               path="/settings"
               element={
-                <SettingsView currentDate={currentDate} snapshot={snapshot} />
+                <SettingsView currentDate={routeDate} snapshot={snapshot} />
               }
             />
           </Routes>
@@ -233,17 +278,17 @@ function AppRoutes() {
       </AppShell>
       <QuickAddDialog
         context={quickAddContext}
-        currentDate={currentDate}
+        currentDate={routeDate}
         currentListId={currentListId}
         isOpen={quickAddOpen}
         lists={snapshot.lists}
         onClose={() => setQuickAddOpen(false)}
-        onOpenList={(listId) => navigate(`/lists/${listId}`)}
+        onOpenList={openList}
       />
       {selectedItem ? (
         <Suspense fallback={null}>
           <ItemDetailsDialog
-            currentDate={currentDate}
+            currentDate={routeDate}
             isFocused={Boolean(
               snapshot?.currentDay.focusItemIds.includes(selectedItem.id),
             )}
@@ -252,7 +297,7 @@ function AppRoutes() {
             key={`${selectedItem.id}-${selectedItem.updatedAt}`}
             lists={snapshot.lists}
             onClose={() => setSelectedItemId(null)}
-            onOpenList={(listId) => navigate(`/lists/${listId}`)}
+            onOpenList={openList}
           />
         </Suspense>
       ) : null}

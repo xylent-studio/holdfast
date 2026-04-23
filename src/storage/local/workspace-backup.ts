@@ -523,9 +523,10 @@ function toSummaryRecord(
 
 async function applyWorkspaceBackup(
   backup: WorkspaceBackupFile,
-  options?: { recordUndo?: boolean },
+  options?: { attachUserId?: string | null; recordUndo?: boolean },
 ): Promise<WorkspaceRestoreResult> {
   const parsedBackup = parseWorkspaceBackupValue(backup);
+  const attachUserId = options?.attachUserId ?? null;
   const recordUndo = options?.recordUndo ?? true;
   const restoredAt = nowIso();
   const previousBackup = recordUndo ? await createWorkspaceBackup() : null;
@@ -903,11 +904,11 @@ async function applyWorkspaceBackup(
         WorkspaceStateRecordSchema.parse({
           ...createDefaultWorkspaceState(),
           authPromptState: 'none',
-          attachState: 'detached-restore',
-          boundUserId: null,
+          attachState: attachUserId ? 'attached' : 'detached-restore',
+          boundUserId: attachUserId,
           createdAt: restoredAt,
           id: WORKSPACE_STATE_ROW_ID,
-          ownershipState: 'device-guest',
+          ownershipState: attachUserId ? 'member' : 'device-guest',
           schemaVersion: SCHEMA_VERSION,
           updatedAt: restoredAt,
         }),
@@ -1058,11 +1059,22 @@ export async function createWorkspaceBackupExport(): Promise<WorkspaceBackupExpo
   };
 }
 
+export async function previewWorkspaceBackupFile(
+  file: File,
+): Promise<Pick<WorkspaceBackupFile, 'exportedAt' | 'summary'>> {
+  const backup = await parseWorkspaceBackupFile(file);
+  return {
+    exportedAt: backup.exportedAt,
+    summary: backup.summary,
+  };
+}
+
 export async function importWorkspaceBackupFile(
   file: File,
+  options?: { attachUserId?: string | null },
 ): Promise<WorkspaceRestoreResult> {
   const backup = await parseWorkspaceBackupFile(file);
-  return applyWorkspaceBackup(backup);
+  return applyWorkspaceBackup(backup, options);
 }
 
 export async function getWorkspaceRestoreUndoAvailability(): Promise<WorkspaceRestoreUndoAvailability> {
@@ -1082,7 +1094,9 @@ export async function getWorkspaceRestoreUndoAvailability(): Promise<WorkspaceRe
       };
 }
 
-export async function undoLastWorkspaceRestore(): Promise<WorkspaceRestoreResult> {
+export async function undoLastWorkspaceRestore(
+  options?: { attachUserId?: string | null },
+): Promise<WorkspaceRestoreResult> {
   const sessions = await db.workspaceRestoreSessions.toArray();
   const latest = latestOpenWorkspaceRestoreSession(sessions);
 
@@ -1093,7 +1107,10 @@ export async function undoLastWorkspaceRestore(): Promise<WorkspaceRestoreResult
   const previousBackup = parseWorkspaceBackupValue(
     JSON.parse(latest.previousBackupJson),
   );
-  const result = await applyWorkspaceBackup(previousBackup, { recordUndo: false });
+  const result = await applyWorkspaceBackup(previousBackup, {
+    attachUserId: options?.attachUserId ?? null,
+    recordUndo: false,
+  });
 
   await db.workspaceRestoreSessions.put(
     WorkspaceRestoreSessionRecordSchema.parse({

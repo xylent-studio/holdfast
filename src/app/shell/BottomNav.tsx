@@ -12,7 +12,13 @@ export function BottomNav({ viewPath }: BottomNavProps) {
       {NAV_ITEMS.map((item) => (
         <NavLink
           className={({ isActive }) =>
-            `bottom-nav-link ${isActive || viewPath === item.path ? 'active' : ''}`
+            `bottom-nav-link ${
+              isActive ||
+              viewPath === item.path ||
+              viewPath.startsWith(`${item.path}/`)
+                ? 'active'
+                : ''
+            }`
           }
           key={item.path}
           to={item.path}

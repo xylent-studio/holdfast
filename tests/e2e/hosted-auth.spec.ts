@@ -70,7 +70,9 @@ test.describe('hosted auth smoke', () => {
       page.getByText('Sign in again to keep this device in sync.'),
     ).toBeVisible();
     await expect(
-      page.getByText("We'll keep what's already here and sync it to your account."),
+      page.getByText(
+        "We'll keep what's already here and attach it to your account here first.",
+      ),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Continue with Google' }),

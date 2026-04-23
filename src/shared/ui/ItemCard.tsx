@@ -56,7 +56,7 @@ export function ItemCard({
   return (
     <article className={`item-card ${cardClass} ${focus ? 'focus' : ''}`}>
       <div className="item-row">
-        {item.kind === 'task' ? (
+        {item.kind === 'task' && onToggleDone ? (
           <button
             aria-label={
               item.status === 'done' ? 'Reopen task' : 'Complete task'

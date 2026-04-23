@@ -79,7 +79,8 @@ export interface RemoteListItemRow {
   status: ListItemRecord['status'];
   position: number;
   source_item_id: string | null;
-  promoted_item_id: string | null;
+  now_date: string | null;
+  promoted_item_id?: string | null;
   completed_at: string | null;
   archived_at: string | null;
   created_at: string;
@@ -288,7 +289,7 @@ export function toRemoteListItemRow(
     status: listItem.status,
     position: listItem.position,
     source_item_id: listItem.sourceItemId,
-    promoted_item_id: listItem.promotedItemId,
+    now_date: listItem.nowDate,
     completed_at: listItem.completedAt,
     archived_at: listItem.archivedAt,
     created_at: listItem.createdAt,
@@ -309,7 +310,7 @@ export function fromRemoteListItemRow(
     status: row.status,
     position: row.position,
     sourceItemId: row.source_item_id,
-    promotedItemId: row.promoted_item_id,
+    nowDate: row.now_date ?? null,
     completedAt: row.completed_at,
     archivedAt: row.archived_at,
     createdAt: row.created_at,

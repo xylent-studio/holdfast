@@ -66,6 +66,7 @@ Now should avoid:
 - too many filters
 - settings and explanations
 - generic dashboard panels
+- a dedicated day-tools panel unless it has clearly proven value
 
 Now should stay protected from list sprawl.
 
@@ -133,7 +134,7 @@ It should answer:
 Review should prioritize:
 - search
 - retrieval
-- list drill-in without new top-level navigation
+- list drill-in back into the right list row
 - repeated-loop visibility
 - recent history and carry-forward honesty
 - refinding saved things, list items, and preserved captures
@@ -143,6 +144,25 @@ Review should avoid:
 - vanity analytics
 - cluttered historical dashboards
 - information with no decision value
+
+## Lists
+Lists is the quiet library home for list surfaces.
+
+It should answer:
+- Which list am I trying to get back to?
+- What list was active recently?
+- Do I need a new list, or just the right existing one?
+
+Lists should prioritize:
+- pinned lists
+- recent lists
+- searchable all-lists access
+- fast empty-list creation when the user wants a real list surface
+
+Lists should avoid:
+- becoming a second command dashboard
+- duplicating Review's search job
+- turning list management into admin work
 
 ## Capture rules
 Capture should be:
@@ -186,21 +206,22 @@ The default Add surface should:
 - avoid turning capture into filing
 
 ## List and object surface rules
-Lists are first-class product objects, but they do not become a second top-level navigation spine by default.
+Lists are first-class product objects, and they now have a quiet top-level home.
 
 Lists should be accessed through:
 - current context when the user is already inside one
 - direct target picking when the user already knows the destination
 - pinned surfaces when repeated access is warranted
+- `Lists` for library access
 - Review and search for retrieval
 
-Review can also be the lightweight place to start a new empty list surface when the user is intentionally creating one.
+The `Lists` route should be the lightweight place to start a new empty list surface when the user is intentionally creating one.
 Add can quick-create a list only when the user intentionally chooses `New list...` as the destination for the current draft.
 Fast Add list creation should ask only for a title and infer the list kind only when the answer is obvious enough to help immediately.
 
 Lists should not:
-- casually create a `Lists` nav tab just because the data model can support one
 - compete with Now, Inbox, Upcoming, and Review for top-level meaning
+- turn the library home into a second dashboard
 - force every list item to behave like a normal task
 
 List item rules:
@@ -208,6 +229,7 @@ List item rules:
 - they should be searchable globally
 - they should be visible in Review and retrieval results
 - they should only reach Now through an explicit promotion or task-creation action
+- sending a list item to `Now` should preserve one identity and mark it with `nowDate`
 - they should keep enough identity to support history and refinding without pretending every list item is a top-level task
 
 ## Preservation and retrieval rules
@@ -255,6 +277,8 @@ Closeout should not:
 - feel like journaling homework
 - require excessive text
 - create duplicated data that confuses later review
+
+The current product should keep closeout available only as quiet supporting behavior. It should not reserve permanent space in the default `Now` layout.
 
 ## Settings rules
 The correct number of settings is fewer than most implementations want.

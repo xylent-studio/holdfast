@@ -13,7 +13,6 @@ import {
   currentWeekLabel,
 } from '@/domain/logic/selectors';
 import {
-  attachWorkspaceToAccount,
   removeDataFromDevice,
   updateSettings,
   updateWeeklyRecord,
@@ -59,6 +58,7 @@ function syncStatusLabel(
   configured: boolean,
   signedIn: boolean,
   isOnline: boolean,
+  lastSyncedAt: string | null,
   pendingMutationCount: number,
   syncMode: HoldfastSnapshot['syncState']['mode'],
   authPromptState: HoldfastSnapshot['workspaceState']['authPromptState'],
@@ -74,20 +74,28 @@ function syncStatusLabel(
   }
 
   if (attachState === 'detached-restore') {
-    return signedIn ? 'Local until you attach it' : 'Local restore only';
+    return 'Local restore only';
   }
 
   if (signedIn) {
     if (syncMode === 'syncing') {
-      return 'Syncing...';
+      return 'Attached, syncing';
     }
 
     if (syncMode === 'error') {
-      return "Couldn't sync yet";
+      return 'Sync needs retry';
     }
 
-    if (!isOnline || pendingMutationCount > 0) {
+    if (!isOnline) {
       return 'Saved offline';
+    }
+
+    if (!lastSyncedAt) {
+      return 'Attached, syncing';
+    }
+
+    if (pendingMutationCount > 0) {
+      return 'Waiting to sync';
     }
 
     return 'Up to date';
@@ -295,7 +303,6 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
   const [workspaceSafetyOpen, setWorkspaceSafetyOpen] = useState(false);
   const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
-  const [attachBusy, setAttachBusy] = useState(false);
   const [removeDataBusy, setRemoveDataBusy] = useState(false);
   const [removeDataFeedback, setRemoveDataFeedback] = useState<string | null>(
     null,
@@ -319,20 +326,6 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
     conflictedItems(snapshot.items).length > 0 ||
     conflictedLists(snapshot.lists).length > 0 ||
     conflictedListItems(snapshot.listItems).length > 0;
-
-  const handleAttachWorkspace = async (): Promise<void> => {
-    if (!auth.user?.id) {
-      return;
-    }
-
-    setAttachBusy(true);
-    try {
-      await attachWorkspaceToAccount(auth.user.id);
-      await sync.retrySync();
-    } finally {
-      setAttachBusy(false);
-    }
-  };
 
   const handleRemoveDataFromDevice = async (): Promise<void> => {
     const confirmed = window.confirm(
@@ -365,8 +358,8 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
           <p>
             {isDetachedRestore
               ? auth.session
-                ? 'This restored workspace is safe on this device. Attach it when you are ready to sync it to this account.'
-                : 'This restored workspace is safe on this device. Sign in when you are ready to attach it again.'
+                ? 'This restored workspace is still catching up on this device.'
+                : 'This restored workspace is safe on this device. Sign in when you are ready to attach and sync it.'
               : auth.session
               ? 'Stay signed in quietly and let Holdfast catch up in the background.'
               : snapshot.workspaceState.authPromptState === 'account-mismatch'
@@ -385,6 +378,7 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                 auth.configured,
                 Boolean(auth.session),
                 sync.isOnline,
+                snapshot.syncState.lastSyncedAt,
                 sync.pendingMutationCount,
                 snapshot.syncState.mode,
                 snapshot.workspaceState.authPromptState,
@@ -412,8 +406,7 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                 </div>
               ) : null}
               <div className="dialog-actions">
-                {snapshot.syncState.mode === 'error' ||
-                sync.pendingMutationCount > 0 ? (
+                {snapshot.syncState.mode === 'error' ? (
                   <button
                     className="button ghost"
                     onClick={() => void sync.retrySync()}
@@ -438,27 +431,6 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                   Sign out
                 </button>
               </div>
-              {isDetachedRestore ? (
-                <div className="recovery-note">
-                  <strong>This restored workspace is still local.</strong>
-                  <p>
-                    Nothing will sync from this device until you attach this
-                    workspace to your account again.
-                  </p>
-                  <div className="dialog-actions">
-                    <button
-                      className="button accent"
-                      disabled={attachBusy}
-                      onClick={() => void handleAttachWorkspace()}
-                      type="button"
-                    >
-                      {attachBusy
-                        ? 'Attaching...'
-                        : 'Attach this workspace'}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
             </>
           ) : (
             <AuthAccessActions
@@ -511,14 +483,17 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
         onToggle={() => setWorkspaceSafetyOpen((current) => !current)}
         summary={
           isDetachedRestore
-            ? 'This restored workspace is still local until you attach it.'
+            ? 'This restored workspace stays local until you sign in.'
             : 'Back up this device or recover earlier prototype work.'
         }
         title="Workspace safety"
       >
         <Suspense fallback={<div className="empty-inline">Loading tools...</div>}>
           <div className="stack">
-            <WorkspaceBackupPanel />
+            <WorkspaceBackupPanel
+              attachUserId={auth.user?.id ?? null}
+              onRestoreComplete={() => void sync.retrySync()}
+            />
             <PrototypeRecoveryPanel />
             <div className="recovery-note">
               <strong>Remove data from this device</strong>

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3 as const;
+export const SCHEMA_VERSION = 4 as const;
 
 export const LANES = [
   { key: 'work', label: 'Store / Work' },
@@ -14,6 +14,7 @@ export const NAV_ITEMS = [
   { path: '/inbox', label: 'Inbox' },
   { path: '/upcoming', label: 'Upcoming' },
   { path: '/review', label: 'Review' },
+  { path: '/lists', label: 'Lists' },
 ] as const;
 
 export const READINESS_CHECKS = [

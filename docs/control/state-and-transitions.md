@@ -184,6 +184,7 @@ When a top-level task or note moves into a list:
 - the resulting list item should preserve the original item id as `sourceItemId`
 - the original task or note should archive out of active circulation instead of lingering as a duplicate open thing
 - if the top-level item originally came from that same list, the product should prefer restoring the original list item over creating a duplicate
+- this should be labeled honestly as conversion into a list item, not a vague move that implies the same object survived unchanged
 
 The product should not require the user to decide task-versus-note before the thought is safely caught.
 
@@ -248,6 +249,7 @@ A list item:
 - is searchable globally
 - can appear in Review
 - can be promoted into Now through an explicit action
+- keeps that same identity when promoted into Now
 - can become a task when action needs to leave the list surface
 - keeps enough identity to support history, refinding, and source preservation
 
@@ -349,7 +351,7 @@ Do not ship behavior where:
 - notes and tasks drift semantically until the difference is meaningless
 - captures are overwritten in a way that destroys original source context
 - list items are flattened into generic tasks because the model is too weak
-- a list surface quietly becomes a second navigation app inside Holdfast
+- list navigation starts competing with the rest of the product instead of staying a quiet library home
 - state labels expose implementation detail
 - scheduling creates duplicate identities or confusing clones
 - a reopened item behaves inconsistently across views

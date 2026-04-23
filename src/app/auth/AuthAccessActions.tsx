@@ -69,7 +69,7 @@ export function AuthAccessActions({
 
       {hasLocalData ? (
         <p className="auth-trust-line">
-          We&apos;ll keep what&apos;s already here and sync it to your account.
+          We&apos;ll keep what&apos;s already here and attach it to your account here first.
         </p>
       ) : (
         <p className="auth-trust-line">

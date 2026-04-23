@@ -185,4 +185,25 @@ describe('QuickAddDialog', () => {
       },
     );
   });
+
+  it('can switch to creating a new list directly from the destination picker', () => {
+    render(
+      <QuickAddDialog
+        context="global"
+        currentDate="2026-04-20"
+        isOpen
+        lists={[]}
+        onClose={vi.fn()}
+        onOpenList={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('What do you need to keep?'), {
+      target: { value: 'Eggs' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose another place' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a new list' }));
+
+    expect(screen.getByLabelText('Title')).toBeVisible();
+  });
 });

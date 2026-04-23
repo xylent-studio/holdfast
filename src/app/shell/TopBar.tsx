@@ -7,8 +7,27 @@ interface TopBarProps {
   onAdd: () => void;
   onChangeDate: (value: DateKey) => void;
   onOpenSettings: () => void;
-  openCount: number;
   showDateControls: boolean;
+  viewPath: string;
+}
+
+function topBarTitle(viewPath: string): string {
+  if (viewPath === '/inbox') {
+    return 'Inbox';
+  }
+  if (viewPath === '/upcoming') {
+    return 'Upcoming';
+  }
+  if (viewPath === '/review') {
+    return 'Review';
+  }
+  if (viewPath === '/lists' || viewPath.startsWith('/lists/')) {
+    return 'Lists';
+  }
+  if (viewPath === '/settings') {
+    return 'Settings';
+  }
+  return 'Now';
 }
 
 export function TopBar({
@@ -16,14 +35,14 @@ export function TopBar({
   onAdd,
   onChangeDate,
   onOpenSettings,
-  openCount,
   showDateControls,
+  viewPath,
 }: TopBarProps) {
   const [showDateJump, setShowDateJump] = useState(false);
   const today = todayDateKey();
   const delta =
     (new Date(`${currentDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86_400_000;
-  const openLabel = `${openCount} ${openCount === 1 ? 'thing' : 'things'} in play`;
+  const title = topBarTitle(viewPath);
 
   const dateState =
     delta === 0 ? 'Today' : delta > 0 ? `${delta} day${delta === 1 ? '' : 's'} ahead` : `${Math.abs(delta)} day${Math.abs(delta) === 1 ? '' : 's'} back`;
@@ -31,14 +50,16 @@ export function TopBar({
   return (
     <header className="topbar">
       <div className="topbar-copy">
-        <div className="eyebrow">In view</div>
+        <div className="eyebrow">Holdfast</div>
         <div className="topbar-heading-row">
-          <div className="topbar-date">{niceDate(currentDate)}</div>
-          <span className="topbar-count">{openLabel}</span>
+          <div className="topbar-date">{title}</div>
         </div>
-        <div className="topbar-meta">
-          <span>{dateState}</span>
-        </div>
+        {showDateControls ? (
+          <div className="topbar-meta">
+            <span>{niceDate(currentDate)}</span>
+            <span>{dateState}</span>
+          </div>
+        ) : null}
       </div>
       <div className="topbar-actions">
         {showDateControls ? (

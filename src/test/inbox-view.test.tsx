@@ -141,7 +141,7 @@ function makeSnapshot(item: ItemWithAttachments): HoldfastSnapshot {
 }
 
 describe('InboxView', () => {
-  it('shows Shape it for captures and hides task completion controls', () => {
+  it('shows the inline placement strip for captures and hides task completion controls', () => {
     render(
       <InboxView
         currentDate="2026-04-19"
@@ -150,9 +150,9 @@ describe('InboxView', () => {
       />,
     );
 
-    expect(
-      screen.getByRole('button', { name: 'Shape it' }),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Place it')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Now' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Complete task/i }),
     ).not.toBeInTheDocument();

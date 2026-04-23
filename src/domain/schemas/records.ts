@@ -125,7 +125,7 @@ export const ListItemRecordSchema = z.object({
   status: ListItemStatusSchema,
   position: z.number().int().nonnegative(),
   sourceItemId: z.string().uuid().nullable().default(null),
-  promotedItemId: z.string().uuid().nullable().default(null),
+  nowDate: z.string().nullable().default(null),
   completedAt: z.string().nullable(),
   archivedAt: z.string().nullable(),
   createdAt: z.string(),

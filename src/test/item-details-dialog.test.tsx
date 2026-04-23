@@ -12,7 +12,7 @@ const moveItemToNewListMock = vi.fn();
 const removeAttachmentMock = vi.fn();
 const replaceItemWithLatestSavedVersionMock = vi.fn();
 const saveItemMock = vi.fn();
-const toggleFocusMock = vi.fn();
+const setItemFocusMock = vi.fn();
 
 vi.mock('@/storage/local/api', () => ({
   addFilesToItem: (...args: unknown[]) => addFilesToItemMock(...args),
@@ -24,7 +24,7 @@ vi.mock('@/storage/local/api', () => ({
   replaceItemWithLatestSavedVersion: (...args: unknown[]) =>
     replaceItemWithLatestSavedVersionMock(...args),
   saveItem: (...args: unknown[]) => saveItemMock(...args),
-  toggleFocus: (...args: unknown[]) => toggleFocusMock(...args),
+  setItemFocus: (...args: unknown[]) => setItemFocusMock(...args),
 }));
 
 function baseLists() {
@@ -57,7 +57,7 @@ describe('ItemDetailsDialog', () => {
     replaceItemWithLatestSavedVersionMock.mockReset();
     removeAttachmentMock.mockReset();
     saveItemMock.mockReset();
-    toggleFocusMock.mockReset();
+    setItemFocusMock.mockReset();
   });
 
   it('shows a visible error when an attachment cannot be downloaded', async () => {
@@ -216,7 +216,8 @@ describe('ItemDetailsDialog', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Move to list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Convert to list item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Groceries' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {

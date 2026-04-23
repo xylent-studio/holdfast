@@ -79,15 +79,16 @@ Rules:
 
 - focus items are still normal items
 - focus stays intentionally limited
-- adding focus pulls the item into `Now` if needed
+- adding focus pulls a top-level item into `Now` if needed
+- moving something to `Now` does not silently focus it
 
 ## 3. In-Play Work
 
 `Now` combines:
 
 - focused items
-- notes in play
-- tasks in play
+- top-level notes and tasks in play
+- list items explicitly promoted into `Now`
 - overdue pressure
 - due-today planned work whose scheduled date has arrived
 
@@ -101,11 +102,11 @@ Modes:
 - Undated
 - Waiting on
 
-`Scheduled` is date-based. `Undated` is alive without a date. `Waiting on` means the user is blocked, not just deferring.
+`Scheduled` is date-based and should show all scheduled work from the selected date forward, grouped by date. `Undated` is alive without a date. `Waiting on` means the user is blocked by a person, system, or event, not just deferring.
 
 ## 5. Lists and repeated structure
 
-Lists are contextual objects, not a competing top-level navigation model.
+Lists are first-class product objects with a quiet top-level library home.
 
 Expected list families:
 
@@ -117,12 +118,15 @@ Expected list families:
 Rules:
 
 - list items stay attached to their list surface by default
-- they become top-level tasks only through explicit promotion
+- list surfaces should lead with what is current in that list right now
+- done items should stay secondary and can remain hidden until the user asks for them
+- sending a list item to `Now` should keep it as a list item through `nowDate`, not clone it into a separate task
+- they become top-level tasks only through an explicit `Create task` action
 - a capture can be sent to a list, preserving `sourceItemId`, while the original capture archives out of active circulation
 - a top-level task or note can also move into a list, preserving `sourceItemId` and archiving the original out of active circulation
 - recurring checklists should grow toward template-plus-run behavior
 - reference collections should preserve things without pretending everything is actionable
-- Review can create a new empty list surface without adding a new top-level navigation model
+- `Lists` owns pinned, recent, and searchable list-library access
 - Add can also quick-create a new list when the captured draft clearly belongs there
 
 ## 6. Review and retrieval
@@ -145,14 +149,12 @@ Review should include retrieval for:
 - lists and list items
 - attachments and preserved context
 
-Review should also be the first honest place to revisit list surfaces before Holdfast ever grows a separate list home.
-
-Inside Review, list access should stay quieter than search:
+Inside Review, retrieval should stay primary:
 
 - search remains the first move
-- the list library should stay secondary
-- pinned and recent lists can surface directly
-- all lists should stay searchable without forcing a top-level `Lists` tab
+- match reasons should be visible, not inferred from hidden fields
+- list-item results should return the user to the correct list row
+- the list library itself should live in `Lists`, not inside Review
 
 Secondary pattern aids such as recent days, repeating loops, and overdue pressure should stay available, but they should not crowd the default retrieval surface.
 
@@ -160,14 +162,15 @@ Secondary pattern aids such as recent days, repeating loops, and overdue pressur
 
 Day support exists to reduce cold starts and keep continuity, not to make the user maintain a ritual.
 
-Entry points:
+Current posture:
 
-- `Now > Open day tools`
-- `Now > Finish day`
+- `Now` should not dedicate a default panel to day mechanics
+- carry-forward context can surface quietly when it helps the user restart
+- closeout can remain in the foundation without leading the command surface until it proves that it reduces real friction
 
 Behavior:
 
-- ensure the current day record exists when the user explicitly starts the day
+- ensure the current day record exists when the product needs it
 - bring in active routines for that weekday without duplicating already-open routine items
 - keep readiness as a short fixed checklist:
   - Water
@@ -185,7 +188,7 @@ Rules:
 - readiness is binary and intentionally limited
 - it is not a health tracker
 - once complete, it should stay quiet
-- start day and finish day are supportive tools, not the main job of `Now`
+- start day and finish day are supportive behaviors, not the main job of `Now`
 
 ## 8. Settings And Routines
 

@@ -64,6 +64,15 @@ The retrieval and reflection surface. It should help the user:
 - recover context from recent days
 - refind saved things, list items, and preserved captures
 
+### Lists
+
+The quiet library for list surfaces. It should help the user:
+
+- get back to the right list quickly
+- search lists without turning Review into a second home screen
+- create a list when the user wants a real list surface, not just another capture
+- keep repeated list access calm and secondary to command work
+
 ## Product Object Direction
 
 The top-level product spine stays:
@@ -72,6 +81,7 @@ The top-level product spine stays:
 - Inbox
 - Upcoming
 - Review
+- Lists
 
 Within that spine, Holdfast should support several real object types:
 
@@ -82,9 +92,7 @@ Within that spine, Holdfast should support several real object types:
 - list items
 - attachments and preserved context
 
-This does not justify a second competing nav model.
-
-Lists should live as contextual surfaces, pinned objects, and retrieval targets rather than automatically becoming a new top-level tab.
+Lists are now a first-class top-level destination, but they still should not compete with the rest of the product for meaning. `Lists` is the quiet library home for list surfaces, while contextual list routes remain the place for item-level work.
 
 ## Product Boundaries
 
@@ -99,7 +107,7 @@ Holdfast is not:
 
 ## What Must Stay True
 
-- the four core areas stay purposeful and distinct
+- the five core areas stay purposeful and distinct
 - catch, place, find, and keep stay clearer than productivity-system language
 - capture stays faster than organization
 - Add stays text-first, with a context-sensitive primary submit and `Save to Inbox` as the fallback
@@ -107,7 +115,7 @@ Holdfast is not:
 - routines and day support stay quiet unless the user wants them
 - review stays decision-relevant, not analytical theater
 - global Add keeps `Save to Inbox` as the default outcome; smarter list routing should show ranked suggestions without quietly hijacking that primary action
-- lists stay contextual, searchable, and quick-creatable without becoming a second nav spine
+- lists stay contextual, searchable, and quick-creatable while also keeping a quiet dedicated library home
 - the normal long-term experience is signed-in and synced
 - first-time sign-in should be one tap or a magic link, not a form wall
 - if local work already exists, the app should open it quickly and let that workspace attach to an account without loss

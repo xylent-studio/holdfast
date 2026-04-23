@@ -106,6 +106,8 @@ function QuickAddDialogBody({
   const [chosenDate, setChosenDate] = useState<DateKey>(defaults.chosenDate);
   const [chosenTime, setChosenTime] = useState(defaults.chosenTime);
   const [newListTitle, setNewListTitle] = useState('');
+  const [submitBusy, setSubmitBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const parsed = splitCapturedText(rawText);
   const canSubmit = Boolean(parsed);
@@ -144,12 +146,11 @@ function QuickAddDialogBody({
     });
   })();
 
-  const defaultListId = selectableLists[0]?.id ?? null;
-  const effectiveSelectedListId = selectableLists.some(
-    (list) => list.id === selectedListId,
-  )
+  const effectiveSelectedListId = selectableLists.some((list) => list.id === selectedListId)
     ? selectedListId
-    : defaultListId;
+    : currentListId && activeLists.some((list) => list.id === currentListId)
+      ? currentListId
+      : null;
 
   const selectedListTitle =
     activeLists.find((entry) => entry.id === effectiveSelectedListId)?.title ??
@@ -171,23 +172,6 @@ function QuickAddDialogBody({
     })
       ? 'context'
       : 'direct';
-
-  const handleSaveToInbox = async (): Promise<void> => {
-    const planned = planQuickAddItem({
-      rawText,
-      currentDate,
-      destination: 'inbox',
-      chosenDate,
-      chosenTime,
-    });
-
-    if (!planned) {
-      return;
-    }
-
-    await createItem(planned);
-    onClose();
-  };
 
   const handleCreateItem = async (
     destination: Exclude<AddDestination, 'list' | 'new-list'>,
@@ -232,7 +216,7 @@ function QuickAddDialogBody({
       {
         title,
         kind: inferListKind(title),
-        lane: 'admin',
+        lane: currentList?.lane ?? 'admin',
       },
       {
         title: parsed.title,
@@ -247,29 +231,56 @@ function QuickAddDialogBody({
   const handleSubmitDestination = async (
     destination: AddDestination,
   ): Promise<void> => {
-    if (destination === 'list') {
-      await handleAddToExistingList();
+    if (submitBusy) {
       return;
     }
 
-    if (destination === 'new-list') {
-      await handleCreateListFromDraft();
-      return;
-    }
+    setSubmitBusy(true);
+    setSubmitError(null);
+    try {
+      if (destination === 'list') {
+        await handleAddToExistingList();
+        return;
+      }
 
-    await handleCreateItem(destination);
+      if (destination === 'new-list') {
+        await handleCreateListFromDraft();
+        return;
+      }
+
+      await handleCreateItem(destination);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Couldn't keep that yet.",
+      );
+    } finally {
+      setSubmitBusy(false);
+    }
   };
 
   const showSaveToInboxSecondary = primaryDestination !== 'inbox';
   const showScheduleFields = activeDestination === 'scheduled';
+  const canCreateNewListFromPicker =
+    selectedDestination !== 'new-list' || Boolean(newListTitle.trim());
 
   const selectListTarget = (listId: string): void => {
+    setSubmitError(null);
     setSelectedDestination('list');
     setSelectedListId(listId);
   };
 
+  const openNewListDraft = (): void => {
+    if (!newListTitle.trim() && listSearch.trim()) {
+      setNewListTitle(listSearch.trim());
+    }
+
+    setSelectedDestination('new-list');
+  };
+
   return (
-    <div className="dialog-stack">
+    <div className="dialog-stack quick-add-dialog">
       <div>
         <div className="eyebrow">Capture</div>
         <h2>Add</h2>
@@ -280,7 +291,10 @@ function QuickAddDialogBody({
         <span>What do you need to keep?</span>
         <textarea
           autoFocus
-          onChange={(event) => setRawText(event.target.value)}
+          onChange={(event) => {
+            setRawText(event.target.value);
+            setSubmitError(null);
+          }}
           placeholder="What do you need to keep?"
           rows={4}
           value={rawText}
@@ -308,7 +322,7 @@ function QuickAddDialogBody({
               )}
               <button
                 className={`chip ${selectedDestination === 'new-list' ? 'active' : ''}`}
-                onClick={() => setSelectedDestination('new-list')}
+                onClick={openNewListDraft}
                 type="button"
               >
                 {destinationLabel('new-list')}
@@ -316,7 +330,7 @@ function QuickAddDialogBody({
             </div>
           </div>
 
-          <div className="item-card day-result">
+          <div className="item-card day-result quick-add-picker">
             {listSearch.trim() ? (
               <>
                 <label className="field-stack">
@@ -402,6 +416,18 @@ function QuickAddDialogBody({
                 ) : null}
               </>
             )}
+            <div className="field-stack quick-add-list-cta">
+              <span>Need a new list?</span>
+              <button
+                className={`button ${selectedDestination === 'new-list' ? 'accent' : 'ghost'}`}
+                onClick={openNewListDraft}
+                type="button"
+              >
+                {selectedDestination === 'new-list'
+                  ? 'New list details below'
+                  : 'Create a new list'}
+              </button>
+            </div>
           </div>
 
           {selectedDestination === 'list' && !effectiveSelectedListId ? (
@@ -419,6 +445,12 @@ function QuickAddDialogBody({
                 showKind={false}
                 title={newListTitle}
               />
+              {parsed ? (
+                <div className="empty-inline">
+                  First item | {parsed.title}
+                  {parsed.body ? ` | ${parsed.body}` : ''}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </>
@@ -445,11 +477,13 @@ function QuickAddDialogBody({
         </div>
       ) : null}
 
-      <div className="dialog-actions spread">
+      {submitError ? <p className="auth-feedback danger">{submitError}</p> : null}
+
+      <div className="dialog-actions spread quick-add-footer">
         <button className="button ghost" onClick={onClose} type="button">
           Cancel
         </button>
-        <div className="dialog-actions">
+        <div className="dialog-actions quick-add-actions">
           {showDestinationPicker ? (
             <>
               <button
@@ -465,8 +499,8 @@ function QuickAddDialogBody({
               {showSaveToInboxSecondary ? (
                 <button
                   className="button ghost"
-                  disabled={!canSubmit}
-                  onClick={() => void handleSaveToInbox()}
+                  disabled={!canSubmit || submitBusy}
+                  onClick={() => void handleSubmitDestination('inbox')}
                   type="button"
                 >
                   Save to Inbox
@@ -475,14 +509,15 @@ function QuickAddDialogBody({
               <button
                 className="button accent"
                 disabled={
+                  submitBusy ||
                   !canSubmit ||
                   (selectedDestination === 'list' && !effectiveSelectedListId) ||
-                  (selectedDestination === 'new-list' && !newListTitle.trim())
+                  (selectedDestination === 'new-list' && !canCreateNewListFromPicker)
                 }
                 onClick={() => void handleSubmitDestination(selectedDestination)}
                 type="button"
               >
-                {selectedActionLabel}
+                {submitBusy ? 'Saving...' : selectedActionLabel}
               </button>
             </>
           ) : (
@@ -490,8 +525,8 @@ function QuickAddDialogBody({
               {showSaveToInboxSecondary ? (
                 <button
                   className="button ghost"
-                  disabled={!canSubmit}
-                  onClick={() => void handleSaveToInbox()}
+                  disabled={!canSubmit || submitBusy}
+                  onClick={() => void handleSubmitDestination('inbox')}
                   type="button"
                 >
                   Save to Inbox
@@ -499,15 +534,15 @@ function QuickAddDialogBody({
               ) : null}
               <button
                 className="button accent"
-                disabled={!canSubmit}
+                disabled={!canSubmit || submitBusy}
                 onClick={() => void handleSubmitDestination(primaryDestination)}
                 type="button"
               >
-                {primaryActionLabel}
+                {submitBusy ? 'Saving...' : primaryActionLabel}
               </button>
               <button
                 className="button ghost"
-                disabled={!canSubmit}
+                disabled={!canSubmit || submitBusy}
                 onClick={() => {
                   setSelectedDestination(primaryDestination);
                   setShowDestinationPicker(true);

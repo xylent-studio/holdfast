@@ -8,7 +8,7 @@ Status: complete
 - establish the repo structure and control-doc contract
 - build the React + TypeScript + Vite shell
 - move local state to IndexedDB
-- preserve the `Now / Inbox / Upcoming / Review` spine
+- preserve the product spine that grew into `Now / Inbox / Upcoming / Review / Lists`
 - add CI, lint, typecheck, tests, and build
 - land backup export, prototype recovery, and undo support
 
@@ -43,7 +43,7 @@ Status: in progress
 - keep capture lighter than administration
 - align Upcoming to `Scheduled / Undated / Waiting on`
 - demote hand-holdy day structure so `Now` stays a command view
-- make list surfaces real without creating a second top-level app
+- make list surfaces real with a quiet dedicated `Lists` home
 - strengthen Review and retrieval so saved things are easy to refind
 
 ## Phase 4: Trust And Recovery Hardening

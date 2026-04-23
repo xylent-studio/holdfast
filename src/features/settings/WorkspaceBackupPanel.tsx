@@ -4,6 +4,7 @@ import {
   createWorkspaceBackupExport,
   getWorkspaceRestoreUndoAvailability,
   importWorkspaceBackupFile,
+  previewWorkspaceBackupFile,
   type WorkspaceBackupSummary,
   type WorkspaceRestoreResult,
   type WorkspaceRestoreUndoAvailability,
@@ -59,7 +60,15 @@ function undoAvailabilityLine(
   return `Last restore replaced this device workspace with ${summaryLine(availability.summary)}.`;
 }
 
-export function WorkspaceBackupPanel() {
+interface WorkspaceBackupPanelProps {
+  attachUserId?: string | null;
+  onRestoreComplete?: () => void;
+}
+
+export function WorkspaceBackupPanel({
+  attachUserId = null,
+  onRestoreComplete,
+}: WorkspaceBackupPanelProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [undoAvailability, setUndoAvailability] =
@@ -113,8 +122,28 @@ export function WorkspaceBackupPanel() {
     setFeedback(null);
 
     try {
-      const nextResult = await importWorkspaceBackupFile(file);
+      const preview = await previewWorkspaceBackupFile(file);
+      const confirmed = window.confirm(
+        [
+          `Restore the backup from ${preview.exportedAt.slice(0, 10)}?`,
+          '',
+          `This will replace current items, lists, routines, settings, and attachment state on this device with ${summaryLine(preview.summary)}.`,
+          'Day and week history from the backup will be restored by date.',
+          attachUserId
+            ? 'Because you are signed in here, this restored workspace will attach back to your account and begin syncing.'
+            : 'If you sign in afterward, Holdfast will attach this restored workspace to your account and begin syncing.',
+        ].join('\n'),
+      );
+      if (!confirmed) {
+        setBusyMode(null);
+        return;
+      }
+
+      const nextResult = await importWorkspaceBackupFile(file, {
+        attachUserId,
+      });
       setResult(restoreResultLine(nextResult));
+      onRestoreComplete?.();
       await refreshUndoAvailability();
     } catch (error) {
       setFeedback(errorMessage(error));
@@ -128,8 +157,9 @@ export function WorkspaceBackupPanel() {
     setFeedback(null);
 
     try {
-      const nextResult = await undoLastWorkspaceRestore();
+      const nextResult = await undoLastWorkspaceRestore({ attachUserId });
       setResult(`Undo restored the previous workspace from ${nextResult.sourceExportedAt.slice(0, 10)} with ${summaryLine(nextResult.summary)}.`);
+      onRestoreComplete?.();
       await refreshUndoAvailability();
     } catch (error) {
       setFeedback(errorMessage(error));
@@ -144,9 +174,10 @@ export function WorkspaceBackupPanel() {
         <h2>Backup</h2>
         <p>
           Export a full backup of this device workspace, including attachments.
-          You can also restore a Holdfast backup file here. Restoring replaces
-          current items, lists, routines, settings, and attachment state on this
-          device, while day and week history from the file are restored by date.
+          You can also restore a Holdfast backup file here. Restore now shows a
+          summary before it replaces current items, lists, routines, settings,
+          and attachment state on this device, while day and week history from
+          the file are restored by date.
         </p>
       </div>
       <div className="dialog-actions">

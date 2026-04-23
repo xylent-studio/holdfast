@@ -8,17 +8,19 @@ import {
   createItem,
   createList,
   createListItem,
+  createTaskFromListItem,
   createListWithFirstItem,
   deleteList,
   deleteItem,
   getHoldfastSnapshot,
+  moveItemToNow,
   moveItemToList,
   promoteListItemToNow,
   reopenAllDoneListItems,
   removeDataFromDevice,
   sendInboxCaptureToList,
   sendInboxCaptureToNewList,
-  toggleFocus,
+  setItemFocus,
   toggleTaskDone,
   updateWorkspaceState,
   updateList,
@@ -75,7 +77,7 @@ describe('capture guardrails', () => {
     expect(capture).toBeTruthy();
 
     await toggleTaskDone(capture!.id, CURRENT_DATE);
-    await toggleFocus(CURRENT_DATE, capture!.id);
+    await setItemFocus(CURRENT_DATE, capture!.id, true);
 
     const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
     const updated = await db.items.get(capture!.id);
@@ -115,7 +117,7 @@ describe('capture guardrails', () => {
       syncState: 'pending',
     });
 
-    await toggleFocus(CURRENT_DATE, item!.id);
+    await moveItemToNow(item!.id, CURRENT_DATE);
 
     const updated = await db.items.get(item!.id);
 
@@ -231,8 +233,11 @@ describe('list mutation logging', () => {
     ).toEqual(
       [
         'list:list.created',
-        'list:list.deleted',
         'list:list.updated',
+        'list:list.updated',
+        'list:list.updated',
+        'list:list.updated',
+        'list:list.deleted',
         'listItem:list-item.created',
         'listItem:list-item.created',
         'listItem:list-item.deleted',
@@ -402,7 +407,7 @@ describe('list creation and capture transfer flows', () => {
     });
   });
 
-  it('restores a promoted list item back into its original list without creating a duplicate', async () => {
+  it('sends a list item into Now without creating a duplicate top-level task', async () => {
     await createList({
       title: 'Groceries',
       kind: 'replenishment',
@@ -417,26 +422,43 @@ describe('list creation and capture transfer flows', () => {
     });
 
     const [originalListItem] = await db.listItems.toArray();
+    const itemsBeforePromotion = await db.items.count();
     await promoteListItemToNow(originalListItem!.id, CURRENT_DATE);
 
     const promotedListItem = await db.listItems.get(originalListItem!.id);
-    expect(promotedListItem?.promotedItemId).toBeTruthy();
-
-    await moveItemToList(promotedListItem!.promotedItemId!, list!.id);
-
-    const restoredListItem = await db.listItems.get(originalListItem!.id);
-    const allListItems = await db.listItems.where('listId').equals(list!.id).toArray();
-    const promotedItem = await db.items.get(promotedListItem!.promotedItemId!);
-
-    expect(allListItems).toHaveLength(1);
-    expect(restoredListItem).toMatchObject({
+    expect(promotedListItem).toMatchObject({
       title: 'Eggs',
       body: 'Check pantry first',
-      promotedItemId: null,
+      nowDate: CURRENT_DATE,
       status: 'open',
     });
-    expect(promotedItem).toMatchObject({
-      status: 'archived',
+    expect(await db.items.count()).toBe(itemsBeforePromotion);
+  });
+
+  it('can still create a separate top-level task from a list item when asked explicitly', async () => {
+    await createList({
+      title: 'Weekend prep',
+      kind: 'checklist',
+      lane: 'admin',
+    });
+
+    const [list] = await db.lists.toArray();
+    await createListItem({
+      listId: list!.id,
+      title: 'Pack charger',
+      body: 'USB-C brick too',
+    });
+
+    const [listItem] = await db.listItems.toArray();
+    const createdTaskId = await createTaskFromListItem(listItem!.id, CURRENT_DATE);
+    const createdTask = createdTaskId ? await db.items.get(createdTaskId) : null;
+
+    expect(createdTask).toMatchObject({
+      title: 'Pack charger',
+      body: 'USB-C brick too',
+      status: 'today',
+      sourceItemId: listItem!.id,
+      scheduledDate: CURRENT_DATE,
     });
   });
 

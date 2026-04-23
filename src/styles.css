@@ -670,6 +670,38 @@ p {
   text-transform: uppercase;
 }
 
+.inline-form {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.quick-add-picker {
+  gap: 0.9rem;
+}
+
+.quick-add-list-cta {
+  border-top: 1px solid var(--line);
+  padding-top: 0.9rem;
+}
+
+.quick-add-footer {
+  align-items: flex-end;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 249, 240, 0),
+    rgba(255, 249, 240, 0.94) 24%
+  );
+  bottom: 0;
+  padding-top: 0.65rem;
+  position: sticky;
+}
+
+.quick-add-actions {
+  justify-content: flex-end;
+}
+
 .attachment-list {
   display: grid;
   gap: 0.7rem;
@@ -799,5 +831,22 @@ p {
 
   .auth-actions {
     grid-template-columns: 1fr;
+  }
+
+  .inline-form {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-add-footer,
+  .quick-add-footer > .dialog-actions,
+  .quick-add-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .quick-add-footer .button,
+  .quick-add-actions .button {
+    width: 100%;
   }
 }

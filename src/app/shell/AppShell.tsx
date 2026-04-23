@@ -10,7 +10,6 @@ interface AppShellProps {
   onAdd: () => void;
   onChangeDate: (value: DateKey) => void;
   onOpenSettings: () => void;
-  openCount: number;
   showDateControls: boolean;
   viewPath: string;
 }
@@ -21,7 +20,6 @@ export function AppShell({
   onAdd,
   onChangeDate,
   onOpenSettings,
-  openCount,
   showDateControls,
   viewPath,
 }: AppShellProps) {
@@ -34,8 +32,8 @@ export function AppShell({
           onAdd={onAdd}
           onChangeDate={onChangeDate}
           onOpenSettings={onOpenSettings}
-          openCount={openCount}
           showDateControls={showDateControls}
+          viewPath={viewPath}
         />
         <main className="app-content">{children}</main>
         <BottomNav viewPath={viewPath} />

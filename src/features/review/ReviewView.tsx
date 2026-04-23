@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 
 import { LIST_KIND_LABELS } from '@/domain/constants';
-import { searchLists } from '@/domain/logic/list-targets';
 import type { DateKey } from '@/domain/dates';
-import type { ListKind } from '@/domain/schemas/records';
+import type { ReviewMatchReason } from '@/domain/logic/selectors';
 import {
   conflictedItems,
   conflictedListItems,
@@ -12,22 +11,38 @@ import {
   overdueItems,
   recentDaySummaries,
   repeatedOpenTitles,
-  reviewListSummaries,
   searchWorkspace,
 } from '@/domain/logic/selectors';
-import { createList, type HoldfastSnapshot } from '@/storage/local/api';
+import type { HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
 import { Panel } from '@/shared/ui/Panel';
-
-import { ListCreatorFields } from '@/features/lists/ListCreatorFields';
 
 interface ReviewViewProps {
   currentDate: DateKey;
   onJumpToDate: (date: DateKey) => void;
   onOpenItem: (itemId: string) => void;
-  onOpenList: (listId: string) => void;
+  onOpenList: (listId: string, highlightListItemId?: string | null) => void;
   snapshot: HoldfastSnapshot;
+}
+
+function matchReasonLabel(reason: ReviewMatchReason): string {
+  switch (reason.field) {
+    case 'title':
+      return 'Matched in title';
+    case 'notes':
+      return 'Matched in notes';
+    case 'source':
+      return 'Matched in source text';
+    case 'attachment':
+      return `Attachment | ${reason.value ?? 'File'}`;
+    case 'status':
+      return `Matched in ${reason.value ?? 'status'}`;
+    case 'listTitle':
+      return `List | ${reason.value ?? 'Matched list'}`;
+    case 'dayNote':
+      return 'Matched in day notes';
+  }
 }
 
 export function ReviewView({
@@ -39,12 +54,6 @@ export function ReviewView({
 }: ReviewViewProps) {
   const [search, setSearch] = useState('');
   const [showMoreTrails, setShowMoreTrails] = useState(false);
-  const [isCreatingList, setIsCreatingList] = useState(false);
-  const [listTitle, setListTitle] = useState('');
-  const [listKind, setListKind] = useState<ListKind>('project');
-  const [librarySearch, setLibrarySearch] = useState('');
-  const [listCreateBusy, setListCreateBusy] = useState(false);
-  const [listCreateError, setListCreateError] = useState<string | null>(null);
   const repeated = useMemo(
     () => repeatedOpenTitles(snapshot.items),
     [snapshot.items],
@@ -87,87 +96,19 @@ export function ReviewView({
       recentDaySummaries(snapshot.dailyRecords, snapshot.items, currentDate),
     [currentDate, snapshot.dailyRecords, snapshot.items],
   );
-  const listSummaries = useMemo(
-    () => reviewListSummaries(snapshot.lists, snapshot.listItems, Number.MAX_SAFE_INTEGER),
-    [snapshot.listItems, snapshot.lists],
-  );
-  const pinnedListSummaries = useMemo(
-    () => listSummaries.filter((entry) => entry.list.pinned),
-    [listSummaries],
-  );
-  const recentListSummaries = useMemo(
-    () => listSummaries.filter((entry) => !entry.list.pinned).slice(0, 4),
-    [listSummaries],
-  );
-  const libraryResults = useMemo(() => {
-    if (!librarySearch.trim()) {
-      return listSummaries;
-    }
-
-    const matches = searchLists(snapshot.lists, librarySearch);
-    const matchIds = new Set(matches.map((list) => list.id));
-    return listSummaries.filter((entry) => matchIds.has(entry.list.id));
-  }, [librarySearch, listSummaries, snapshot.lists]);
-
-  const handleOpenListCreator = (): void => {
-    setIsCreatingList(true);
-    setListCreateError(null);
-    setListKind('project');
-  };
-
-  const handleCancelListCreator = (): void => {
-    if (listCreateBusy) {
-      return;
-    }
-
-    setIsCreatingList(false);
-    setListTitle('');
-    setListKind('project');
-    setListCreateError(null);
-  };
-
-  const handleCreateList = async (): Promise<void> => {
-    const title = listTitle.trim();
-    if (!title) {
-      return;
-    }
-
-    setListCreateBusy(true);
-    setListCreateError(null);
-
-    try {
-      const listId = await createList({
-        title,
-        kind: listKind,
-        lane: 'admin',
-      });
-      setListTitle('');
-      setListKind('project');
-      setIsCreatingList(false);
-      onOpenList(listId);
-    } catch (error) {
-      setListCreateError(
-        error instanceof Error && error.message
-          ? error.message
-          : "Couldn't create this list yet.",
-      );
-    } finally {
-      setListCreateBusy(false);
-    }
-  };
 
   return (
     <div className="stack">
       <Panel>
         <div className="panel-header">
           <h1>Review</h1>
-          <p>Find saved things again and pull the right thing back into view.</p>
+          <p>Find saved things again, understand why they matched, and jump back into the right place.</p>
         </div>
         <label className="field-stack">
           <span>Search</span>
           <input
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search captures, lists, list items, attachments, and day notes"
+            placeholder="Search captures, attachments, list items, list titles, and day notes"
             type="search"
             value={search}
           />
@@ -181,11 +122,16 @@ export function ReviewView({
                     <ItemCard
                       item={result.item}
                       key={result.item.id}
-                      meta={itemMeta(
-                        result.item,
-                        currentDate,
-                        result.item.attachments,
-                      )}
+                      meta={[
+                        ...itemMeta(
+                          result.item,
+                          currentDate,
+                          result.item.attachments,
+                        ),
+                        ...result.matchedOn
+                          .slice(0, 2)
+                          .map((reason) => matchReasonLabel(reason)),
+                      ]}
                       onOpen={() => onOpenItem(result.item.id)}
                     />
                   );
@@ -195,14 +141,15 @@ export function ReviewView({
                   return (
                     <div className="item-card day-result" key={`day-${result.date}`}>
                       <div className="eyebrow">{result.date}</div>
+                      <div className="chip-row">
+                        {result.matchedOn.map((reason) => (
+                          <span className="chip small" key={`${result.date}-${reason.field}`}>
+                            {matchReasonLabel(reason)}
+                          </span>
+                        ))}
+                      </div>
                       <p>
-                        {[
-                          result.dailyRecord.launchNote,
-                          result.dailyRecord.closeWin,
-                          result.dailyRecord.closeCarry,
-                          result.dailyRecord.closeSeed,
-                          result.dailyRecord.closeNote,
-                        ]
+                        {[result.dailyRecord.launchNote, result.dailyRecord.closeWin, result.dailyRecord.closeCarry, result.dailyRecord.closeSeed, result.dailyRecord.closeNote]
                           .filter(Boolean)
                           .join(' | ') || 'Day entry'}
                       </p>
@@ -228,17 +175,20 @@ export function ReviewView({
                       </div>
                       <div className="item-title-row">
                         <h3>{result.list.title}</h3>
-                        <span className="chip small">
-                          {result.openCount} open
-                        </span>
+                        <div className="chip-row">
+                          <span className="chip small">{result.openCount} current</span>
+                          {result.doneCount ? (
+                            <span className="chip small">{result.doneCount} done</span>
+                          ) : null}
+                        </div>
                       </div>
-                      <p>
-                        {result.doneCount
-                          ? `${result.doneCount} done item${
-                              result.doneCount === 1 ? '' : 's'
-                            } remembered here.`
-                          : 'Ready to refind without adding another app inside Holdfast.'}
-                      </p>
+                      <div className="chip-row">
+                        {result.matchedOn.map((reason) => (
+                          <span className="chip small" key={`${result.list.id}-${reason.field}`}>
+                            {matchReasonLabel(reason)}
+                          </span>
+                        ))}
+                      </div>
                       <div className="dialog-actions">
                         <button
                           className="button ghost small"
@@ -257,24 +207,31 @@ export function ReviewView({
                     className="item-card day-result"
                     key={`list-item-${result.listItem.id}`}
                   >
-                    <div className="eyebrow">
-                      List item | {result.list.title}
-                    </div>
+                    <div className="eyebrow">List item | {result.list.title}</div>
                     <div className="item-title-row">
                       <h3>{result.listItem.title}</h3>
-                      <span className="chip small">
-                        {result.listItem.status}
-                      </span>
+                      <div className="chip-row">
+                        <span className="chip small">{result.listItem.status}</span>
+                        {result.listItem.nowDate ? (
+                          <span className="chip small">In Now</span>
+                        ) : null}
+                      </div>
                     </div>
-                    {result.listItem.body.trim() ? (
-                      <p>{result.listItem.body}</p>
-                    ) : (
-                      <p>Still attached to its list surface.</p>
-                    )}
+                    <div className="chip-row">
+                      {result.matchedOn.map((reason) => (
+                        <span
+                          className="chip small"
+                          key={`${result.listItem.id}-${reason.field}-${reason.value ?? ''}`}
+                        >
+                          {matchReasonLabel(reason)}
+                        </span>
+                      ))}
+                    </div>
+                    {result.listItem.body.trim() ? <p>{result.listItem.body}</p> : null}
                     <div className="dialog-actions">
                       <button
                         className="button ghost small"
-                        onClick={() => onOpenList(result.list.id)}
+                        onClick={() => onOpenList(result.list.id, result.listItem.id)}
                         type="button"
                       >
                         Open list
@@ -289,7 +246,7 @@ export function ReviewView({
           )
         ) : (
           <EmptyState>
-            Search captures, lists, list items, attachments, or day notes.
+            Search captures, attachments, list items, list titles, or day notes.
           </EmptyState>
         )}
       </Panel>
@@ -351,7 +308,7 @@ export function ReviewView({
                   <div className="dialog-actions">
                     <button
                       className="button ghost small"
-                      onClick={() => onOpenList(list.id)}
+                      onClick={() => onOpenList(list.id, listItem.id)}
                       type="button"
                     >
                       Open list
@@ -363,173 +320,6 @@ export function ReviewView({
           </div>
         </Panel>
       ) : null}
-
-      <Panel>
-        <div className="panel-header split">
-          <div>
-            <h2>Library</h2>
-            <p>Keep search first, then use lists as a quieter way back in.</p>
-          </div>
-          <div className="dialog-actions">
-            <button
-              className="button ghost small"
-              onClick={() => handleOpenListCreator()}
-              type="button"
-            >
-              New list
-            </button>
-          </div>
-        </div>
-        {isCreatingList ? (
-          <div className="item-card day-result">
-            <ListCreatorFields
-              disabled={listCreateBusy}
-              kind={listKind}
-              onKindChange={setListKind}
-              onTitleChange={setListTitle}
-              title={listTitle}
-            />
-            {listCreateError ? (
-              <p className="auth-feedback danger">{listCreateError}</p>
-            ) : null}
-            <div className="dialog-actions spread">
-              <button
-                className="button ghost"
-                disabled={listCreateBusy}
-                onClick={() => handleCancelListCreator()}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="button accent"
-                disabled={!listTitle.trim() || listCreateBusy}
-                onClick={() => void handleCreateList()}
-                type="button"
-              >
-                {listCreateBusy ? 'Creating...' : 'Create list'}
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {listSummaries.length ? (
-          <div className="stack">
-            {pinnedListSummaries.length ? (
-              <div className="stack compact">
-                <div className="eyebrow">Pinned</div>
-                <div className="grid two">
-                  {pinnedListSummaries.map((entry) => (
-                    <div className="item-card day-result" key={`pinned-${entry.list.id}`}>
-                      <div className="eyebrow">
-                        {LIST_KIND_LABELS[entry.list.kind]} list | pinned
-                      </div>
-                      <div className="item-title-row">
-                        <h3>{entry.list.title}</h3>
-                        <span className="chip small">{entry.openCount} open</span>
-                      </div>
-                      <p>
-                        {entry.previewTitles.length
-                          ? entry.previewTitles.join(' | ')
-                          : 'Nothing open right now.'}
-                      </p>
-                      <div className="dialog-actions">
-                        <button
-                          className="button ghost small"
-                          onClick={() => onOpenList(entry.list.id)}
-                          type="button"
-                        >
-                          Open list
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {recentListSummaries.length ? (
-              <div className="stack compact">
-                <div className="eyebrow">Recent</div>
-                <div className="grid two">
-                  {recentListSummaries.map((entry) => (
-                    <div className="item-card day-result" key={`recent-${entry.list.id}`}>
-                      <div className="eyebrow">{LIST_KIND_LABELS[entry.list.kind]} list</div>
-                      <div className="item-title-row">
-                        <h3>{entry.list.title}</h3>
-                        <span className="chip small">{entry.openCount} open</span>
-                      </div>
-                      <p>
-                        {entry.previewTitles.length
-                          ? entry.previewTitles.join(' | ')
-                          : 'Nothing open right now.'}
-                      </p>
-                      <div className="dialog-actions">
-                        <button
-                          className="button ghost small"
-                          onClick={() => onOpenList(entry.list.id)}
-                          type="button"
-                        >
-                          Open list
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="stack compact">
-              <div className="eyebrow">All lists</div>
-              <label className="field-stack">
-                <span>Find a list</span>
-                <input
-                  onChange={(event) => setLibrarySearch(event.target.value)}
-                  placeholder="Search lists"
-                  type="search"
-                  value={librarySearch}
-                />
-              </label>
-              {libraryResults.length ? (
-                <div className="stack compact">
-                  {libraryResults.map((entry) => (
-                    <div className="item-card day-result" key={`library-${entry.list.id}`}>
-                      <div className="item-title-row">
-                        <h3>{entry.list.title}</h3>
-                        <div className="chip-row">
-                          <span className="chip small">
-                            {LIST_KIND_LABELS[entry.list.kind]}
-                          </span>
-                          {entry.list.pinned ? (
-                            <span className="chip small">Pinned</span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <p>
-                        {entry.previewTitles.length
-                          ? entry.previewTitles.join(' | ')
-                          : 'Nothing open right now.'}
-                      </p>
-                      <div className="dialog-actions">
-                        <button
-                          className="button ghost small"
-                          onClick={() => onOpenList(entry.list.id)}
-                          type="button"
-                        >
-                          Open list
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState>No matching lists.</EmptyState>
-              )}
-            </div>
-          </div>
-        ) : (
-          <EmptyState>No active lists to revisit yet.</EmptyState>
-        )}
-      </Panel>
 
       <Panel>
         <div className="panel-header split">
@@ -625,7 +415,7 @@ export function ReviewView({
             </div>
           </div>
         ) : (
-          <EmptyState>Search and list surfaces stay up front. Open this only when you need a wider trail.</EmptyState>
+          <EmptyState>Search stays primary. Open this only when you need a wider trail.</EmptyState>
         )}
       </Panel>
     </div>

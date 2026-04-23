@@ -13,7 +13,7 @@ import {
   removeAttachment,
   replaceItemWithLatestSavedVersion,
   saveItem,
-  toggleFocus,
+  setItemFocus,
   type HoldfastSnapshot,
   type ItemWithAttachments,
 } from '@/storage/local/api';
@@ -175,12 +175,11 @@ export function ItemDetailsDialog({
       return true;
     });
   })();
-  const defaultListId = selectableLists[0]?.id ?? null;
   const effectiveSelectedListId = selectableLists.some(
     (list) => list.id === selectedListId,
   )
     ? selectedListId
-    : defaultListId;
+    : null;
   const effectiveListTargetMode =
     activeLists.length || listTargetMode === 'new' ? listTargetMode : 'new';
   const inferredNewListKind = inferListKind(newListTitle);
@@ -208,7 +207,7 @@ export function ItemDetailsDialog({
         const listId = await moveItemToNewList(item.id, {
           title: newListTitle.trim(),
           kind: inferredNewListKind,
-          lane: 'admin',
+          lane: item.lane,
         });
         if (listId) {
           onClose();
@@ -348,14 +347,20 @@ export function ItemDetailsDialog({
           {kind !== 'capture' ? (
             <button
               className="button ghost"
-              onClick={() => void toggleFocus(currentDate, item.id)}
+              onClick={() =>
+                void setItemFocus(
+                  currentDate,
+                  item.id,
+                  item.status === 'today' ? !isFocused : true,
+                )
+              }
               type="button"
             >
               {item.status === 'today'
                 ? isFocused
                   ? 'Remove focus'
                   : 'Add focus'
-                : 'Move to Now + focus'}
+                : 'Add focus'}
             </button>
           ) : null}
         </div>
@@ -416,7 +421,7 @@ export function ItemDetailsDialog({
               onClick={() => handlePlacementChange('list')}
               type="button"
             >
-              Move to list
+              Convert to list item
             </button>
             {kind !== 'capture' ? (
               <>
