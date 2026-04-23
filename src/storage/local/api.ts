@@ -1041,6 +1041,8 @@ export async function toggleFocus(
               ...item,
               status: 'today',
               scheduledDate: date,
+              completedAt: null,
+              archivedAt: null,
               updatedAt: nowIso(),
               syncState: 'pending',
             });
@@ -1202,19 +1204,43 @@ export async function closeDay(
         addDays(date, 1),
         items,
       );
-      const carryItems = carryForward.map((entry) =>
-        createItemRecord({
-          title: entry.title,
-          kind: 'task',
-          lane: 'admin',
-          status: 'upcoming',
-          sourceDate: date,
-          scheduledDate: entry.scheduledDate,
-          scheduledTime: null,
-        }),
+      const carryExistingItemIds = new Set(
+        carryForward
+          .map((entry) => entry.existingItemId)
+          .filter((entry): entry is string => Boolean(entry)),
       );
+      const updatedExistingItems = items
+        .filter((item) => carryExistingItemIds.has(item.id))
+        .map((item) =>
+          ItemRecordSchema.parse({
+            ...item,
+            status: 'upcoming',
+            scheduledDate: addDays(date, 1),
+            scheduledTime: null,
+            completedAt: null,
+            archivedAt: null,
+            updatedAt: nowIso(),
+            syncState: 'pending',
+          }),
+        );
+      const carryItems = carryForward
+        .filter((entry) => !entry.existingItemId)
+        .map((entry) =>
+          createItemRecord({
+            title: entry.title,
+            kind: 'task',
+            lane: 'admin',
+            status: 'upcoming',
+          sourceDate: date,
+            scheduledDate: entry.scheduledDate,
+            scheduledTime: null,
+          }),
+        );
 
       await db.dailyRecords.put(updatedDay);
+      if (updatedExistingItems.length) {
+        await db.items.bulkPut(updatedExistingItems);
+      }
       if (carryItems.length) {
         await db.items.bulkAdd(carryItems);
       }
@@ -1227,6 +1253,11 @@ export async function closeDay(
       for (const item of carryItems) {
         await queueMutation(
           createMutationRecord('item', item.id, 'item.created', { item }),
+        );
+      }
+      for (const item of updatedExistingItems) {
+        await queueMutation(
+          createMutationRecord('item', item.id, 'item.updated', { item }),
         );
       }
     },

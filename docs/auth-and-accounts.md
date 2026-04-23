@@ -208,6 +208,8 @@ Current hosted auth state:
 - the validation project remains useful for hosted shell, offline, and risky smoke
 - staging should be the first provider-backed auth and sync lane for risky hosted changes before production
 
+Those hosted auth and sync claims describe the last manual hosted verification pass, not a guarantee from default CI. The repo's normal `npm run test:e2e` lane skips hosted auth/sync smoke unless the required hosted env and secrets are present.
+
 Use the repo helper instead of hand-editing auth URLs every time:
 
 - inspect current config:

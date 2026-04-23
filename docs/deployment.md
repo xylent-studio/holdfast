@@ -6,7 +6,7 @@ Holdfast now has a real production Pages project and a live production hostname.
 
 That does not mean launch quality is finished.
 
-As of April 22, 2026:
+As of April 23, 2026, after a fresh manual hosted validation pass:
 
 - local Cloudflare CLI auth is working
 - a disposable validation project exists at `https://holdfast-validation.pages.dev`
@@ -19,6 +19,8 @@ As of April 22, 2026:
 - provider-backed staging auth smoke passes on the staging hostname
 - same-account hosted sync, attachment download, offline replay, and a common later-offline-edit catch-up path pass on the production hostname
 - same-account staged sync, attachment download, offline replay, and a common later-offline-edit catch-up path pass on the staging hostname
+
+These hosted claims are not continuously proven by the default GitHub Actions CI job. The repo has hosted auth/sync smoke coverage, but those suites are env-gated because they need real hosted URLs and secrets. Re-run the hosted smoke commands before relying on the hosted state after unrelated changes.
 
 ## Chosen Hosting Direction
 

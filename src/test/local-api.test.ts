@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DateKey } from '@/domain/dates';
 import { itemsForToday } from '@/domain/logic/selectors';
 import {
+  closeDay,
   createItem,
   createList,
   createListItem,
@@ -81,6 +82,111 @@ describe('capture guardrails', () => {
     });
     expect(snapshot.currentDay.focusItemIds).toEqual([]);
     expect(itemsForToday(snapshot.items, CURRENT_DATE)).toEqual([]);
+  });
+
+  it('reopens a terminal item into Now without stale completion or archive state', async () => {
+    await createItem({
+      title: 'Reopen me',
+      kind: 'task',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    const [item] = await db.items.toArray();
+    await db.items.put({
+      ...item!,
+      status: 'archived',
+      archivedAt: '2026-04-18T20:00:00.000Z',
+      completedAt: '2026-04-18T19:00:00.000Z',
+      updatedAt: '2026-04-18T20:00:00.000Z',
+      syncState: 'pending',
+    });
+
+    await toggleFocus(CURRENT_DATE, item!.id);
+
+    const updated = await db.items.get(item!.id);
+
+    expect(updated).toMatchObject({
+      status: 'today',
+      scheduledDate: CURRENT_DATE,
+      completedAt: null,
+      archivedAt: null,
+    });
+  });
+});
+
+describe('close day carry-forward behavior', () => {
+  it('turns matched alive work into real Upcoming items and only creates new tasks for unmatched lines', async () => {
+    await createItem({
+      title: 'Call the landlord',
+      kind: 'task',
+      lane: 'admin',
+      status: 'today',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: CURRENT_DATE,
+      scheduledTime: null,
+    });
+    await createItem({
+      title: 'Existing capture',
+      kind: 'capture',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: 'Existing capture',
+      sourceItemId: null,
+      captureMode: 'uncertain',
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    const [landlordTask] = (await db.items.toArray()).filter(
+      (item) => item.title === 'Call the landlord',
+    );
+
+    await closeDay(CURRENT_DATE, {
+      closeWin: '',
+      closeCarry: 'Call the landlord\nBuy batteries',
+      closeSeed: 'Start with coffee',
+      closeNote: '',
+    });
+
+    const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
+    const allItems = await db.items.toArray();
+    const updatedLandlord = allItems.find((item) => item.id === landlordTask!.id);
+    const createdCarry = allItems.find((item) => item.title === 'Buy batteries');
+    const mutationTypes = (await db.mutationQueue.toArray()).map(
+      (mutation) => `${mutation.entity}:${mutation.type}:${mutation.entityId}`,
+    );
+
+    expect(updatedLandlord).toMatchObject({
+      id: landlordTask!.id,
+      status: 'upcoming',
+      scheduledDate: '2026-04-20',
+      completedAt: null,
+      archivedAt: null,
+    });
+    expect(createdCarry).toMatchObject({
+      status: 'upcoming',
+      scheduledDate: '2026-04-20',
+    });
+    expect(
+      allItems.filter((item) => item.title === 'Call the landlord'),
+    ).toHaveLength(1);
+    expect(mutationTypes).toContain(`item:item.updated:${landlordTask!.id}`);
+    expect(mutationTypes).toContain(`item:item.created:${createdCarry!.id}`);
+    expect(snapshot.currentDay.closeCarry).toBe('Call the landlord\nBuy batteries');
   });
 });
 

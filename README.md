@@ -78,6 +78,7 @@ npm run build
 Current reality:
 
 - the production shell is live on `holdfast.xylent.studio`
+- hosted auth and hosted sync smoke are real repo workflows, but they are not part of default secretless CI; treat hosted status as something that should be re-verified with the hosted smoke commands after meaningful hosted changes
 - a dedicated Cloudflare staging auth/sync lane now exists at `holdfast-staging.pages.dev`
 - production Pages is currently a direct-upload project named `holdfast`
 - provider-backed staging auth smoke now passes on `holdfast-staging.pages.dev`

@@ -780,7 +780,6 @@ async function pushPendingMutations(
         status: 'failed',
         lastError: syncErrorMessage(error),
       });
-      throw error;
     }
   }
 }

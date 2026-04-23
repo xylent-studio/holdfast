@@ -41,12 +41,20 @@ describe('buildCarryForwardTasks', () => {
     );
 
     expect(result).toEqual([
-      { title: 'Call the landlord', scheduledDate: '2026-04-19' },
-      { title: 'Buy batteries', scheduledDate: '2026-04-19' },
+      {
+        title: 'Call the landlord',
+        scheduledDate: '2026-04-19',
+        existingItemId: null,
+      },
+      {
+        title: 'Buy batteries',
+        scheduledDate: '2026-04-19',
+        existingItemId: null,
+      },
     ]);
   });
 
-  it('skips carry lines that already exist as open items', () => {
+  it('matches carry lines to alive existing items instead of dropping them', () => {
     const result = buildCarryForwardTasks(
       'Call the landlord\nBuy batteries',
       '2026-04-19',
@@ -54,7 +62,16 @@ describe('buildCarryForwardTasks', () => {
     );
 
     expect(result).toEqual([
-      { title: 'Buy batteries', scheduledDate: '2026-04-19' },
+      {
+        title: 'Call the landlord',
+        scheduledDate: '2026-04-19',
+        existingItemId: expect.any(String),
+      },
+      {
+        title: 'Buy batteries',
+        scheduledDate: '2026-04-19',
+        existingItemId: null,
+      },
     ]);
   });
 });
