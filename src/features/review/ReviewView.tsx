@@ -33,6 +33,7 @@ export function ReviewView({
   snapshot,
 }: ReviewViewProps) {
   const [search, setSearch] = useState('');
+  const [showMoreTrails, setShowMoreTrails] = useState(false);
   const [isCreatingList, setIsCreatingList] = useState(false);
   const [listTitle, setListTitle] = useState('');
   const [listCreateBusy, setListCreateBusy] = useState(false);
@@ -426,87 +427,101 @@ export function ReviewView({
       </Panel>
 
       <Panel>
-        <div className="panel-header">
-          <h2>Recent days</h2>
-          <p>A short path back to what stayed alive.</p>
+        <div className="panel-header split">
+          <div>
+            <h2>More trails</h2>
+            <p>Open this only when you need a little more history or pattern help.</p>
+          </div>
+          <div className="dialog-actions">
+            <button
+              className="button ghost small"
+              onClick={() => setShowMoreTrails((current) => !current)}
+              type="button"
+            >
+              {showMoreTrails ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </div>
-        <div className="grid two">
-          {recent.map((day) => (
-            <div className="item-card day-result" key={day.date}>
-              <div className="eyebrow">{day.date}</div>
-              <div className="meta-row">
-                <span className="meta-chip">
-                  Focus | {day.focusTitles.join(', ') || '--'}
-                </span>
-              </div>
-              <div className="meta-row">
-                <span className="meta-chip">Win | {day.closeWin || '--'}</span>
-              </div>
-              <div className="meta-row">
-                <span className="meta-chip">
-                  Seed | {day.closeSeed || '--'}
-                </span>
-              </div>
-              <div className="dialog-actions">
-                <button
-                  className="button ghost small"
-                  onClick={() => onJumpToDate(day.date as DateKey)}
-                  type="button"
-                >
-                  Open day
-                </button>
+        {showMoreTrails ? (
+          <div className="stack">
+            <div className="stack compact">
+              <div className="eyebrow">Recent days</div>
+              <div className="grid two">
+                {recent.map((day) => (
+                  <div className="item-card day-result" key={day.date}>
+                    <div className="eyebrow">{day.date}</div>
+                    <div className="meta-row">
+                      <span className="meta-chip">
+                        Focus | {day.focusTitles.join(', ') || '--'}
+                      </span>
+                    </div>
+                    <div className="meta-row">
+                      <span className="meta-chip">Win | {day.closeWin || '--'}</span>
+                    </div>
+                    <div className="meta-row">
+                      <span className="meta-chip">
+                        Seed | {day.closeSeed || '--'}
+                      </span>
+                    </div>
+                    <div className="dialog-actions">
+                      <button
+                        className="button ghost small"
+                        onClick={() => onJumpToDate(day.date as DateKey)}
+                        type="button"
+                      >
+                        Open day
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      </Panel>
 
-      <Panel>
-        <div className="panel-header">
-          <h2>Signals</h2>
-          <p>Secondary retrieval aids when something keeps showing up.</p>
-        </div>
-        <div className="grid two">
-          <div className="stack compact">
-            <div className="eyebrow">Repeating</div>
-            {repeated.length ? (
-              repeated.map(([title, count]) => (
-                <div className="item-card day-result" key={`${title}-${count}`}>
-                  <div className="item-title-row">
-                    <h3>{title}</h3>
-                    <span className="chip small">{count}</span>
-                  </div>
-                  <div className="dialog-actions">
-                    <button
-                      className="button ghost small"
-                      onClick={() => setSearch(title)}
-                      type="button"
-                    >
-                      Show matches
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyState>No repeated open loops right now.</EmptyState>
-            )}
+            <div className="grid two">
+              <div className="stack compact">
+                <div className="eyebrow">Repeating</div>
+                {repeated.length ? (
+                  repeated.map(([title, count]) => (
+                    <div className="item-card day-result" key={`${title}-${count}`}>
+                      <div className="item-title-row">
+                        <h3>{title}</h3>
+                        <span className="chip small">{count}</span>
+                      </div>
+                      <div className="dialog-actions">
+                        <button
+                          className="button ghost small"
+                          onClick={() => setSearch(title)}
+                          type="button"
+                        >
+                          Show matches
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState>No repeated open loops right now.</EmptyState>
+                )}
+              </div>
+              <div className="stack compact">
+                <div className="eyebrow">Overdue</div>
+                {overdue.length ? (
+                  overdue.map((item) => (
+                    <ItemCard
+                      item={item}
+                      key={item.id}
+                      meta={itemMeta(item, currentDate, item.attachments)}
+                      onOpen={() => onOpenItem(item.id)}
+                    />
+                  ))
+                ) : (
+                  <EmptyState>Nothing overdue.</EmptyState>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="stack compact">
-            <div className="eyebrow">Overdue</div>
-            {overdue.length ? (
-              overdue.map((item) => (
-                <ItemCard
-                  item={item}
-                  key={item.id}
-                  meta={itemMeta(item, currentDate, item.attachments)}
-                  onOpen={() => onOpenItem(item.id)}
-                />
-              ))
-            ) : (
-              <EmptyState>Nothing overdue.</EmptyState>
-            )}
-          </div>
-        </div>
+        ) : (
+          <EmptyState>Search and list surfaces stay up front. Open this only when you need a wider trail.</EmptyState>
+        )}
       </Panel>
     </div>
   );

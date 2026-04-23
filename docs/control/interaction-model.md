@@ -137,6 +137,7 @@ Review should prioritize:
 - repeated-loop visibility
 - recent history and carry-forward honesty
 - refinding saved things, list items, and preserved captures
+- keeping secondary pattern aids quieter than the main retrieval path
 
 Review should avoid:
 - vanity analytics
@@ -159,7 +160,8 @@ Holdfast supports three capture speeds:
 - it should not require choosing task, note, area, place, or timing first
 
 ### 2. Intentional capture in context
-- when the user is already inside the destination, Add should place directly into that surface
+- when the user is already inside the destination, Add should still start with text first
+- the current destination should be available as a direct action from that calm starting point
 - the user should not be bounced back through Inbox when intent is already obvious
 - example: inside a grocery list, adding `eggs` should add a list item there immediately
 

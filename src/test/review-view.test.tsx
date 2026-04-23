@@ -290,8 +290,31 @@ describe('ReviewView', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
     fireEvent.click(screen.getByRole('button', { name: 'Show matches' }));
     expect(screen.getByRole('searchbox')).toHaveValue('Buy coffee');
+  });
+
+  it('keeps secondary history and pattern aids collapsed by default', () => {
+    render(
+      <ReviewView
+        currentDate="2026-04-20"
+        onJumpToDate={vi.fn()}
+        onOpenList={vi.fn()}
+        onOpenItem={vi.fn()}
+        snapshot={makeSnapshot()}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'More trails' })).toBeVisible();
+    expect(
+      screen.getByText(
+        'Search and list surfaces stay up front. Open this only when you need a wider trail.',
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole('heading', { name: 'Recent days' }),
+    ).not.toBeInTheDocument();
   });
 
   it('surfaces lists in review and lets the user open the real list surface', () => {

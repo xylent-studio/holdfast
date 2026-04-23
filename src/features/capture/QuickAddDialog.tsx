@@ -60,9 +60,7 @@ function QuickAddDialogBody({
       (entry.pinned || entry.id === preferredListId),
   );
   const [rawText, setRawText] = useState('');
-  const [placeNow, setPlaceNow] = useState(
-    Boolean(preferredPlacement || preferredList),
-  );
+  const [showDestinationPicker, setShowDestinationPicker] = useState(false);
   const [target, setTarget] = useState<DirectTarget>(
     preferredList
       ? { type: 'list', listId: preferredList.id }
@@ -76,36 +74,35 @@ function QuickAddDialogBody({
   const [chosenDate, setChosenDate] = useState<DateKey>(defaults.chosenDate);
   const [chosenTime, setChosenTime] = useState(defaults.chosenTime);
 
-  const handleSubmit = async (): Promise<void> => {
+  const handleSaveToInbox = async (): Promise<void> => {
+    const planned = planQuickAddItem({
+      rawText,
+      currentDate,
+      shapeNow: false,
+      kind: 'task',
+      placement: 'today',
+      timingMode,
+      chosenDate,
+      chosenTime,
+    });
+
+    if (!planned) {
+      return;
+    }
+
+    await createItem(planned);
+    onClose();
+  };
+
+  const handlePlaceInTarget = async (directTarget: DirectTarget): Promise<void> => {
     const parsed = splitCapturedText(rawText);
     if (!parsed) {
       return;
     }
 
-    if (!placeNow) {
-      const planned = planQuickAddItem({
-        rawText,
-        currentDate,
-        shapeNow: false,
-        kind: 'task',
-        placement: 'today',
-        timingMode,
-        chosenDate,
-        chosenTime,
-      });
-
-      if (!planned) {
-        return;
-      }
-
-      await createItem(planned);
-      onClose();
-      return;
-    }
-
-    if (target.type === 'list') {
+    if (directTarget.type === 'list') {
       await createListItem({
-        listId: target.listId,
+        listId: directTarget.listId,
         title: parsed.title,
         body: parsed.body,
       });
@@ -118,12 +115,14 @@ function QuickAddDialogBody({
       currentDate,
       shapeNow: true,
       kind: 'task',
-      placement: target.type,
+      placement: directTarget.type,
       timingMode,
       chosenDate,
       chosenTime,
       captureMode:
-        preferredPlacement && preferredPlacement === target.type ? 'context' : 'direct',
+        preferredPlacement && preferredPlacement === directTarget.type
+          ? 'context'
+          : 'direct',
     });
 
     if (!planned) {
@@ -142,6 +141,20 @@ function QuickAddDialogBody({
       : target.type === 'today'
         ? 'Now'
         : 'Upcoming';
+  const contextualTarget = preferredList
+    ? ({ type: 'list', listId: preferredList.id } as const)
+    : preferredPlacement
+      ? ({ type: preferredPlacement } as const)
+      : null;
+  const contextualActionLabel =
+    contextualTarget?.type === 'list'
+      ? `Add to ${preferredList?.title ?? 'This list'}`
+      : contextualTarget?.type === 'today'
+        ? 'Add to Now'
+        : contextualTarget?.type === 'upcoming'
+          ? 'Add to Upcoming'
+          : null;
+  const canSubmit = Boolean(splitCapturedText(rawText));
 
   return (
     <div className="dialog-stack">
@@ -170,27 +183,7 @@ function QuickAddDialogBody({
         />
       </label>
 
-      <div className="field-stack">
-        <span>Destination</span>
-        <div className="chip-row">
-          <button
-            className={`chip ${!placeNow ? 'active' : ''}`}
-            onClick={() => setPlaceNow(false)}
-            type="button"
-          >
-            Inbox first
-          </button>
-          <button
-            className={`chip ${placeNow ? 'active' : ''}`}
-            onClick={() => setPlaceNow(true)}
-            type="button"
-          >
-            Place now
-          </button>
-        </div>
-      </div>
-
-      {placeNow ? (
+      {showDestinationPicker ? (
         <>
           <div className="field-stack">
             <span>Place in</span>
@@ -278,23 +271,64 @@ function QuickAddDialogBody({
         </>
       ) : null}
 
-      <div className="dialog-actions">
+      <div className="dialog-actions spread">
         <button className="button ghost" onClick={onClose} type="button">
           Cancel
         </button>
-        <button
-          className="button accent"
-          onClick={() => void handleSubmit()}
-          type="button"
-        >
-          {placeNow
-            ? target.type === 'list'
-              ? `Add to ${directTargetLabel}`
-              : target.type === 'today'
-                ? 'Add to Now'
-                : 'Add to Upcoming'
-            : 'Save to Inbox'}
-        </button>
+        <div className="dialog-actions">
+          {showDestinationPicker ? (
+            <>
+              <button
+                className="button ghost"
+                onClick={() => setShowDestinationPicker(false)}
+                type="button"
+              >
+                Back
+              </button>
+              <button
+                className="button accent"
+                disabled={!canSubmit}
+                onClick={() => void handlePlaceInTarget(target)}
+                type="button"
+              >
+                {target.type === 'list'
+                  ? `Add to ${directTargetLabel}`
+                  : target.type === 'today'
+                    ? 'Add to Now'
+                    : 'Add to Upcoming'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="button accent"
+                disabled={!canSubmit}
+                onClick={() => void handleSaveToInbox()}
+                type="button"
+              >
+                Save to Inbox
+              </button>
+              {contextualTarget && contextualActionLabel ? (
+                <button
+                  className="button ghost"
+                  disabled={!canSubmit}
+                  onClick={() => void handlePlaceInTarget(contextualTarget)}
+                  type="button"
+                >
+                  {contextualActionLabel}
+                </button>
+              ) : null}
+              <button
+                className="button ghost"
+                disabled={!canSubmit}
+                onClick={() => setShowDestinationPicker(true)}
+                type="button"
+              >
+                Choose another place
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

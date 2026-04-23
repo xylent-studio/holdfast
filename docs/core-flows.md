@@ -30,8 +30,9 @@ Example:
 
 When the user is already inside a destination surface:
 
-- Add should place directly into that surface
-- the current context outranks Inbox fallback
+- Add should still open as one calm text entry point first
+- the current context should be available as a direct action, not a filing form
+- the user should be able to save to Inbox instead when the destination is suddenly less clear
 
 Example:
 
@@ -132,6 +133,8 @@ Review should include retrieval for:
 - attachments and preserved context
 
 Review should also be the first honest place to revisit list surfaces before Holdfast ever grows a separate list home.
+
+Secondary pattern aids such as recent days, repeating loops, and overdue pressure should stay available, but they should not crowd the default retrieval surface.
 
 ## 7. Optional day support
 
