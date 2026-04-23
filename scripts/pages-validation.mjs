@@ -399,7 +399,8 @@ function projectRole(options) {
 }
 
 function parseDirtyPath(line) {
-  const candidate = line.slice(3).trim();
+  const match = line.match(/^[ MADRCU?!]{1,2}\s+(.*)$/u);
+  const candidate = (match?.[1] ?? line).trim();
   const pathText = candidate.includes(' -> ')
     ? candidate.split(' -> ').at(-1) ?? candidate
     : candidate;
