@@ -10,18 +10,44 @@ const getAttachmentDownloadMock = vi.fn();
 const removeAttachmentMock = vi.fn();
 const replaceItemWithLatestSavedVersionMock = vi.fn();
 const saveItemMock = vi.fn();
+const sendInboxCaptureToListMock = vi.fn();
+const sendInboxCaptureToNewListMock = vi.fn();
 const toggleFocusMock = vi.fn();
 
 vi.mock('@/storage/local/api', () => ({
   addFilesToItem: (...args: unknown[]) => addFilesToItemMock(...args),
   deleteItem: (...args: unknown[]) => deleteItemMock(...args),
   getAttachmentDownload: (...args: unknown[]) => getAttachmentDownloadMock(...args),
+  removeAttachment: (...args: unknown[]) => removeAttachmentMock(...args),
   replaceItemWithLatestSavedVersion: (...args: unknown[]) =>
     replaceItemWithLatestSavedVersionMock(...args),
-  removeAttachment: (...args: unknown[]) => removeAttachmentMock(...args),
   saveItem: (...args: unknown[]) => saveItemMock(...args),
+  sendInboxCaptureToList: (...args: unknown[]) =>
+    sendInboxCaptureToListMock(...args),
+  sendInboxCaptureToNewList: (...args: unknown[]) =>
+    sendInboxCaptureToNewListMock(...args),
   toggleFocus: (...args: unknown[]) => toggleFocusMock(...args),
 }));
+
+function baseLists() {
+  return [
+    {
+      id: 'list-1',
+      schemaVersion: SCHEMA_VERSION,
+      title: 'Groceries',
+      kind: 'replenishment',
+      lane: 'home',
+      pinned: true,
+      sourceItemId: null,
+      archivedAt: null,
+      createdAt: '2026-04-20T08:00:00.000Z',
+      updatedAt: '2026-04-20T08:00:00.000Z',
+      deletedAt: null,
+      syncState: 'pending',
+      remoteRevision: null,
+    },
+  ];
+}
 
 describe('ItemDetailsDialog', () => {
   beforeEach(() => {
@@ -31,6 +57,8 @@ describe('ItemDetailsDialog', () => {
     replaceItemWithLatestSavedVersionMock.mockReset();
     removeAttachmentMock.mockReset();
     saveItemMock.mockReset();
+    sendInboxCaptureToListMock.mockReset();
+    sendInboxCaptureToNewListMock.mockReset();
     toggleFocusMock.mockReset();
   });
 
@@ -57,6 +85,7 @@ describe('ItemDetailsDialog', () => {
               updatedAt: '2026-04-20T08:00:00.000Z',
               deletedAt: null,
               syncState: 'synced',
+              remoteRevision: null,
             },
           ],
           body: '',
@@ -80,7 +109,9 @@ describe('ItemDetailsDialog', () => {
           updatedAt: '2026-04-20T08:00:00.000Z',
           deletedAt: null,
         }}
+        lists={baseLists()}
         onClose={vi.fn()}
+        onOpenList={vi.fn()}
       />,
     );
 
@@ -128,7 +159,9 @@ describe('ItemDetailsDialog', () => {
           updatedAt: '2026-04-20T08:00:00.000Z',
           deletedAt: null,
         }}
+        lists={baseLists()}
         onClose={onClose}
+        onOpenList={vi.fn()}
       />,
     );
 
@@ -141,6 +174,57 @@ describe('ItemDetailsDialog', () => {
     await waitFor(() => {
       expect(replaceItemWithLatestSavedVersionMock).toHaveBeenCalledWith(
         '22222222-2222-4222-8222-222222222222',
+      );
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it('can send an inbox capture into a pinned list', async () => {
+    sendInboxCaptureToListMock.mockResolvedValue(undefined);
+    const onClose = vi.fn();
+
+    render(
+      <ItemDetailsDialog
+        currentDate="2026-04-20"
+        isFocused={false}
+        isOpen
+        item={{
+          attachments: [],
+          body: 'Check pantry first',
+          captureMode: 'uncertain',
+          createdAt: '2026-04-20T08:00:00.000Z',
+          id: '22222222-2222-4222-8222-222222222222',
+          kind: 'capture',
+          lane: 'admin',
+          schemaVersion: SCHEMA_VERSION,
+          scheduledDate: null,
+          scheduledTime: null,
+          sourceDate: '2026-04-20',
+          sourceItemId: null,
+          sourceText: 'Eggs\n\nCheck pantry first',
+          routineId: null,
+          completedAt: null,
+          archivedAt: null,
+          status: 'inbox',
+          syncState: 'pending',
+          remoteRevision: null,
+          title: 'Eggs',
+          updatedAt: '2026-04-20T08:00:00.000Z',
+          deletedAt: null,
+        }}
+        lists={baseLists()}
+        onClose={onClose}
+        onOpenList={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send to list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(sendInboxCaptureToListMock).toHaveBeenCalledWith(
+        '22222222-2222-4222-8222-222222222222',
+        'list-1',
       );
       expect(onClose).toHaveBeenCalled();
     });

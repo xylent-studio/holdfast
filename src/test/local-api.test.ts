@@ -8,10 +8,13 @@ import {
   createItem,
   createList,
   createListItem,
+  createListWithFirstItem,
   deleteList,
   deleteItem,
   getHoldfastSnapshot,
   removeDataFromDevice,
+  sendInboxCaptureToList,
+  sendInboxCaptureToNewList,
   toggleFocus,
   toggleTaskDone,
   updateWorkspaceState,
@@ -234,6 +237,126 @@ describe('list mutation logging', () => {
         'listItem:list-item.updated',
       ].sort(),
     );
+  });
+});
+
+describe('list creation and capture transfer flows', () => {
+  it('can create a list together with its first list item', async () => {
+    const listId = await createListWithFirstItem(
+      {
+        title: 'Weekend prep',
+        kind: 'checklist',
+        lane: 'admin',
+      },
+      {
+        title: 'Pack charger',
+        body: 'USB-C brick too',
+      },
+    );
+
+    const list = await db.lists.get(listId);
+    const listItems = await db.listItems.where('listId').equals(listId).toArray();
+    const mutations = (await db.mutationQueue.toArray()).map(
+      (mutation) => `${mutation.entity}:${mutation.type}`,
+    );
+
+    expect(list).toMatchObject({
+      title: 'Weekend prep',
+      kind: 'checklist',
+    });
+    expect(listItems).toHaveLength(1);
+    expect(listItems[0]).toMatchObject({
+      title: 'Pack charger',
+      body: 'USB-C brick too',
+      position: 0,
+      sourceItemId: null,
+    });
+    expect(mutations).toContain('list:list.created');
+    expect(mutations).toContain('listItem:list-item.created');
+  });
+
+  it('archives an inbox capture after sending it to an existing list and preserves sourceItemId', async () => {
+    await createItem({
+      title: 'Eggs',
+      kind: 'capture',
+      lane: 'admin',
+      status: 'inbox',
+      body: 'Check pantry first',
+      sourceText: 'Eggs\n\nCheck pantry first',
+      sourceItemId: null,
+      captureMode: 'uncertain',
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+    await createList({
+      title: 'Groceries',
+      kind: 'replenishment',
+      lane: 'home',
+      pinned: true,
+    });
+
+    const [capture] = await db.items.toArray();
+    const [list] = await db.lists.toArray();
+
+    await sendInboxCaptureToList(capture!.id, list!.id);
+
+    const updatedCapture = await db.items.get(capture!.id);
+    const [listItem] = await db.listItems.where('listId').equals(list!.id).toArray();
+    const mutations = (await db.mutationQueue.toArray()).map(
+      (mutation) => `${mutation.entity}:${mutation.type}:${mutation.entityId}`,
+    );
+
+    expect(updatedCapture).toMatchObject({
+      status: 'archived',
+      archivedAt: expect.any(String),
+    });
+    expect(listItem).toMatchObject({
+      title: 'Eggs',
+      body: 'Check pantry first',
+      sourceItemId: capture!.id,
+    });
+    expect(mutations).toContain(`item:item.updated:${capture!.id}`);
+    expect(mutations).toContain(`listItem:list-item.created:${listItem!.id}`);
+  });
+
+  it('can create a new list from an inbox capture and archive the original capture', async () => {
+    await createItem({
+      title: 'Eggs',
+      kind: 'capture',
+      lane: 'admin',
+      status: 'inbox',
+      body: 'Check pantry first',
+      sourceText: 'Eggs\n\nCheck pantry first',
+      sourceItemId: null,
+      captureMode: 'uncertain',
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    const [capture] = await db.items.toArray();
+    const listId = await sendInboxCaptureToNewList(capture!.id, {
+      title: 'Groceries',
+      kind: 'replenishment',
+      lane: 'admin',
+    });
+
+    const list = await db.lists.get(listId!);
+    const [listItem] = await db.listItems.where('listId').equals(listId!).toArray();
+    const updatedCapture = await db.items.get(capture!.id);
+
+    expect(list).toMatchObject({
+      title: 'Groceries',
+      kind: 'replenishment',
+    });
+    expect(listItem).toMatchObject({
+      title: 'Eggs',
+      sourceItemId: capture!.id,
+    });
+    expect(updatedCapture).toMatchObject({
+      status: 'archived',
+    });
   });
 });
 

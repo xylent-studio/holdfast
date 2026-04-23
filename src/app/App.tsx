@@ -23,6 +23,10 @@ import { QuickAddDialog } from '@/features/capture/QuickAddDialog';
 import { NowView } from '@/features/now/NowView';
 import { UpcomingView } from '@/features/upcoming/UpcomingView';
 import { todayDateKey } from '@/domain/dates';
+import {
+  addContextForLocation,
+  currentListIdForPath,
+} from '@/domain/logic/capture';
 import { openItems } from '@/domain/logic/selectors';
 import { bootstrapHoldfast, useHoldfastSnapshot } from '@/storage/local/api';
 import { LoadingPanel } from '@/shared/ui/LoadingPanel';
@@ -55,28 +59,6 @@ const SettingsView = lazy(async () =>
 
 async function preloadCoreOfflineSurface(): Promise<void> {
   await import('@/features/item-details/ItemDetailsDialog');
-}
-
-function quickAddPlacementForPath(
-  pathname: string,
-): 'today' | 'upcoming' | null {
-  if (pathname === '/now') {
-    return 'today';
-  }
-
-  if (pathname === '/upcoming') {
-    return 'upcoming';
-  }
-
-  return null;
-}
-
-function quickAddListIdForPath(pathname: string): string | null {
-  if (!pathname.startsWith('/lists/')) {
-    return null;
-  }
-
-  return pathname.slice('/lists/'.length) || null;
 }
 
 function RoutedListView({
@@ -124,7 +106,11 @@ function AppRoutes() {
     () => snapshot?.items.find((item) => item.id === selectedItemId) ?? null,
     [selectedItemId, snapshot?.items],
   );
-  const currentListId = quickAddListIdForPath(location.pathname);
+  const quickAddContext = addContextForLocation(
+    location.pathname,
+    location.search,
+  );
+  const currentListId = currentListIdForPath(location.pathname);
   const hasLocalData = snapshot ? hasMeaningfulLocalState(snapshot) : false;
   const shouldWaitForAuthGate =
     Boolean(snapshot) && auth.configured && !auth.isReady && !hasLocalData;
@@ -246,12 +232,13 @@ function AppRoutes() {
         </Suspense>
       </AppShell>
       <QuickAddDialog
+        context={quickAddContext}
         currentDate={currentDate}
+        currentListId={currentListId}
         isOpen={quickAddOpen}
         lists={snapshot.lists}
         onClose={() => setQuickAddOpen(false)}
-        preferredListId={currentListId}
-        preferredPlacement={quickAddPlacementForPath(location.pathname)}
+        onOpenList={(listId) => navigate(`/lists/${listId}`)}
       />
       {selectedItem ? (
         <Suspense fallback={null}>
@@ -263,7 +250,9 @@ function AppRoutes() {
             item={selectedItem}
             isOpen
             key={`${selectedItem.id}-${selectedItem.updatedAt}`}
+            lists={snapshot.lists}
             onClose={() => setSelectedItemId(null)}
+            onOpenList={(listId) => navigate(`/lists/${listId}`)}
           />
         </Suspense>
       ) : null}

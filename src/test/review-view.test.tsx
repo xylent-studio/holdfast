@@ -256,15 +256,16 @@ describe('ReviewView', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'New list' }));
-    fireEvent.change(screen.getByRole('textbox'), {
+    fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Weekend prep' },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'Checklist' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create list' }));
 
     await waitFor(() => {
       expect(createListMock).toHaveBeenCalledWith({
         title: 'Weekend prep',
-        kind: 'project',
+        kind: 'checklist',
         lane: 'admin',
       });
       expect(onOpenList).toHaveBeenCalledWith('list-2');

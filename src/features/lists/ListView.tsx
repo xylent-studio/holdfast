@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { LIST_KIND_LABELS } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import {
   createListItem,
@@ -279,7 +280,7 @@ export function ListView({
       <Panel>
         <div className="panel-header split">
           <div>
-            <div className="eyebrow">{list.kind} list</div>
+            <div className="eyebrow">{LIST_KIND_LABELS[list.kind]} list</div>
             <h1>{list.title}</h1>
             <p>
               Keep a living list without turning it into a second navigation

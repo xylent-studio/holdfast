@@ -8,7 +8,6 @@ import {
   getQueueItemsForToday,
   itemMeta,
   itemsForToday,
-  nextScheduledItems,
   overdueItems,
 } from '@/domain/logic/selectors';
 import {
@@ -59,7 +58,6 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
   ).length;
   const carry = carrySuggestions(snapshot.dailyRecords, currentDate);
   const overdue = overdueItems(snapshot.items, currentDate);
-  const nextUp = nextScheduledItems(snapshot.items, currentDate);
   const closeDayKey = `${snapshot.currentDay.date}-${snapshot.currentDay.updatedAt}-${closeDayOpen ? 'open' : 'closed'}`;
   const dayToolsSummary = [
     snapshot.currentDay.startedAt ? 'Day started' : 'Not started',
@@ -280,27 +278,6 @@ export function NowView({ currentDate, onOpenItem, snapshot }: NowViewProps) {
           </div>
         ) : (
           <EmptyState>Nothing overdue.</EmptyState>
-        )}
-      </Panel>
-
-      <Panel>
-        <div className="panel-header">
-          <h2>Next up</h2>
-          <p>Scheduled after this date, without flooding this day.</p>
-        </div>
-        {nextUp.length ? (
-          <div className="item-list">
-            {nextUp.map((item) => (
-              <ItemCard
-                item={item}
-                key={item.id}
-                meta={itemMeta(item, currentDate, item.attachments)}
-                onOpen={() => onOpenItem(item.id)}
-              />
-            ))}
-          </div>
-        ) : (
-          <EmptyState>Nothing scheduled after this date right now.</EmptyState>
         )}
       </Panel>
 

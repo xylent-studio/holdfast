@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SCHEMA_VERSION } from '@/domain/constants';
 import { NowView } from '@/features/now/NowView';
 import type { HoldfastSnapshot } from '@/storage/local/api';
+import type { ItemWithAttachments } from '@/storage/local/api';
 import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 
 const startDayMock = vi.fn();
@@ -28,10 +29,40 @@ vi.mock('@/storage/local/api', async () => {
   };
 });
 
-function makeSnapshot(): HoldfastSnapshot {
+function makeItem(
+  overrides: Partial<ItemWithAttachments>,
+): ItemWithAttachments {
+  return {
+    attachments: [],
+    body: '',
+    captureMode: null,
+    createdAt: '2026-04-20T08:00:00.000Z',
+    deletedAt: null,
+    id: crypto.randomUUID(),
+    kind: 'task',
+    lane: 'admin',
+    routineId: null,
+    schemaVersion: SCHEMA_VERSION,
+    scheduledDate: null,
+    scheduledTime: null,
+    sourceDate: '2026-04-20',
+    sourceItemId: null,
+    sourceText: null,
+    completedAt: null,
+    archivedAt: null,
+    status: 'today',
+    syncState: 'pending',
+    remoteRevision: null,
+    title: 'Untitled',
+    updatedAt: '2026-04-20T08:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeSnapshot(items: ItemWithAttachments[] = []): HoldfastSnapshot {
   return {
     currentDate: '2026-04-20',
-    items: [],
+    items,
     lists: [],
     listItems: [],
     dailyRecords: [
@@ -175,5 +206,38 @@ describe('NowView', () => {
 
     expect(screen.getByText('Water')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start day' })).toBeInTheDocument();
+  });
+
+  it('keeps due-today planned work in Now, future work out of Now, and removes Next up', () => {
+    render(
+      <NowView
+        currentDate="2026-04-20"
+        onOpenItem={vi.fn()}
+        snapshot={makeSnapshot([
+          makeItem({
+            title: 'Due today',
+            status: 'upcoming',
+            scheduledDate: '2026-04-20',
+          }),
+          makeItem({
+            title: 'Future',
+            status: 'upcoming',
+            scheduledDate: '2026-04-21',
+          }),
+          makeItem({
+            title: 'Overdue',
+            status: 'upcoming',
+            scheduledDate: '2026-04-19',
+          }),
+        ])}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Due today' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move to Now' })).toBeInTheDocument();
+    expect(screen.queryByText('Future')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Next up' }),
+    ).not.toBeInTheDocument();
   });
 });

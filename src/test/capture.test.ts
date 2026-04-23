@@ -1,39 +1,60 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildQuickAddDraft, planQuickAddItem } from '@/domain/logic/capture';
+import {
+  addContextForLocation,
+  buildQuickAddDraft,
+  parseUpcomingSection,
+  planQuickAddItem,
+  primaryAddDestinationForContext,
+} from '@/domain/logic/capture';
+
+describe('capture route context', () => {
+  it('derives add context from the current route and upcoming section', () => {
+    expect(addContextForLocation('/now', '')).toBe('now');
+    expect(addContextForLocation('/review', '')).toBe('global');
+    expect(addContextForLocation('/lists/list-1', '')).toBe('list');
+    expect(addContextForLocation('/upcoming', '')).toBe('upcoming-scheduled');
+    expect(addContextForLocation('/upcoming', '?section=undated')).toBe(
+      'upcoming-undated',
+    );
+    expect(addContextForLocation('/upcoming', '?section=waiting')).toBe(
+      'upcoming-waiting',
+    );
+  });
+
+  it('falls back to scheduled when the upcoming section is missing or invalid', () => {
+    expect(parseUpcomingSection(null)).toBe('scheduled');
+    expect(parseUpcomingSection('wrong')).toBe('scheduled');
+  });
+});
+
+describe('primary add destination', () => {
+  it('maps each context to its obvious primary submit action', () => {
+    expect(primaryAddDestinationForContext('global')).toBe('inbox');
+    expect(primaryAddDestinationForContext('now')).toBe('now');
+    expect(primaryAddDestinationForContext('upcoming-scheduled')).toBe(
+      'scheduled',
+    );
+    expect(primaryAddDestinationForContext('upcoming-undated')).toBe('undated');
+    expect(primaryAddDestinationForContext('upcoming-waiting')).toBe('waiting');
+    expect(primaryAddDestinationForContext('list')).toBe('list');
+  });
+});
 
 describe('planQuickAddItem', () => {
-  it('uses route-aware defaults for current-context add surfaces', () => {
-    expect(buildQuickAddDraft('2026-04-20', 'today')).toEqual({
-      captureMode: 'context',
-      chosenDate: '2026-04-20',
+  it('defaults scheduled drafts to tomorrow without forcing classification', () => {
+    expect(buildQuickAddDraft('2026-04-20')).toEqual({
+      chosenDate: '2026-04-21',
       chosenTime: '',
-      kind: 'task',
-      placement: 'today',
-      shapeNow: true,
-      timingMode: 'tomorrow',
-    });
-
-    expect(buildQuickAddDraft('2026-04-20', 'upcoming')).toEqual({
-      captureMode: 'context',
-      chosenDate: '2026-04-20',
-      chosenTime: '',
-      kind: 'task',
-      placement: 'upcoming',
-      shapeNow: true,
-      timingMode: 'someday',
     });
   });
 
-  it('defaults to uncertain Inbox capture without forced classification', () => {
+  it('creates an uncertain Inbox capture when saved to Inbox', () => {
     const result = planQuickAddItem({
       rawText: 'groceries, eggs, coffee, check pantry first',
       currentDate: '2026-04-18',
-      shapeNow: false,
-      kind: 'task',
-      placement: 'today',
-      timingMode: 'tomorrow',
-      chosenDate: '2026-04-18',
+      destination: 'inbox',
+      chosenDate: '2026-04-19',
       chosenTime: '',
     });
 
@@ -52,50 +73,75 @@ describe('planQuickAddItem', () => {
     });
   });
 
-  it('supports deliberate placement when the user chooses to shape now', () => {
+  it('creates a Now task when the user places it directly into Now', () => {
     const result = planQuickAddItem({
       rawText: 'Buy batteries',
       currentDate: '2026-04-18',
-      shapeNow: true,
-      kind: 'task',
-      placement: 'upcoming',
-      timingMode: 'tomorrow',
-      chosenDate: '2026-04-18',
-      chosenTime: '09:30',
+      destination: 'now',
+      chosenDate: '2026-04-19',
+      chosenTime: '',
+      captureMode: 'context',
     });
 
     expect(result).toEqual({
       title: 'Buy batteries',
       kind: 'task',
       lane: 'admin',
-      status: 'upcoming',
+      status: 'today',
       body: '',
       sourceText: 'Buy batteries',
       sourceItemId: null,
-      captureMode: 'direct',
+      captureMode: 'context',
       sourceDate: '2026-04-18',
-      scheduledDate: '2026-04-19',
-      scheduledTime: '09:30',
+      scheduledDate: '2026-04-18',
+      scheduledTime: null,
     });
   });
 
-  it('preserves context capture mode when the current surface placement is explicit', () => {
-    const result = planQuickAddItem({
-      rawText: 'Check in with vendor',
-      currentDate: '2026-04-18',
-      shapeNow: true,
+  it('supports scheduled, undated, and waiting placements without asking task vs note', () => {
+    expect(
+      planQuickAddItem({
+        rawText: 'Plan trip',
+        currentDate: '2026-04-18',
+        destination: 'scheduled',
+        chosenDate: '2026-04-21',
+        chosenTime: '09:30',
+      }),
+    ).toMatchObject({
       kind: 'task',
-      placement: 'today',
-      timingMode: 'tomorrow',
-      chosenDate: '2026-04-18',
-      chosenTime: '',
-      captureMode: 'context',
+      status: 'upcoming',
+      scheduledDate: '2026-04-21',
+      scheduledTime: '09:30',
     });
 
-    expect(result).toMatchObject({
-      captureMode: 'context',
-      scheduledDate: '2026-04-18',
-      status: 'today',
+    expect(
+      planQuickAddItem({
+        rawText: 'Keep for later',
+        currentDate: '2026-04-18',
+        destination: 'undated',
+        chosenDate: '2026-04-21',
+        chosenTime: '',
+      }),
+    ).toMatchObject({
+      kind: 'task',
+      status: 'upcoming',
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    expect(
+      planQuickAddItem({
+        rawText: 'Waiting on vendor',
+        currentDate: '2026-04-18',
+        destination: 'waiting',
+        chosenDate: '2026-04-21',
+        chosenTime: '',
+      }),
+    ).toMatchObject({
+      kind: 'task',
+      status: 'waiting',
+      scheduledDate: null,
+      scheduledTime: null,
     });
   });
 });

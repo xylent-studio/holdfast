@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
 import {
+  itemsForToday,
+  overdueItems,
   reviewListSummaries,
   repeatedOpenTitles,
   scheduledUpcomingItems,
@@ -58,9 +60,11 @@ describe('scheduledUpcomingItems', () => {
   it('returns only upcoming items within the selected window', () => {
     const result = scheduledUpcomingItems(
       [
+        makeItem({ title: 'Due today', scheduledDate: '2026-04-18' }),
         makeItem({ title: 'This week', scheduledDate: '2026-04-19' }),
         makeItem({ title: 'Next month', scheduledDate: '2026-05-04' }),
-        makeItem({ title: 'Queue only', scheduledDate: null }),
+        makeItem({ title: 'Undated', scheduledDate: null }),
+        makeItem({ title: 'Overdue', scheduledDate: '2026-04-17' }),
         makeItem({
           title: 'Waiting',
           status: 'waiting',
@@ -72,6 +76,35 @@ describe('scheduledUpcomingItems', () => {
     );
 
     expect(result.map((item) => item.title)).toEqual(['This week']);
+  });
+});
+
+describe('Now ownership selectors', () => {
+  it('keeps due-today planned items in Now and overdue items in overdue pressure', () => {
+    const items = [
+      makeItem({
+        title: 'Due today',
+        status: 'upcoming',
+        scheduledDate: '2026-04-18',
+      }),
+      makeItem({
+        title: 'Future',
+        status: 'upcoming',
+        scheduledDate: '2026-04-20',
+      }),
+      makeItem({
+        title: 'Overdue',
+        status: 'upcoming',
+        scheduledDate: '2026-04-17',
+      }),
+    ];
+
+    expect(itemsForToday(items, '2026-04-18').map((item) => item.title)).toEqual([
+      'Due today',
+    ]);
+    expect(overdueItems(items, '2026-04-18').map((item) => item.title)).toEqual([
+      'Overdue',
+    ]);
   });
 });
 

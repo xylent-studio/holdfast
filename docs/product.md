@@ -37,9 +37,10 @@ Holdfast should feel:
 The command view for active work. It should help the user:
 
 - keep a short honest focus list
-- see what is active without backlog fog
+- see current-day work without backlog fog
 - move through what matters without ritual overhead
 - use day support only when it actually helps continuity
+- own due-today planned work and overdue pressure without previewing future work
 
 ### Inbox
 
@@ -101,9 +102,11 @@ Holdfast is not:
 - the four core areas stay purposeful and distinct
 - catch, place, find, and keep stay clearer than productivity-system language
 - capture stays faster than organization
+- Add stays text-first, with a context-sensitive primary submit and `Save to Inbox` as the fallback
 - direct placement works when the destination is already obvious
 - routines and day support stay quiet unless the user wants them
 - review stays decision-relevant, not analytical theater
+- lists stay contextual, searchable, and quick-creatable without becoming a second nav spine
 - the normal long-term experience is signed-in and synced
 - first-time sign-in should be one tap or a magic link, not a form wall
 - if local work already exists, the app should open it quickly and let that workspace attach to an account without loss

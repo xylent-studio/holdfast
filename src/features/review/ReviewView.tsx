@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 
+import { LIST_KIND_LABELS } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
+import type { ListKind } from '@/domain/schemas/records';
 import {
   conflictedItems,
   conflictedListItems,
@@ -16,6 +18,8 @@ import { createList, type HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
 import { Panel } from '@/shared/ui/Panel';
+
+import { ListCreatorFields } from '@/features/lists/ListCreatorFields';
 
 interface ReviewViewProps {
   currentDate: DateKey;
@@ -36,6 +40,7 @@ export function ReviewView({
   const [showMoreTrails, setShowMoreTrails] = useState(false);
   const [isCreatingList, setIsCreatingList] = useState(false);
   const [listTitle, setListTitle] = useState('');
+  const [listKind, setListKind] = useState<ListKind>('project');
   const [listCreateBusy, setListCreateBusy] = useState(false);
   const [listCreateError, setListCreateError] = useState<string | null>(null);
   const repeated = useMemo(
@@ -88,6 +93,7 @@ export function ReviewView({
   const handleOpenListCreator = (): void => {
     setIsCreatingList(true);
     setListCreateError(null);
+    setListKind('project');
   };
 
   const handleCancelListCreator = (): void => {
@@ -97,6 +103,7 @@ export function ReviewView({
 
     setIsCreatingList(false);
     setListTitle('');
+    setListKind('project');
     setListCreateError(null);
   };
 
@@ -112,10 +119,11 @@ export function ReviewView({
     try {
       const listId = await createList({
         title,
-        kind: 'project',
+        kind: listKind,
         lane: 'admin',
       });
       setListTitle('');
+      setListKind('project');
       setIsCreatingList(false);
       onOpenList(listId);
     } catch (error) {
@@ -196,7 +204,7 @@ export function ReviewView({
                   return (
                     <div className="item-card day-result" key={`list-${result.list.id}`}>
                       <div className="eyebrow">
-                        {result.list.kind} list
+                        {LIST_KIND_LABELS[result.list.kind]} list
                         {result.list.pinned ? ' | pinned' : ''}
                       </div>
                       <div className="item-title-row">
@@ -230,7 +238,9 @@ export function ReviewView({
                     className="item-card day-result"
                     key={`list-item-${result.listItem.id}`}
                   >
-                    <div className="eyebrow">List item | {result.list.title}</div>
+                    <div className="eyebrow">
+                      List item | {result.list.title}
+                    </div>
                     <div className="item-title-row">
                       <h3>{result.listItem.title}</h3>
                       <span className="chip small">
@@ -285,7 +295,7 @@ export function ReviewView({
             ))}
             {conflictLists.map((list) => (
               <div className="item-card day-result" key={`conflict-list-${list.id}`}>
-                <div className="eyebrow">{list.kind} list</div>
+                <div className="eyebrow">{LIST_KIND_LABELS[list.kind]} list</div>
                 <div className="item-title-row">
                   <h3>{list.title}</h3>
                   <span className="chip small">Needs attention</span>
@@ -353,22 +363,13 @@ export function ReviewView({
         </div>
         {isCreatingList ? (
           <div className="item-card day-result">
-            <label className="field-stack">
-              <span>Title</span>
-              <input
-                autoFocus
-                onChange={(event) => setListTitle(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void handleCreateList();
-                  }
-                }}
-                placeholder="Groceries, project, or reference"
-                type="text"
-                value={listTitle}
-              />
-            </label>
+            <ListCreatorFields
+              disabled={listCreateBusy}
+              kind={listKind}
+              onKindChange={setListKind}
+              onTitleChange={setListTitle}
+              title={listTitle}
+            />
             {listCreateError ? (
               <p className="auth-feedback danger">{listCreateError}</p>
             ) : null}
@@ -397,7 +398,7 @@ export function ReviewView({
             {listSummaries.map((entry) => (
               <div className="item-card day-result" key={entry.list.id}>
                 <div className="eyebrow">
-                  {entry.list.kind} list
+                  {LIST_KIND_LABELS[entry.list.kind]} list
                   {entry.list.pinned ? ' | pinned' : ''}
                 </div>
                 <div className="item-title-row">

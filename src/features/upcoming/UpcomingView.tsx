@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import type { DateKey } from '@/domain/dates';
+import { parseUpcomingSection } from '@/domain/logic/capture';
 import {
   groupScheduledItems,
   itemMeta,
@@ -21,13 +23,22 @@ interface UpcomingViewProps {
 }
 
 export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingViewProps) {
-  const [filter, setFilter] = useState<'scheduled' | 'undated' | 'waiting'>(
-    'scheduled',
-  );
+  const [searchParams, setSearchParams] = useSearchParams();
   const [planSpan, setPlanSpan] = useState<PlanSpan>('week');
+  const filter = parseUpcomingSection(searchParams.get('section'));
   const scheduled = scheduledUpcomingItems(snapshot.items, currentDate, planSpan);
   const undated = undatedUpcomingItems(snapshot.items);
   const waiting = waitingItems(snapshot.items);
+  const scheduledGroups = useMemo(
+    () => groupScheduledItems(scheduled),
+    [scheduled],
+  );
+
+  const handleFilterChange = (nextFilter: 'scheduled' | 'undated' | 'waiting') => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set('section', nextFilter);
+    setSearchParams(nextSearchParams);
+  };
 
   return (
     <div className="stack">
@@ -49,20 +60,20 @@ export function UpcomingView({ currentDate, onOpenItem, snapshot }: UpcomingView
           ) : null}
         </div>
         <div className="chip-row">
-          <button className={`chip ${filter === 'scheduled' ? 'active' : ''}`} onClick={() => setFilter('scheduled')} type="button">
+          <button className={`chip ${filter === 'scheduled' ? 'active' : ''}`} onClick={() => handleFilterChange('scheduled')} type="button">
             Scheduled {scheduled.length ? `(${scheduled.length})` : ''}
           </button>
-          <button className={`chip ${filter === 'undated' ? 'active' : ''}`} onClick={() => setFilter('undated')} type="button">
+          <button className={`chip ${filter === 'undated' ? 'active' : ''}`} onClick={() => handleFilterChange('undated')} type="button">
             Undated {undated.length ? `(${undated.length})` : ''}
           </button>
-          <button className={`chip ${filter === 'waiting' ? 'active' : ''}`} onClick={() => setFilter('waiting')} type="button">
+          <button className={`chip ${filter === 'waiting' ? 'active' : ''}`} onClick={() => handleFilterChange('waiting')} type="button">
             Waiting on {waiting.length ? `(${waiting.length})` : ''}
           </button>
         </div>
         {filter === 'scheduled' ? (
-          groupScheduledItems(scheduled).length ? (
+          scheduledGroups.length ? (
             <div className="stack">
-              {groupScheduledItems(scheduled).map((group) => (
+              {scheduledGroups.map((group) => (
                 <div className="stack compact" key={group.date}>
                   <div className="eyebrow">{group.date}</div>
                   <div className="item-list">

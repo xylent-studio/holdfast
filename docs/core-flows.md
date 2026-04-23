@@ -58,6 +58,15 @@ Rules:
 - `Inbox` is the fallback for uncertainty, not the mandatory funnel for every add
 - direct placement should win when destination is already obvious
 - `Now` should be intentional, not the default for everything
+- the primary Add submit should follow the current surface:
+  - `Now` -> `Add to Now`
+  - `Upcoming > Scheduled` -> `Schedule`
+  - `Upcoming > Undated` -> `Keep in Upcoming`
+  - `Upcoming > Waiting on` -> `Add to Waiting on`
+  - `List` -> `Add to <list>`
+  - global surfaces -> `Save to Inbox`
+- `Choose another place` should expose `Now`, `Scheduled`, `Undated`, `Waiting on`, pinned lists, and `New list...`
+- Add can quick-create a new list and use the captured draft as the first list item
 - `Upcoming` should surface dated items as `Scheduled` and undated items as `Undated`
 - original source context should survive reshaping
 
@@ -79,7 +88,7 @@ Rules:
 - notes in play
 - tasks in play
 - overdue pressure
-- near-term scheduled items
+- due-today planned work whose scheduled date has arrived
 
 The point is context, not one flat backlog.
 
@@ -108,9 +117,11 @@ Rules:
 
 - list items stay attached to their list surface by default
 - they become top-level tasks only through explicit promotion
+- a capture can be sent to a list, preserving `sourceItemId`, while the original capture archives out of active circulation
 - recurring checklists should grow toward template-plus-run behavior
 - reference collections should preserve things without pretending everything is actionable
-- Review can create a new list surface without adding a new top-level navigation model
+- Review can create a new empty list surface without adding a new top-level navigation model
+- Add can also quick-create a new list when the captured draft clearly belongs there
 
 ## 6. Review and retrieval
 

@@ -1384,6 +1384,46 @@ export async function createList(input: CreateListInput): Promise<string> {
   return record.id;
 }
 
+async function nextListItemPosition(listId: string): Promise<number> {
+  const existingItems = await db.listItems.where('listId').equals(listId).toArray();
+  return (
+    existingItems
+      .filter((item) => !item.deletedAt)
+      .reduce((max, item) => Math.max(max, item.position), -1) + 1
+  );
+}
+
+export async function createListWithFirstItem(
+  input: CreateListInput,
+  firstItem: Omit<CreateListItemInput, 'listId'>,
+): Promise<string> {
+  const listRecord = createListRecord(input);
+  const listItemRecord = createListItemRecord(
+    {
+      ...firstItem,
+      listId: listRecord.id,
+    },
+    0,
+  );
+
+  await db.transaction('rw', db.lists, db.listItems, db.mutationQueue, async () => {
+    await db.lists.add(listRecord);
+    await db.listItems.add(listItemRecord);
+    await queueMutation(
+      createMutationRecord('list', listRecord.id, 'list.created', {
+        list: listRecord,
+      }),
+    );
+    await queueMutation(
+      createMutationRecord('listItem', listItemRecord.id, 'list-item.created', {
+        listItem: listItemRecord,
+      }),
+    );
+  });
+
+  return listRecord.id;
+}
+
 export async function createListItem(
   input: CreateListItemInput,
 ): Promise<void> {
@@ -1398,15 +1438,7 @@ export async function createListItem(
         return;
       }
 
-      const existingItems = await db.listItems
-        .where('listId')
-        .equals(input.listId)
-        .toArray();
-      const position =
-        input.position ??
-        existingItems
-          .filter((item) => !item.deletedAt)
-          .reduce((max, item) => Math.max(max, item.position), -1) + 1;
+      const position = input.position ?? (await nextListItemPosition(input.listId));
       const record = createListItemRecord(input, position);
 
       await db.listItems.add(record);
@@ -1417,6 +1449,127 @@ export async function createListItem(
       );
     },
   );
+}
+
+export async function sendInboxCaptureToList(
+  itemId: string,
+  listId: string,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.items,
+    db.lists,
+    db.listItems,
+    db.mutationQueue,
+    async () => {
+      const [item, list] = await Promise.all([
+        db.items.get(itemId),
+        db.lists.get(listId),
+      ]);
+      if (
+        !item ||
+        item.deletedAt ||
+        item.kind !== 'capture' ||
+        !list ||
+        list.deletedAt
+      ) {
+        return;
+      }
+
+      const timestamp = nowIso();
+      const position = await nextListItemPosition(listId);
+      const listItem = createListItemRecord(
+        {
+          listId,
+          title: item.title,
+          body: item.body,
+          sourceItemId: item.id,
+        },
+        position,
+      );
+      const archivedItem = ItemRecordSchema.parse({
+        ...item,
+        status: 'archived',
+        archivedAt: item.archivedAt ?? timestamp,
+        updatedAt: timestamp,
+        syncState: 'pending',
+      });
+
+      await db.listItems.add(listItem);
+      await db.items.put(archivedItem);
+      await queueMutation(
+        createMutationRecord('listItem', listItem.id, 'list-item.created', {
+          listItem,
+        }),
+      );
+      await queueMutation(
+        createMutationRecord('item', item.id, 'item.updated', {
+          item: archivedItem,
+        }),
+      );
+    },
+  );
+}
+
+export async function sendInboxCaptureToNewList(
+  itemId: string,
+  input: CreateListInput,
+): Promise<string | null> {
+  const listRecord = createListRecord(input);
+
+  await db.transaction(
+    'rw',
+    db.items,
+    db.lists,
+    db.listItems,
+    db.mutationQueue,
+    async () => {
+      const item = await db.items.get(itemId);
+      if (!item || item.deletedAt || item.kind !== 'capture') {
+        return;
+      }
+
+      const timestamp = nowIso();
+      const listItem = createListItemRecord(
+        {
+          listId: listRecord.id,
+          title: item.title,
+          body: item.body,
+          sourceItemId: item.id,
+        },
+        0,
+      );
+      const archivedItem = ItemRecordSchema.parse({
+        ...item,
+        status: 'archived',
+        archivedAt: item.archivedAt ?? timestamp,
+        updatedAt: timestamp,
+        syncState: 'pending',
+      });
+
+      await db.lists.add(listRecord);
+      await db.listItems.add(listItem);
+      await db.items.put(archivedItem);
+      await queueMutation(
+        createMutationRecord('list', listRecord.id, 'list.created', {
+          list: listRecord,
+        }),
+      );
+      await queueMutation(
+        createMutationRecord('listItem', listItem.id, 'list-item.created', {
+          listItem,
+        }),
+      );
+      await queueMutation(
+        createMutationRecord('item', item.id, 'item.updated', {
+          item: archivedItem,
+        }),
+      );
+    },
+  );
+
+  const createdList = await db.lists.get(listRecord.id);
+  return createdList ? listRecord.id : null;
 }
 
 export async function updateList(

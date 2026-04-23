@@ -135,28 +135,6 @@ export function conflictedListItems<T extends ListItemRecord>(
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-export function nextScheduledItems<T extends ItemRecord>(
-  items: T[],
-  currentDate: string,
-  limit = 4,
-): T[] {
-  return items
-    .filter(
-      (item) =>
-        !item.deletedAt &&
-        item.kind !== 'capture' &&
-        item.status === 'upcoming' &&
-        !!item.scheduledDate &&
-        item.scheduledDate > currentDate,
-    )
-    .sort((left, right) =>
-      `${left.scheduledDate ?? ''}${left.scheduledTime ?? ''}`.localeCompare(
-        `${right.scheduledDate ?? ''}${right.scheduledTime ?? ''}`,
-      ),
-    )
-    .slice(0, limit);
-}
-
 export function scheduledUpcomingItems<T extends ItemRecord>(
   items: T[],
   currentDate: string,
@@ -168,6 +146,8 @@ export function scheduledUpcomingItems<T extends ItemRecord>(
         !item.deletedAt &&
         item.kind !== 'capture' &&
         item.status === 'upcoming' &&
+        Boolean(item.scheduledDate) &&
+        item.scheduledDate > currentDate &&
         inWindow(item.scheduledDate, currentDate, span),
     )
     .sort((left, right) =>

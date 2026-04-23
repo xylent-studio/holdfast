@@ -176,6 +176,10 @@ Notes do not use Done as their normal terminal state unless the product explicit
 
 Capture is not a mandatory permanent state. It is a preservation-first entry state.
 
+When a capture becomes a list item:
+- the list item should preserve the original capture id as `sourceItemId`
+- the original capture should archive out of active circulation instead of lingering as a duplicate open thing
+
 The product should not require the user to decide task-versus-note before the thought is safely caught.
 
 ## Scheduling Relationship
@@ -185,7 +189,9 @@ Scheduling is not a separate state by itself. It is additional context that affe
 A scheduled item typically lives in:
 
 - Upcoming before the relevant day
-- Now when it becomes current
+- Now when the scheduled date arrives
+
+Future-scheduled items should not appear in both surfaces at once.
 
 Upcoming should be surfaced as:
 
@@ -196,8 +202,9 @@ Upcoming should be surfaced as:
 The UI should favor outcome language such as:
 
 - Schedule
-- Plan for later
+- Keep in Upcoming
 - Move to Now
+- Save to Inbox
 
 It should avoid exposing raw timing structures as the primary user concept.
 

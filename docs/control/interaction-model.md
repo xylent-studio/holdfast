@@ -178,8 +178,10 @@ Capture should not require:
 
 The default Add surface should:
 - start with a single calm text entry point
-- save to Inbox when destination is not yet clear
-- reveal direct placement controls only when the user is intentionally placing something now
+- default its primary submit to the current surface when the destination is already obvious
+- keep `Save to Inbox` available as the calm fallback when destination is unclear
+- reveal `Choose another place` only after the draft is safely caught
+- expose `Now`, `Scheduled`, `Undated`, `Waiting on`, pinned lists, and `New list...` as alternate destinations
 - avoid turning capture into filing
 
 ## List and object surface rules
@@ -191,7 +193,8 @@ Lists should be accessed through:
 - pinned surfaces when repeated access is warranted
 - Review and search for retrieval
 
-Review can also be the lightweight place to start a new list surface when the user is intentionally creating one.
+Review can also be the lightweight place to start a new empty list surface when the user is intentionally creating one.
+Add can quick-create a list only when the user intentionally chooses `New list...` as the destination for the current draft.
 
 Lists should not:
 - casually create a `Lists` nav tab just because the data model can support one

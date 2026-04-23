@@ -1,87 +1,115 @@
 import { useMemo, useState } from 'react';
 
 import {
+  addContextDescription,
   buildQuickAddDraft,
+  destinationActionLabel,
+  destinationLabel,
+  isContextDestination,
+  primaryAddDestinationForContext,
   planQuickAddItem,
   splitCapturedText,
-  type QuickAddPlacement,
-  type QuickAddTimingMode,
+  type AddContext,
+  type AddDestination,
 } from '@/domain/logic/capture';
 import type { DateKey } from '@/domain/dates';
+import type { ListKind } from '@/domain/schemas/records';
 import {
   createItem,
   createListItem,
+  createListWithFirstItem,
   type HoldfastSnapshot,
 } from '@/storage/local/api';
 import { Modal } from '@/shared/ui/Modal';
 
+import { ListCreatorFields } from '@/features/lists/ListCreatorFields';
+
 interface QuickAddDialogProps {
+  context: AddContext;
   currentDate: DateKey;
+  currentListId?: string | null;
   isOpen: boolean;
   lists: HoldfastSnapshot['lists'];
   onClose: () => void;
-  preferredListId?: string | null;
-  preferredPlacement?: QuickAddPlacement | null;
+  onOpenList: (listId: string) => void;
 }
 
-type DirectTarget =
-  | {
-      type: 'list';
-      listId: string;
-    }
-  | {
-      type: QuickAddPlacement;
-    };
-
 interface QuickAddDialogBodyProps {
+  context: AddContext;
   currentDate: DateKey;
+  currentListId: string | null;
   lists: HoldfastSnapshot['lists'];
   onClose: () => void;
-  preferredListId: string | null;
-  preferredPlacement: QuickAddPlacement | null;
+  onOpenList: (listId: string) => void;
 }
 
 function QuickAddDialogBody({
+  context,
   currentDate,
+  currentListId,
   lists,
   onClose,
-  preferredListId,
-  preferredPlacement,
+  onOpenList,
 }: QuickAddDialogBodyProps) {
-  const defaults = useMemo(
-    () => buildQuickAddDraft(currentDate, preferredPlacement),
-    [currentDate, preferredPlacement],
-  );
-  const preferredList =
-    lists.find((entry) => entry.id === preferredListId && !entry.deletedAt) ?? null;
-  const availableLists = lists.filter(
-    (entry) =>
-      !entry.deletedAt &&
-      (entry.pinned || entry.id === preferredListId),
-  );
+  const defaults = useMemo(() => buildQuickAddDraft(currentDate), [currentDate]);
+  const currentList =
+    lists.find((entry) => entry.id === currentListId && !entry.deletedAt) ?? null;
+  const availableLists = useMemo(() => {
+    const ordered = [
+      ...(currentList ? [currentList] : []),
+      ...lists.filter(
+        (entry) => !entry.deletedAt && entry.pinned && entry.id !== currentListId,
+      ),
+    ];
+
+    return ordered;
+  }, [currentList, currentListId, lists]);
+  const primaryDestination = primaryAddDestinationForContext(context);
   const [rawText, setRawText] = useState('');
   const [showDestinationPicker, setShowDestinationPicker] = useState(false);
-  const [target, setTarget] = useState<DirectTarget>(
-    preferredList
-      ? { type: 'list', listId: preferredList.id }
-      : {
-          type: preferredPlacement ?? defaults.placement,
-        },
+  const [selectedDestination, setSelectedDestination] = useState<AddDestination>(
+    primaryDestination,
   );
-  const [timingMode, setTimingMode] = useState<QuickAddTimingMode>(
-    defaults.timingMode,
+  const [selectedListId, setSelectedListId] = useState<string | null>(
+    currentList?.id ?? availableLists[0]?.id ?? null,
   );
   const [chosenDate, setChosenDate] = useState<DateKey>(defaults.chosenDate);
   const [chosenTime, setChosenTime] = useState(defaults.chosenTime);
+  const [newListTitle, setNewListTitle] = useState('');
+  const [newListKind, setNewListKind] = useState<ListKind>('project');
+
+  const parsed = splitCapturedText(rawText);
+  const canSubmit = Boolean(parsed);
+  const activeDestination = showDestinationPicker
+    ? selectedDestination
+    : primaryDestination;
+  const currentListTitle = currentList?.title ?? null;
+  const selectedListTitle =
+    availableLists.find((entry) => entry.id === selectedListId)?.title ??
+    currentListTitle;
+
+  const primaryActionLabel = destinationActionLabel(
+    primaryDestination,
+    currentListTitle,
+  );
+  const selectedActionLabel = destinationActionLabel(
+    selectedDestination,
+    selectedListTitle,
+  );
+
+  const contextCaptureMode = (destination: AddDestination) =>
+    isContextDestination(context, destination, {
+      currentListId,
+      selectedListId,
+    })
+      ? 'context'
+      : 'direct';
 
   const handleSaveToInbox = async (): Promise<void> => {
     const planned = planQuickAddItem({
       rawText,
       currentDate,
-      shapeNow: false,
-      kind: 'task',
-      placement: 'today',
-      timingMode,
+      destination: 'inbox',
       chosenDate,
       chosenTime,
     });
@@ -94,35 +122,16 @@ function QuickAddDialogBody({
     onClose();
   };
 
-  const handlePlaceInTarget = async (directTarget: DirectTarget): Promise<void> => {
-    const parsed = splitCapturedText(rawText);
-    if (!parsed) {
-      return;
-    }
-
-    if (directTarget.type === 'list') {
-      await createListItem({
-        listId: directTarget.listId,
-        title: parsed.title,
-        body: parsed.body,
-      });
-      onClose();
-      return;
-    }
-
+  const handleCreateItem = async (
+    destination: Exclude<AddDestination, 'list' | 'new-list'>,
+  ): Promise<void> => {
     const planned = planQuickAddItem({
       rawText,
       currentDate,
-      shapeNow: true,
-      kind: 'task',
-      placement: directTarget.type,
-      timingMode,
+      destination,
       chosenDate,
       chosenTime,
-      captureMode:
-        preferredPlacement && preferredPlacement === directTarget.type
-          ? 'context'
-          : 'direct',
+      captureMode: contextCaptureMode(destination),
     });
 
     if (!planned) {
@@ -133,43 +142,68 @@ function QuickAddDialogBody({
     onClose();
   };
 
-  const directTargetLabel =
-    target.type === 'list'
-      ? preferredList?.title ??
-        availableLists.find((entry) => entry.id === target.listId)?.title ??
-        'This list'
-      : target.type === 'today'
-        ? 'Now'
-        : 'Upcoming';
-  const contextualTarget = preferredList
-    ? ({ type: 'list', listId: preferredList.id } as const)
-    : preferredPlacement
-      ? ({ type: preferredPlacement } as const)
-      : null;
-  const contextualActionLabel =
-    contextualTarget?.type === 'list'
-      ? `Add to ${preferredList?.title ?? 'This list'}`
-      : contextualTarget?.type === 'today'
-        ? 'Add to Now'
-        : contextualTarget?.type === 'upcoming'
-          ? 'Add to Upcoming'
-          : null;
-  const canSubmit = Boolean(splitCapturedText(rawText));
+  const handleAddToExistingList = async (): Promise<void> => {
+    if (!parsed || !selectedListId) {
+      return;
+    }
+
+    await createListItem({
+      body: parsed.body,
+      listId: selectedListId,
+      title: parsed.title,
+    });
+    onClose();
+  };
+
+  const handleCreateListFromDraft = async (): Promise<void> => {
+    if (!parsed || !newListTitle.trim()) {
+      return;
+    }
+
+    const listId = await createListWithFirstItem(
+      {
+        title: newListTitle.trim(),
+        kind: newListKind,
+        lane: 'admin',
+      },
+      {
+        title: parsed.title,
+        body: parsed.body,
+      },
+    );
+
+    onClose();
+    onOpenList(listId);
+  };
+
+  const handleSubmitDestination = async (
+    destination: AddDestination,
+  ): Promise<void> => {
+    if (destination === 'list') {
+      await handleAddToExistingList();
+      return;
+    }
+
+    if (destination === 'new-list') {
+      await handleCreateListFromDraft();
+      return;
+    }
+
+    await handleCreateItem(destination);
+  };
+
+  const showSaveToInboxSecondary = primaryDestination !== 'inbox';
+  const showScheduleFields = activeDestination === 'scheduled';
+  const currentListOptionLabel = currentList
+    ? destinationLabel('list', currentList.title)
+    : null;
 
   return (
     <div className="dialog-stack">
       <div>
         <div className="eyebrow">Capture</div>
         <h2>Add</h2>
-        <p>
-          {preferredList
-            ? `You're already in ${preferredList.title}. Catch it here or fall back to Inbox.`
-            : preferredPlacement === 'today'
-              ? 'You are already in Now. Catch it here or fall back to Inbox.'
-              : preferredPlacement === 'upcoming'
-                ? 'You are already in Upcoming. Catch it here or fall back to Inbox.'
-                : 'Catch it first. Place it now only when the destination is already clear.'}
-        </p>
+        <p>{addContextDescription(context, currentListTitle)}</p>
       </div>
 
       <label className="field-stack">
@@ -186,89 +220,106 @@ function QuickAddDialogBody({
       {showDestinationPicker ? (
         <>
           <div className="field-stack">
-            <span>Place in</span>
+            <span>Choose another place</span>
             <div className="chip-row">
-              <button
-                className={`chip ${target.type === 'today' ? 'active' : ''}`}
-                onClick={() => setTarget({ type: 'today' })}
-                type="button"
-              >
-                Now
-              </button>
-              <button
-                className={`chip ${target.type === 'upcoming' ? 'active' : ''}`}
-                onClick={() => setTarget({ type: 'upcoming' })}
-                type="button"
-              >
-                Upcoming
-              </button>
-              {availableLists.map((list) => (
+              {(
+                ['now', 'scheduled', 'undated', 'waiting'] as const
+              ).map((destination) => (
                 <button
                   className={`chip ${
-                    target.type === 'list' && target.listId === list.id
+                    selectedDestination === destination ? 'active' : ''
+                  }`}
+                  key={destination}
+                  onClick={() => setSelectedDestination(destination)}
+                  type="button"
+                >
+                  {destinationLabel(destination)}
+                </button>
+              ))}
+              {currentList ? (
+                <button
+                  className={`chip ${
+                    selectedDestination === 'list' &&
+                    selectedListId === currentList.id
                       ? 'active'
                       : ''
                   }`}
-                  key={list.id}
-                  onClick={() => setTarget({ type: 'list', listId: list.id })}
+                  onClick={() => {
+                    setSelectedDestination('list');
+                    setSelectedListId(currentList.id);
+                  }}
                   type="button"
                 >
-                  {list.title}
+                  {currentListOptionLabel}
                 </button>
-              ))}
+              ) : null}
+              {availableLists
+                .filter((entry) => entry.id !== currentList?.id)
+                .map((list) => (
+                  <button
+                    className={`chip ${
+                      selectedDestination === 'list' && selectedListId === list.id
+                        ? 'active'
+                        : ''
+                    }`}
+                    key={list.id}
+                    onClick={() => {
+                      setSelectedDestination('list');
+                      setSelectedListId(list.id);
+                    }}
+                    type="button"
+                  >
+                    {list.title}
+                  </button>
+                ))}
+              <button
+                className={`chip ${selectedDestination === 'new-list' ? 'active' : ''}`}
+                onClick={() => setSelectedDestination('new-list')}
+                type="button"
+              >
+                {destinationLabel('new-list')}
+              </button>
             </div>
           </div>
 
-          {target.type === 'upcoming' ? (
-            <>
-              <div className="field-stack">
-                <span>When</span>
-                <div className="chip-row">
-                  {(
-                    [
-                      ['tomorrow', 'Tomorrow'],
-                      ['thisweek', 'This week'],
-                      ['nextweek', 'Next week'],
-                      ['date', 'Pick date'],
-                      ['someday', 'No date'],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      className={`chip ${timingMode === value ? 'active' : ''}`}
-                      key={value}
-                      onClick={() => setTimingMode(value)}
-                      type="button"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {timingMode === 'date' ? (
-                <label className="field-stack">
-                  <span>Date</span>
-                  <input
-                    onChange={(event) =>
-                      setChosenDate(event.target.value as DateKey)
-                    }
-                    type="date"
-                    value={chosenDate}
-                  />
-                </label>
-              ) : null}
-              {timingMode !== 'someday' ? (
-                <label className="field-stack">
-                  <span>Time</span>
-                  <input
-                    onChange={(event) => setChosenTime(event.target.value)}
-                    type="time"
-                    value={chosenTime}
-                  />
-                </label>
-              ) : null}
-            </>
+          {selectedDestination === 'list' && !selectedListId ? (
+            <div className="empty-inline">
+              Pin a list or create a new one before sending this there.
+            </div>
+          ) : null}
+
+          {selectedDestination === 'new-list' ? (
+            <div className="item-card day-result">
+              <ListCreatorFields
+                kind={newListKind}
+                onKindChange={setNewListKind}
+                onTitleChange={setNewListTitle}
+                title={newListTitle}
+              />
+            </div>
           ) : null}
         </>
+      ) : null}
+
+      {showScheduleFields ? (
+        <div className="grid two">
+          <label className="field-stack">
+            <span>Date</span>
+            <input
+              onChange={(event) => setChosenDate(event.target.value as DateKey)}
+              type="date"
+              value={chosenDate}
+            />
+          </label>
+          <label className="field-stack">
+            <span>Time</span>
+            <input
+              onChange={(event) => setChosenTime(event.target.value)}
+              type="time"
+              value={chosenTime}
+            />
+          </label>
+        </div>
       ) : null}
 
       <div className="dialog-actions spread">
@@ -285,43 +336,56 @@ function QuickAddDialogBody({
               >
                 Back
               </button>
+              {showSaveToInboxSecondary ? (
+                <button
+                  className="button ghost"
+                  disabled={!canSubmit}
+                  onClick={() => void handleSaveToInbox()}
+                  type="button"
+                >
+                  Save to Inbox
+                </button>
+              ) : null}
               <button
                 className="button accent"
-                disabled={!canSubmit}
-                onClick={() => void handlePlaceInTarget(target)}
+                disabled={
+                  !canSubmit ||
+                  (selectedDestination === 'list' && !selectedListId) ||
+                  (selectedDestination === 'new-list' && !newListTitle.trim())
+                }
+                onClick={() => void handleSubmitDestination(selectedDestination)}
                 type="button"
               >
-                {target.type === 'list'
-                  ? `Add to ${directTargetLabel}`
-                  : target.type === 'today'
-                    ? 'Add to Now'
-                    : 'Add to Upcoming'}
+                {selectedActionLabel}
               </button>
             </>
           ) : (
             <>
-              <button
-                className="button accent"
-                disabled={!canSubmit}
-                onClick={() => void handleSaveToInbox()}
-                type="button"
-              >
-                Save to Inbox
-              </button>
-              {contextualTarget && contextualActionLabel ? (
+              {showSaveToInboxSecondary ? (
                 <button
                   className="button ghost"
                   disabled={!canSubmit}
-                  onClick={() => void handlePlaceInTarget(contextualTarget)}
+                  onClick={() => void handleSaveToInbox()}
                   type="button"
                 >
-                  {contextualActionLabel}
+                  Save to Inbox
                 </button>
               ) : null}
               <button
+                className="button accent"
+                disabled={!canSubmit}
+                onClick={() => void handleSubmitDestination(primaryDestination)}
+                type="button"
+              >
+                {primaryActionLabel}
+              </button>
+              <button
                 className="button ghost"
                 disabled={!canSubmit}
-                onClick={() => setShowDestinationPicker(true)}
+                onClick={() => {
+                  setSelectedDestination(primaryDestination);
+                  setShowDestinationPicker(true);
+                }}
                 type="button"
               >
                 Choose another place
@@ -335,12 +399,13 @@ function QuickAddDialogBody({
 }
 
 export function QuickAddDialog({
+  context,
   currentDate,
+  currentListId = null,
   isOpen,
   lists,
   onClose,
-  preferredListId = null,
-  preferredPlacement = null,
+  onOpenList,
 }: QuickAddDialogProps) {
   if (!isOpen) {
     return null;
@@ -349,12 +414,13 @@ export function QuickAddDialog({
   return (
     <Modal isOpen onClose={onClose} title="Add">
       <QuickAddDialogBody
+        context={context}
         currentDate={currentDate}
-        key={`${currentDate}-${preferredPlacement ?? preferredListId ?? 'inbox'}`}
+        currentListId={currentListId}
+        key={`${currentDate}-${context}-${currentListId ?? 'global'}`}
         lists={lists}
         onClose={onClose}
-        preferredListId={preferredListId}
-        preferredPlacement={preferredPlacement}
+        onOpenList={onOpenList}
       />
     </Modal>
   );
