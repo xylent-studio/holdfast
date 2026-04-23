@@ -1371,7 +1371,7 @@ export async function createRoutine(): Promise<void> {
   });
 }
 
-export async function createList(input: CreateListInput): Promise<void> {
+export async function createList(input: CreateListInput): Promise<string> {
   const record = createListRecord(input);
 
   await db.transaction('rw', db.lists, db.mutationQueue, async () => {
@@ -1380,6 +1380,8 @@ export async function createList(input: CreateListInput): Promise<void> {
       createMutationRecord('list', record.id, 'list.created', { list: record }),
     );
   });
+
+  return record.id;
 }
 
 export async function createListItem(

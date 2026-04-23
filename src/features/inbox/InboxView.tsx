@@ -19,9 +19,7 @@ export function InboxView({
   onOpenItem,
   snapshot,
 }: InboxViewProps) {
-  const [filter, setFilter] = useState<'unsorted' | 'open' | 'archived'>(
-    'unsorted',
-  );
+  const [filter, setFilter] = useState<'unsorted' | 'archived'>('unsorted');
   const items = inboxItems(snapshot.items, filter);
   const focusIds = new Set(snapshot.currentDay.focusItemIds);
 
@@ -36,7 +34,6 @@ export function InboxView({
           {(
             [
               ['unsorted', 'Unsorted'],
-              ['open', 'All open'],
               ['archived', 'Archived'],
             ] as const
           ).map(([value, label]) => (

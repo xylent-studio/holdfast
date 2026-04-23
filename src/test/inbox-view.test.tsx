@@ -158,4 +158,34 @@ describe('InboxView', () => {
     ).not.toBeInTheDocument();
     expect(screen.getAllByText('Capture')).not.toHaveLength(0);
   });
+
+  it('stays scoped to Inbox items instead of leaking all open work', () => {
+    const inboxItem = makeCaptureItem();
+    const nowItem: ItemWithAttachments = {
+      ...makeCaptureItem(),
+      id: crypto.randomUUID(),
+      title: 'Already in Now',
+      kind: 'task',
+      status: 'today',
+      captureMode: null,
+      sourceText: null,
+    };
+
+    render(
+      <InboxView
+        currentDate="2026-04-19"
+        onOpenItem={vi.fn()}
+        snapshot={{
+          ...makeSnapshot(inboxItem),
+          items: [inboxItem, nowItem],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Receipt and reminder')).toBeInTheDocument();
+    expect(screen.queryByText('Already in Now')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'All open' }),
+    ).not.toBeInTheDocument();
+  });
 });

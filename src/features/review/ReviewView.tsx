@@ -12,7 +12,7 @@ import {
   reviewListSummaries,
   searchWorkspace,
 } from '@/domain/logic/selectors';
-import type { HoldfastSnapshot } from '@/storage/local/api';
+import { createList, type HoldfastSnapshot } from '@/storage/local/api';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
 import { Panel } from '@/shared/ui/Panel';
@@ -33,6 +33,10 @@ export function ReviewView({
   snapshot,
 }: ReviewViewProps) {
   const [search, setSearch] = useState('');
+  const [isCreatingList, setIsCreatingList] = useState(false);
+  const [listTitle, setListTitle] = useState('');
+  const [listCreateBusy, setListCreateBusy] = useState(false);
+  const [listCreateError, setListCreateError] = useState<string | null>(null);
   const repeated = useMemo(
     () => repeatedOpenTitles(snapshot.items),
     [snapshot.items],
@@ -79,6 +83,50 @@ export function ReviewView({
     () => reviewListSummaries(snapshot.lists, snapshot.listItems),
     [snapshot.listItems, snapshot.lists],
   );
+
+  const handleOpenListCreator = (): void => {
+    setIsCreatingList(true);
+    setListCreateError(null);
+  };
+
+  const handleCancelListCreator = (): void => {
+    if (listCreateBusy) {
+      return;
+    }
+
+    setIsCreatingList(false);
+    setListTitle('');
+    setListCreateError(null);
+  };
+
+  const handleCreateList = async (): Promise<void> => {
+    const title = listTitle.trim();
+    if (!title) {
+      return;
+    }
+
+    setListCreateBusy(true);
+    setListCreateError(null);
+
+    try {
+      const listId = await createList({
+        title,
+        kind: 'project',
+        lane: 'admin',
+      });
+      setListTitle('');
+      setIsCreatingList(false);
+      onOpenList(listId);
+    } catch (error) {
+      setListCreateError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Couldn't create this list yet.",
+      );
+    } finally {
+      setListCreateBusy(false);
+    }
+  };
 
   return (
     <div className="stack">
@@ -287,10 +335,62 @@ export function ReviewView({
       ) : null}
 
       <Panel>
-        <div className="panel-header">
-          <h2>Lists</h2>
-          <p>Pinned and active list surfaces you can return to quickly.</p>
+        <div className="panel-header split">
+          <div>
+            <h2>Lists</h2>
+            <p>Pinned and active list surfaces you can return to quickly.</p>
+          </div>
+          <div className="dialog-actions">
+            <button
+              className="button ghost small"
+              onClick={() => handleOpenListCreator()}
+              type="button"
+            >
+              New list
+            </button>
+          </div>
         </div>
+        {isCreatingList ? (
+          <div className="item-card day-result">
+            <label className="field-stack">
+              <span>Title</span>
+              <input
+                autoFocus
+                onChange={(event) => setListTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void handleCreateList();
+                  }
+                }}
+                placeholder="Groceries, project, or reference"
+                type="text"
+                value={listTitle}
+              />
+            </label>
+            {listCreateError ? (
+              <p className="auth-feedback danger">{listCreateError}</p>
+            ) : null}
+            <div className="dialog-actions spread">
+              <button
+                className="button ghost"
+                disabled={listCreateBusy}
+                onClick={() => handleCancelListCreator()}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="button accent"
+                disabled={!listTitle.trim() || listCreateBusy}
+                onClick={() => void handleCreateList()}
+                type="button"
+              >
+                {listCreateBusy ? 'Creating...' : 'Create list'}
+              </button>
+            </div>
+          </div>
+        ) : null}
         {listSummaries.length ? (
           <div className="grid two">
             {listSummaries.map((entry) => (

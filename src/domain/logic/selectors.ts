@@ -16,7 +16,7 @@ import type {
   ListRecord,
 } from '@/domain/schemas/records';
 
-export type InboxFilter = 'unsorted' | 'open' | 'archived';
+export type InboxFilter = 'unsorted' | 'archived';
 export type UpcomingFilter = 'scheduled' | 'undated' | 'waiting';
 export type PlanSpan = 'day' | 'week' | 'month';
 export type ReviewableItem = ItemRecord & {
@@ -204,10 +204,6 @@ export function inboxItems<T extends ItemRecord>(
     return items.filter(
       (item) => item.status === 'archived' && !item.deletedAt,
     );
-  }
-
-  if (filter === 'open') {
-    return openItems(items);
   }
 
   return items.filter((item) => item.status === 'inbox' && !item.deletedAt);

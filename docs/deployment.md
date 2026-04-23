@@ -22,6 +22,8 @@ As of April 23, 2026, after a fresh manual hosted validation pass:
 
 These hosted claims are not continuously proven by the default GitHub Actions CI job. The repo has hosted auth/sync smoke coverage, but those suites are env-gated because they need real hosted URLs and secrets. Re-run the hosted smoke commands before relying on the hosted state after unrelated changes.
 
+The repo now also includes `.github/workflows/hosted-validation.yml` for scheduled or manual hosted verification when the required GitHub secrets are configured.
+
 ## Chosen Hosting Direction
 
 - frontend hosting: Cloudflare Pages
@@ -210,6 +212,19 @@ Current repo/backend foundation already includes:
 2. Use the staging project for hosted auth, sync, shell, and offline smoke before production.
 3. Keep the production project deployed from the repo helper: `npm run cf:pages:prod:deploy`.
 4. Run hosted smoke tests across validation, staging, and production hostnames as appropriate.
+
+## GitHub Hosted Validation Secrets
+
+To let GitHub Actions run the hosted staging and production smoke lane, configure:
+
+- `CLOUDFLARE_API_TOKEN`
+- `SUPABASE_ACCESS_TOKEN`
+- `PLAYWRIGHT_STAGING_SUPABASE_URL`
+- `PLAYWRIGHT_STAGING_SUPABASE_ANON_KEY`
+- `PLAYWRIGHT_PROD_SUPABASE_URL`
+- `PLAYWRIGHT_PROD_SUPABASE_ANON_KEY`
+
+That secret-backed workflow is separate from the default CI job on purpose. Default CI stays secretless and fast; hosted validation proves the real staged and production lanes.
 5. Promote risky auth/sync changes from staging to production only after the staging lane passes.
 6. Verify service-worker install/update and offline shell behavior on the hosted build.
 7. Run broader multi-device sync, offline, and attachment smoke on real accounts.

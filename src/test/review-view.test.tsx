@@ -1,10 +1,23 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
 import { ReviewView } from '@/features/review/ReviewView';
 import type { HoldfastSnapshot } from '@/storage/local/api';
 import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
+
+const createListMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/storage/local/api', async () => {
+  const actual = await vi.importActual<typeof import('@/storage/local/api')>(
+    '@/storage/local/api',
+  );
+
+  return {
+    ...actual,
+    createList: createListMock,
+  };
+});
 
 function makeSnapshot(): HoldfastSnapshot {
   return {
@@ -196,6 +209,10 @@ function makeSnapshot(): HoldfastSnapshot {
 }
 
 describe('ReviewView', () => {
+  beforeEach(() => {
+    createListMock.mockReset();
+  });
+
   it('opens item matches and lets day matches jump back into Now', () => {
     const onOpenItem = vi.fn();
     const onJumpToDate = vi.fn();
@@ -222,6 +239,36 @@ describe('ReviewView', () => {
     });
     fireEvent.click(screen.getAllByRole('button', { name: 'Open day' })[0]);
     expect(onJumpToDate).toHaveBeenCalledWith('2026-04-19');
+  });
+
+  it('creates a new list from Review and opens it immediately', async () => {
+    createListMock.mockResolvedValue('list-2');
+    const onOpenList = vi.fn();
+
+    render(
+      <ReviewView
+        currentDate="2026-04-20"
+        onJumpToDate={vi.fn()}
+        onOpenList={onOpenList}
+        onOpenItem={vi.fn()}
+        snapshot={makeSnapshot()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'New list' }));
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'Weekend prep' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create list' }));
+
+    await waitFor(() => {
+      expect(createListMock).toHaveBeenCalledWith({
+        title: 'Weekend prep',
+        kind: 'project',
+        lane: 'admin',
+      });
+      expect(onOpenList).toHaveBeenCalledWith('list-2');
+    });
   });
 
   it('turns repeating loops into search actions', () => {

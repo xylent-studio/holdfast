@@ -109,6 +109,7 @@ Rules:
 - they become top-level tasks only through explicit promotion
 - recurring checklists should grow toward template-plus-run behavior
 - reference collections should preserve things without pretending everything is actionable
+- Review can create a new list surface without adding a new top-level navigation model
 
 ## 6. Review and retrieval
 

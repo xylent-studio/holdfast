@@ -189,6 +189,8 @@ Lists should be accessed through:
 - pinned surfaces when repeated access is warranted
 - Review and search for retrieval
 
+Review can also be the lightweight place to start a new list surface when the user is intentionally creating one.
+
 Lists should not:
 - casually create a `Lists` nav tab just because the data model can support one
 - compete with Now, Inbox, Upcoming, and Review for top-level meaning
