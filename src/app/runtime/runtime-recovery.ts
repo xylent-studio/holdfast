@@ -130,6 +130,24 @@ export async function unregisterHoldfastServiceWorkers(): Promise<void> {
   );
 }
 
+function refreshCurrentLocation(): void {
+  const currentUrl = window.location.href;
+  window.setTimeout(() => {
+    window.location.replace(currentUrl);
+  }, 0);
+}
+
+function scheduleRuntimeRefresh(): void {
+  if (document.readyState === 'complete') {
+    refreshCurrentLocation();
+    return;
+  }
+
+  window.addEventListener('load', refreshCurrentLocation, {
+    once: true,
+  });
+}
+
 export async function repairRuntimeOnce(
   reason: string,
 ): Promise<'already-attempted' | 'started' | 'unsupported'> {
@@ -145,6 +163,6 @@ export async function repairRuntimeOnce(
 
   await unregisterHoldfastServiceWorkers();
   await clearHoldfastRuntimeCaches();
-  window.location.reload();
+  scheduleRuntimeRefresh();
   return 'started';
 }
