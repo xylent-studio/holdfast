@@ -45,11 +45,52 @@ function buildServiceWorkerSource(
 ): string {
   return `const BUILD_ID = ${JSON.stringify(buildId)};
 const CACHE_NAME = \`holdfast-shell-\${BUILD_ID}\`;
-const PRECACHE = ${JSON.stringify(precachePaths)};
+const SHELL_CACHE_KEYS = ['/', '/index.html'];
+const PRECACHE = ${JSON.stringify(precachePaths.filter((path) => path !== '/index.html' && path !== '/'))};
 const PRECACHE_SET = new Set(PRECACHE);
 
+async function normalizeShellResponse(response) {
+  const html = await response.text();
+  const headers = new Headers(response.headers);
+  if (!headers.has('content-type')) {
+    headers.set('content-type', 'text/html; charset=utf-8');
+  }
+
+  return new Response(html, {
+    headers,
+    status: 200,
+    statusText: 'OK',
+  });
+}
+
+async function cacheShell(cache, response) {
+  const normalized = await normalizeShellResponse(response);
+  await Promise.all(
+    SHELL_CACHE_KEYS.map((key) => cache.put(key, normalized.clone())),
+  );
+}
+
+async function matchCachedShell(cache) {
+  for (const key of SHELL_CACHE_KEYS) {
+    const cached = await cache.match(key);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  return null;
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const shellResponse = await fetch('/', { cache: 'no-store' });
+      await Promise.all([
+        cacheShell(cache, shellResponse),
+        cache.addAll(PRECACHE),
+      ]);
+    }),
+  );
   self.skipWaiting();
 });
 
@@ -93,21 +134,36 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
+      caches.open(CACHE_NAME).then((cache) =>
+        fetch(request)
+        .then(async (response) => {
           const contentType = response.headers.get('content-type') ?? '';
           if (response.ok && contentType.includes('text/html')) {
-            const clone = response.clone();
-            event.waitUntil(
-              caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone)),
-            );
+            event.waitUntil(cacheShell(cache, response.clone()));
           }
           return response;
         })
         .catch(async () => {
-          const cached = await caches.match('/index.html');
+          const cached = await matchCachedShell(cache);
           return cached || Response.error();
         }),
+      ),
+    );
+    return;
+  }
+
+  if (url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await matchCachedShell(cache);
+        if (cached) {
+          return cached;
+        }
+
+        const response = await fetch('/', { cache: 'no-store' });
+        await cacheShell(cache, response.clone());
+        return response;
+      }),
     );
     return;
   }
