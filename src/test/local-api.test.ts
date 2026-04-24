@@ -12,20 +12,25 @@ import {
   createListWithFirstItem,
   deleteList,
   deleteItem,
+  finishList,
   getHoldfastSnapshot,
+  moveListToNow,
   moveItemToNow,
   moveItemToList,
   promoteListItemToNow,
   reopenAllDoneListItems,
   removeDataFromDevice,
+  scheduleList,
   sendInboxCaptureToList,
   sendInboxCaptureToNewList,
   setItemFocus,
+  setListFocus,
   toggleTaskDone,
   updateWorkspaceState,
   updateList,
   updateListItem,
   addFilesToItem,
+  bootstrapHoldfast,
 } from '@/storage/local/api';
 import { HOLDFAST_DB_NAME, db } from '@/storage/local/db';
 
@@ -126,6 +131,63 @@ describe('capture guardrails', () => {
       scheduledDate: CURRENT_DATE,
       completedAt: null,
       archivedAt: null,
+    });
+  });
+
+  it('backfills a member workspace marker when legacy synced data exists without workspace state', async () => {
+    await createItem({
+      title: 'Already synced elsewhere',
+      kind: 'task',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: CURRENT_DATE,
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    const [item] = await db.items.toArray();
+    await db.items.put({
+      ...item!,
+      remoteRevision: 'server-item-1',
+      syncState: 'synced',
+    });
+    await db.syncState.put({
+      id: 'sync',
+      schemaVersion: 5,
+      provider: 'supabase',
+      mode: 'ready',
+      blockedReason: null,
+      lastFailureAt: null,
+      lastSyncedAt: '2026-04-19T08:00:00.000Z',
+      lastTransportError: null,
+      pullCursorByStream: {
+        items: { updatedAt: '2026-04-19T08:00:00.000Z', id: item!.id },
+        lists: { updatedAt: null, id: null },
+        listItems: { updatedAt: null, id: null },
+        dailyRecords: { updatedAt: null, id: null },
+        weeklyRecords: { updatedAt: null, id: null },
+        routines: { updatedAt: null, id: null },
+        settings: { updatedAt: null, id: null },
+        attachments: { updatedAt: null, id: null },
+        deletedRecords: { updatedAt: null, id: null },
+      },
+      createdAt: '2026-04-19T08:00:00.000Z',
+      updatedAt: '2026-04-19T08:00:00.000Z',
+    });
+
+    await db.workspaceState.clear();
+    await bootstrapHoldfast();
+
+    const snapshot = await getHoldfastSnapshot(CURRENT_DATE);
+
+    expect(snapshot.workspaceState).toMatchObject({
+      ownershipState: 'member',
+      authPromptState: 'session-expired',
+      attachState: 'attached',
     });
   });
 });
@@ -482,6 +544,110 @@ describe('list creation and capture transfer flows', () => {
       status: 'open',
       completedAt: null,
     });
+  });
+});
+
+describe('whole-list activation and finish lifecycle', () => {
+  it('can move, schedule, and focus a whole list for a specific day', async () => {
+    await createList({
+      title: 'Groceries',
+      kind: 'replenishment',
+      lane: 'home',
+    });
+
+    const [list] = await db.lists.toArray();
+
+    await scheduleList(list!.id, '2026-04-21', '09:30');
+    await moveListToNow(list!.id, CURRENT_DATE);
+    await setListFocus(CURRENT_DATE, list!.id, true);
+
+    const updatedList = await db.lists.get(list!.id);
+    const currentDay = await db.dailyRecords.get(CURRENT_DATE);
+
+    expect(updatedList).toMatchObject({
+      scheduledDate: CURRENT_DATE,
+      scheduledTime: null,
+      completedAt: null,
+    });
+    expect(currentDay?.focusListIds).toEqual([list!.id]);
+
+    await setListFocus(CURRENT_DATE, list!.id, false);
+
+    const unfocusedDay = await db.dailyRecords.get(CURRENT_DATE);
+    expect(unfocusedDay?.focusListIds).toEqual([]);
+    expect((await db.lists.get(list!.id))?.scheduledDate).toBe(CURRENT_DATE);
+  });
+
+  it('archives a reusable run snapshot and resets the live list for reuse', async () => {
+    await createList({
+      title: 'Groceries',
+      kind: 'replenishment',
+      lane: 'home',
+    });
+
+    const [list] = await db.lists.toArray();
+    await createListItem({ listId: list!.id, title: 'Eggs' });
+    await createListItem({ listId: list!.id, title: 'Coffee' });
+
+    const [eggs] = await db.listItems.where('listId').equals(list!.id).sortBy('position');
+    await updateListItem(eggs!.id, { status: 'done' });
+    await setListFocus(CURRENT_DATE, list!.id, true);
+
+    await finishList(list!.id, 'archive-run-and-reset', CURRENT_DATE);
+
+    const lists = await db.lists.toArray();
+    const liveList = lists.find((entry) => entry.id === list!.id);
+    const archivedRun = lists.find(
+      (entry) => entry.id !== list!.id && entry.archivedAt,
+    );
+    const liveItems = await db.listItems.where('listId').equals(list!.id).sortBy('position');
+    const archivedItems = archivedRun
+      ? await db.listItems.where('listId').equals(archivedRun.id).sortBy('position')
+      : [];
+    const currentDay = await db.dailyRecords.get(CURRENT_DATE);
+
+    expect(liveList).toMatchObject({
+      scheduledDate: null,
+      scheduledTime: null,
+      completedAt: null,
+      archivedAt: null,
+    });
+    expect(liveItems.map((item) => item.status)).toEqual(['open', 'open']);
+    expect(archivedRun).toMatchObject({
+      title: 'Groceries',
+      completedAt: expect.any(String),
+      archivedAt: expect.any(String),
+      scheduledDate: CURRENT_DATE,
+    });
+    expect(archivedItems.map((item) => item.status)).toEqual(['done', 'open']);
+    expect(currentDay?.focusListIds).toEqual([]);
+  });
+
+  it('can clear list items for reuse without deleting the live list', async () => {
+    await createList({
+      title: 'Weekend prep',
+      kind: 'project',
+      lane: 'admin',
+    });
+
+    const [list] = await db.lists.toArray();
+    await createListItem({ listId: list!.id, title: 'Pack charger' });
+    await moveListToNow(list!.id, CURRENT_DATE);
+
+    await finishList(list!.id, 'clear-items-for-reuse', CURRENT_DATE);
+
+    const updatedList = await db.lists.get(list!.id);
+    const remainingActiveItems = (await db.listItems.where('listId').equals(list!.id).toArray()).filter(
+      (item) => !item.deletedAt,
+    );
+
+    expect(updatedList).toMatchObject({
+      scheduledDate: null,
+      scheduledTime: null,
+      completedAt: null,
+      archivedAt: null,
+    });
+    expect(remainingActiveItems).toEqual([]);
   });
 });
 

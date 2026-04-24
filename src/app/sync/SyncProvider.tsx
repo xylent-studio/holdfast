@@ -17,23 +17,25 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(
     typeof navigator === 'undefined' ? true : navigator.onLine,
   );
-  const pendingMutationCount =
-    useLiveQuery(
-      async () =>
-        db.mutationQueue
-          .filter(
-            (mutation) =>
-              mutation.status === 'pending' || mutation.status === 'failed',
-          )
-          .count(),
-      [],
-    ) ?? 0;
+  const mutationCounts =
+    useLiveQuery(async () => {
+      const mutations = await db.mutationQueue.toArray();
+
+      return mutations.reduce(
+        (counts, mutation) => {
+          if (mutation.status === 'pending') {
+            counts.pending += 1;
+          }
+          if (mutation.status === 'failed') {
+            counts.failed += 1;
+          }
+          return counts;
+        },
+        { failed: 0, pending: 0 },
+      );
+    }, []) ?? { failed: 0, pending: 0 };
 
   const attemptSync = useEffectEvent(async () => {
-    if (!auth.session || !auth.configured || !isOnline) {
-      return;
-    }
-
     try {
       await runSupabaseSync();
     } catch {
@@ -42,10 +44,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   });
 
   const retrySync = async (): Promise<void> => {
-    if (!auth.session || !auth.configured || !isOnline) {
-      return;
-    }
-
     try {
       await runSupabaseSync();
     } catch {
@@ -68,10 +66,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void attemptSync();
-  }, [auth.configured, auth.session, isOnline, pendingMutationCount]);
+  }, [auth.configured, auth.session, isOnline, mutationCounts.failed, mutationCounts.pending]);
 
   useEffect(() => {
-    if (!auth.session || !auth.configured) {
+    if (!auth.configured) {
       return;
     }
 
@@ -87,8 +85,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   return (
     <SyncContext.Provider
       value={{
+        failedMutationCount: mutationCounts.failed,
         isOnline,
-        pendingMutationCount,
+        pendingMutationCount: mutationCounts.pending,
         retrySync,
       }}
     >

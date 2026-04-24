@@ -15,7 +15,7 @@ A user should be able to:
 - avoid thinking about sync unless something truly needs attention
 
 ## Product-level rules
-- Never frame the app as “local mode” versus “cloud mode.”
+- Never frame the app as "local mode" versus "cloud mode."
 - Never make sync feel optional or bolted on.
 - Never require manual recovery for normal offline use.
 - Prefer quiet status over noisy status.
@@ -36,14 +36,16 @@ The product should usually feel like one of these:
 - up to date
 - syncing quietly
 - saved offline and waiting to sync
+- can't sync yet only when the reason is real and concrete
 - needs attention only when recovery actually requires a decision
 
 ## User-facing status language
 Good:
 - Up to date
-- Syncing…
+- Syncing...
 - Saved offline
-- Couldn’t sync yet
+- Can't sync yet
+- Couldn't sync yet
 - Retry
 
 Bad:
@@ -118,6 +120,7 @@ Silent retry:
 
 User-visible risk:
 - show a clear, non-technical message
+- distinguish "can't sync yet" from "couldn't sync yet"
 
 True action-required failure:
 - present a small set of obvious choices

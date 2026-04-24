@@ -47,6 +47,13 @@ export const SyncAuthPromptStateSchema = z.enum([
   'signed-out-by-user',
   'account-mismatch',
 ]);
+export const SyncBlockedReasonSchema = z.enum([
+  'not-configured',
+  'signed-out',
+  'offline',
+  'detached-restore',
+  'account-mismatch',
+]);
 export const WorkspaceAttachStateSchema = z.enum([
   'attached',
   'detached-restore',
@@ -108,10 +115,13 @@ export const ListRecordSchema = z.object({
   lane: LaneSchema,
   pinned: z.boolean(),
   sourceItemId: z.string().uuid().nullable().default(null),
-  archivedAt: z.string().nullable(),
+  scheduledDate: z.string().nullable().default(null),
+  scheduledTime: z.string().nullable().default(null),
+  completedAt: z.string().nullable().default(null),
+  archivedAt: z.string().nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
-  deletedAt: z.string().nullable(),
+  deletedAt: z.string().nullable().default(null),
   syncState: SyncRecordStateSchema,
   remoteRevision: z.string().nullable().default(null),
 });
@@ -149,6 +159,7 @@ export const DailyRecordSchema = z.object({
     sleepSetup: z.boolean(),
   }),
   focusItemIds: z.array(z.string().uuid()),
+  focusListIds: z.array(z.string().uuid()).default([]),
   launchNote: z.string(),
   closeWin: z.string(),
   closeCarry: z.string(),
@@ -253,6 +264,9 @@ export const SyncStateRecordSchema = z.object({
   provider: z.enum(['supabase']),
   mode: z.enum(['disabled', 'ready', 'syncing', 'error']),
   lastSyncedAt: z.string().nullable(),
+  blockedReason: SyncBlockedReasonSchema.nullable().default(null),
+  lastTransportError: z.string().nullable().default(null),
+  lastFailureAt: z.string().nullable().default(null),
   pullCursorByStream: SyncPullCursorMapSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -329,6 +343,7 @@ export type WorkspaceOwnershipState = z.infer<
   typeof WorkspaceOwnershipStateSchema
 >;
 export type SyncAuthPromptState = z.infer<typeof SyncAuthPromptStateSchema>;
+export type SyncBlockedReason = z.infer<typeof SyncBlockedReasonSchema>;
 export type WorkspaceAttachState = z.infer<typeof WorkspaceAttachStateSchema>;
 export type SyncPullCursor = z.infer<typeof SyncPullCursorSchema>;
 export type SyncPullCursorMap = z.infer<typeof SyncPullCursorMapSchema>;

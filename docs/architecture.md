@@ -105,6 +105,13 @@ The local database stores:
 - sync mutation log
 - sync state
 
+That local replica now carries two distinct day-level list concepts:
+
+- list placement on the list record itself through `scheduledDate` and `scheduledTime`
+- list focus on the day record through `focusListIds`
+
+This keeps whole-list activation separate from list-item promotion and avoids duplicating list work into top-level item rows.
+
 ## Attachment Strategy
 
 Attachments are split into:
@@ -124,8 +131,9 @@ The current foundation includes:
 
 - manifest
 - installable start URL
-- service worker
+- a build-aware service worker generated from the Vite manifest
 - runtime shell caching
+- one-shot runtime recovery for stale controllers and chunk mismatches
 
 The frontend output is intentionally compatible with Cloudflare Pages. Supabase is the preferred backend path for auth, database sync, and attachment storage.
 
@@ -141,6 +149,14 @@ Current hosting posture:
 - public rollout is still gated by broader multi-device merge, deeper offline, and conflict-handling trust work
 - GitHub remains the source-control system of record
 
+Boot and runtime recovery now follow this posture:
+
+- `AuthProvider` owns callback completion and session restore
+- `AuthCallbackView` is only a status handoff surface
+- app boot distinguishes loading, storage failure, and runtime failure instead of hanging on `Opening Holdfast`
+- stale or legacy service workers are cleared automatically once per build before the app falls back to a manual recovery screen
+- local IndexedDB is never wiped automatically during runtime repair
+
 ## Expected Sync Model
 
 1. The app opens into a device-local workspace immediately.
@@ -151,6 +167,13 @@ Current hosting posture:
 6. Remote changes are pulled back into the local replica.
 7. Attachments upload separately from metadata.
 8. Offline changes remain safe until the network returns.
+
+Sync status now separates:
+
+- `blocked`: the device cannot sync yet because it is offline, signed out, misconfigured, restored-but-detached, or on the wrong account
+- `syncing`: the device is actively catching up
+- `degraded`: transport failed, queued mutations failed, or conflicts need attention
+- `healthy`: the device is attached and caught up
 
 ## Conflict Direction
 

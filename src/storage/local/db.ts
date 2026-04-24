@@ -433,6 +433,101 @@ export class HoldfastDatabase extends Dexie {
           tx.table('items').bulkPut(archivedProjectionItems),
         ]);
       });
+
+    this.version(8)
+      .stores({
+        items:
+          'id, status, kind, lane, scheduledDate, updatedAt, routineId, sourceItemId, deletedAt',
+        lists:
+          'id, kind, pinned, scheduledDate, updatedAt, archivedAt, deletedAt',
+        listItems: 'id, listId, status, position, nowDate, updatedAt, deletedAt',
+        dailyRecords: 'date, updatedAt',
+        weeklyRecords: 'weekStart, updatedAt',
+        routines: 'id, active, updatedAt, deletedAt',
+        settings: 'id, updatedAt',
+        attachments: 'id, itemId, kind, updatedAt, deletedAt',
+        attachmentBlobs: 'id, createdAt',
+        mutationQueue: 'id, entity, entityId, status, createdAt',
+        prototypeRecoverySessions: 'id, createdAt, undoneAt',
+        workspaceRestoreSessions: 'id, createdAt, undoneAt',
+        syncState: 'id, updatedAt',
+        workspaceState: 'id, updatedAt',
+      })
+      .upgrade(async (tx) => {
+        const stampSchemaVersion = async (tableName: string): Promise<void> => {
+          await tx
+            .table(tableName)
+            .toCollection()
+            .modify((record: Record<string, unknown>) => {
+              record.schemaVersion = 5;
+            });
+        };
+
+        await Promise.all([
+          stampSchemaVersion('items'),
+          stampSchemaVersion('lists'),
+          stampSchemaVersion('listItems'),
+          stampSchemaVersion('dailyRecords'),
+          stampSchemaVersion('weeklyRecords'),
+          stampSchemaVersion('routines'),
+          stampSchemaVersion('settings'),
+          stampSchemaVersion('attachments'),
+          stampSchemaVersion('attachmentBlobs'),
+          stampSchemaVersion('mutationQueue'),
+          stampSchemaVersion('prototypeRecoverySessions'),
+          stampSchemaVersion('workspaceRestoreSessions'),
+          stampSchemaVersion('syncState'),
+          stampSchemaVersion('workspaceState'),
+        ]);
+
+        await tx
+          .table('lists')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.scheduledDate ??= null;
+            record.scheduledTime ??= null;
+            record.completedAt ??= null;
+          });
+
+        await tx
+          .table('dailyRecords')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.focusListIds ??= [];
+          });
+      });
+
+    this.version(9)
+      .stores({
+        items:
+          'id, status, kind, lane, scheduledDate, updatedAt, routineId, sourceItemId, deletedAt',
+        lists:
+          'id, kind, pinned, scheduledDate, updatedAt, archivedAt, deletedAt',
+        listItems: 'id, listId, status, position, nowDate, updatedAt, deletedAt',
+        dailyRecords: 'date, updatedAt',
+        weeklyRecords: 'weekStart, updatedAt',
+        routines: 'id, active, updatedAt, deletedAt',
+        settings: 'id, updatedAt',
+        attachments: 'id, itemId, kind, updatedAt, deletedAt',
+        attachmentBlobs: 'id, createdAt',
+        mutationQueue: 'id, entity, entityId, status, createdAt',
+        prototypeRecoverySessions: 'id, createdAt, undoneAt',
+        workspaceRestoreSessions: 'id, createdAt, undoneAt',
+        syncState: 'id, updatedAt',
+        workspaceState: 'id, updatedAt',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('syncState')
+          .toCollection()
+          .modify((record: Record<string, unknown>) => {
+            record.schemaVersion = 5;
+            record.blockedReason ??=
+              record.mode === 'disabled' ? 'not-configured' : 'signed-out';
+            record.lastFailureAt ??= null;
+            record.lastTransportError ??= null;
+          });
+      });
   }
 }
 

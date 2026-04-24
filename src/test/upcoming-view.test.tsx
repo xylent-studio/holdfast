@@ -70,6 +70,7 @@ function makeSnapshot(items: ItemWithAttachments[]): HoldfastSnapshot {
         sleepSetup: false,
       },
       focusItemIds: [],
+      focusListIds: [],
       launchNote: '',
       closeWin: '',
       closeCarry: '',
@@ -146,6 +147,7 @@ function renderUpcoming(initialEntry = '/upcoming') {
             <UpcomingView
               currentDate="2026-04-20"
               onOpenItem={vi.fn()}
+              onOpenList={vi.fn()}
               snapshot={snapshot}
             />
           }
@@ -172,5 +174,55 @@ describe('UpcomingView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Waiting on (1)' }));
 
     expect(screen.getByRole('heading', { name: 'Waiting' })).toBeInTheDocument();
+  });
+
+  it('shows scheduled whole lists alongside scheduled items', () => {
+    const snapshot = makeSnapshot([
+      makeItem({
+        title: 'Tomorrow',
+        scheduledDate: '2026-04-21',
+      }),
+    ]);
+    snapshot.lists = [
+      {
+        id: 'list-1',
+        schemaVersion: SCHEMA_VERSION,
+        title: 'Groceries',
+        kind: 'replenishment',
+        lane: 'home',
+        pinned: false,
+        sourceItemId: null,
+        scheduledDate: '2026-04-21',
+        scheduledTime: null,
+        completedAt: null,
+        archivedAt: null,
+        createdAt: '2026-04-20T08:00:00.000Z',
+        updatedAt: '2026-04-20T08:00:00.000Z',
+        deletedAt: null,
+        syncState: 'pending',
+        remoteRevision: null,
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/upcoming']}>
+        <Routes>
+          <Route
+            path="/upcoming"
+            element={
+              <UpcomingView
+                currentDate="2026-04-20"
+                onOpenItem={vi.fn()}
+                onOpenList={vi.fn()}
+                snapshot={snapshot}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Groceries' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tomorrow' })).toBeInTheDocument();
   });
 });

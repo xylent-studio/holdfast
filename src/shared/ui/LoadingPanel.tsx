@@ -1,13 +1,19 @@
 interface LoadingPanelProps {
   layout?: 'app' | 'auth' | 'screen';
+  message?: string;
+  title?: string;
 }
 
-export function LoadingPanel({ layout = 'app' }: LoadingPanelProps) {
+export function LoadingPanel({
+  layout = 'app',
+  message = 'Getting things ready.',
+  title = 'Opening Holdfast',
+}: LoadingPanelProps) {
   const content = (
     <>
       <div className="eyebrow">Holdfast</div>
-      <h1>Opening Holdfast</h1>
-      <p>Getting things ready.</p>
+      <h1>{title}</h1>
+      <p>{message}</p>
     </>
   );
 

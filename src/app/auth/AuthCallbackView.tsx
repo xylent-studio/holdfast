@@ -1,47 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { AuthAccessActions } from '@/app/auth/AuthAccessActions';
-import {
-  normalizeAuthNextPath,
-  finishSupabaseAuthRedirect,
-} from '@/storage/sync/supabase/auth';
-import { getSupabaseBrowserClient } from '@/storage/sync/supabase/client';
+import { useAuth } from '@/app/auth/useAuth';
+import { normalizeAuthNextPath } from '@/storage/sync/supabase/auth';
 
 export function AuthCallbackView() {
+  const auth = useAuth();
   const navigate = useNavigate();
   const nextPath = normalizeAuthNextPath(
     new URLSearchParams(window.location.search).get('next'),
   );
-  const [error, setError] = useState<string | null>(() =>
-    getSupabaseBrowserClient() ? null : "Account setup isn't ready yet.",
-  );
 
   useEffect(() => {
-    const client = getSupabaseBrowserClient();
-    if (!client) {
+    if (!auth.configured || !auth.isReady || !auth.session) {
       return;
     }
 
-    let cancelled = false;
+    navigate(nextPath, { replace: true });
+  }, [auth.configured, auth.isReady, auth.session, navigate, nextPath]);
 
-    void finishSupabaseAuthRedirect(client).then((result) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-
-      navigate(nextPath, { replace: true });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate, nextPath]);
+  const error = !auth.configured
+    ? "Account setup isn't ready yet."
+    : auth.isReady && !auth.session
+      ? auth.error ?? "Couldn't finish sign-in. Try again."
+      : null;
 
   return (
     <div className="auth-shell">

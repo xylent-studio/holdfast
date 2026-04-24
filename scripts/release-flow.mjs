@@ -16,12 +16,13 @@ function printUsage() {
 
 Usage:
   node scripts/release-flow.mjs --lane staging --env-file .env.staging.local
-  node scripts/release-flow.mjs --lane production
+  node scripts/release-flow.mjs --lane production --staging-env-file .env.staging.local
 
 Options:
-  --lane <staging|production>  Release lane to run.
-  --env-file <path>            Build-time env file for staging deploys.
-  --help                       Show this message.
+  --lane <staging|production>     Release lane to run.
+  --env-file <path>               Build-time env file for staging deploys.
+  --staging-env-file <path>       Build-time env file for the staging realignment pass after production.
+  --help                          Show this message.
 `);
 }
 
@@ -71,6 +72,7 @@ function parseArgs(argv) {
     envFile: null,
     help: false,
     lane: null,
+    stagingEnvFile: '.env.staging.local',
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -84,6 +86,12 @@ function parseArgs(argv) {
 
     if (arg === '--env-file') {
       options.envFile = argv[index + 1] ?? null;
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--staging-env-file') {
+      options.stagingEnvFile = argv[index + 1] ?? null;
       index += 1;
       continue;
     }
@@ -119,19 +127,56 @@ function runPagesValidation(args) {
   run('node', [pagesValidationScript, ...args]);
 }
 
-function runStagingRelease(options) {
-  printStep('Staging release candidate');
-  printGitContext();
-
+function runLocalValidation() {
   printStep('Running local validation');
   run('npm', ['run', 'lint']);
   run('npm', ['run', 'typecheck']);
   run('npm', ['run', 'test']);
   run('npm', ['run', 'build']);
   run('npx', ['playwright', 'test']);
+}
 
-  const envArgs = options.envFile ? ['--env-file', options.envFile] : [];
+function envArgsFor(filePath) {
+  return filePath ? ['--env-file', filePath] : [];
+}
 
+function runHostedLaneSmoke(projectName, baseUrl, envArgs = []) {
+  printStep(`Running ${projectName} hosted shell smoke`);
+  runPagesValidation([
+    '--project',
+    projectName,
+    '--smoke',
+    '--base-url',
+    baseUrl,
+    ...envArgs,
+  ]);
+}
+
+function runHostedAuthSmoke(projectName, baseUrl, envArgs = []) {
+  printStep(`Running ${projectName} hosted auth smoke`);
+  runPagesValidation([
+    '--project',
+    projectName,
+    '--auth-smoke',
+    '--base-url',
+    baseUrl,
+    ...envArgs,
+  ]);
+}
+
+function runHostedSyncSmoke(projectName, baseUrl, envArgs = []) {
+  printStep(`Running ${projectName} hosted sync smoke`);
+  runPagesValidation([
+    '--project',
+    projectName,
+    '--sync-smoke',
+    '--base-url',
+    baseUrl,
+    ...envArgs,
+  ]);
+}
+
+function runStagingDeploy(envArgs = [], options = {}) {
   printStep('Deploying staging');
   runPagesValidation([
     '--project',
@@ -140,68 +185,52 @@ function runStagingRelease(options) {
     '--deploy',
     '--base-url',
     STAGING_BASE_URL,
+    ...(options.skipBuild ? ['--skip-build'] : []),
     ...envArgs,
   ]);
+}
 
-  printStep('Running staging hosted auth smoke');
-  runPagesValidation([
-    '--project',
-    STAGING_PROJECT,
-    '--auth-smoke',
-    '--base-url',
-    STAGING_BASE_URL,
-    ...envArgs,
-  ]);
+function runStagingRelease(options) {
+  printStep('Staging release candidate');
+  printGitContext();
+  runLocalValidation();
 
-  printStep('Running staging hosted sync smoke');
-  runPagesValidation([
-    '--project',
-    STAGING_PROJECT,
-    '--sync-smoke',
-    '--base-url',
-    STAGING_BASE_URL,
-    ...envArgs,
-  ]);
+  const envArgs = envArgsFor(options.envFile);
+
+  runStagingDeploy(envArgs);
+  runHostedLaneSmoke(STAGING_PROJECT, STAGING_BASE_URL, envArgs);
+  runHostedAuthSmoke(STAGING_PROJECT, STAGING_BASE_URL, envArgs);
+  runHostedSyncSmoke(STAGING_PROJECT, STAGING_BASE_URL, envArgs);
 
   printStep('Staging release candidate passed');
   console.log('Promote intentionally with `npm run release:prod` after review.');
 }
 
-function runProductionRelease() {
+function runProductionRelease(options) {
   printStep('Production promotion');
   printGitContext();
 
-  printStep('Building production artifact');
-  run('npm', ['run', 'build']);
+  runLocalValidation();
 
   printStep('Deploying production');
   runPagesValidation([
     '--project',
     PRODUCTION_PROJECT,
-    '--create',
     '--deploy',
     '--base-url',
     PRODUCTION_BASE_URL,
-    '--skip-build',
   ]);
 
-  printStep('Running production hosted auth smoke');
-  runPagesValidation([
-    '--project',
-    PRODUCTION_PROJECT,
-    '--auth-smoke',
-    '--base-url',
-    PRODUCTION_BASE_URL,
-  ]);
+  runHostedLaneSmoke(PRODUCTION_PROJECT, PRODUCTION_BASE_URL);
+  runHostedAuthSmoke(PRODUCTION_PROJECT, PRODUCTION_BASE_URL);
+  runHostedSyncSmoke(PRODUCTION_PROJECT, PRODUCTION_BASE_URL);
 
-  printStep('Running production hosted sync smoke');
-  runPagesValidation([
-    '--project',
-    PRODUCTION_PROJECT,
-    '--sync-smoke',
-    '--base-url',
-    PRODUCTION_BASE_URL,
-  ]);
+  const stagingEnvArgs = envArgsFor(options.stagingEnvFile);
+  printStep('Realigning staging to the same fixed commit');
+  runStagingDeploy(stagingEnvArgs);
+  runHostedLaneSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
+  runHostedAuthSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
+  runHostedSyncSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
 }
 
 function main() {
@@ -221,7 +250,7 @@ function main() {
     return;
   }
 
-  runProductionRelease();
+  runProductionRelease(options);
 }
 
 try {

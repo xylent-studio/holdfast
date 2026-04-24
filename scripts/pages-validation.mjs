@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,8 @@ const DEFAULT_BRANCH = 'main';
 const NON_BLOCKING_PRODUCTION_DIRTY_PATHS = new Set([
   'scripts/rehydrate-agent.ps1',
 ]);
+const STAGING_SUPABASE_PROJECT_REF = 'tgldornordukkssrbjlc';
+const PRODUCTION_SUPABASE_PROJECT_REF = 'acpaqcdttgdofwcsnhxf';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -151,7 +153,7 @@ function parseArgs(argv) {
     authPreflight: false,
     allowDirty: false,
     baseUrl: null,
-    branch: DEFAULT_BRANCH,
+    branch: null,
     create: false,
     deploy: false,
     envFile: null,
@@ -296,6 +298,194 @@ function supabaseProjectRefFromUrl(supabaseUrl) {
   } catch {
     return null;
   }
+}
+
+function currentGitValue(args) {
+  return run('git', args, { capture: true });
+}
+
+function currentGitBranch() {
+  return currentGitValue(['rev-parse', '--abbrev-ref', 'HEAD']) || DEFAULT_BRANCH;
+}
+
+function currentGitCommit() {
+  return currentGitValue(['rev-parse', '--short=12', 'HEAD']);
+}
+
+function resolvedBranchLabel(options) {
+  if (projectRole(options) === 'production') {
+    return DEFAULT_BRANCH;
+  }
+
+  return options.branch ?? currentGitBranch() ?? DEFAULT_BRANCH;
+}
+
+function ensureProductionBranchLocked(options) {
+  if (projectRole(options) !== 'production') {
+    return;
+  }
+
+  const currentBranch = currentGitBranch();
+  if (currentBranch !== DEFAULT_BRANCH) {
+    throw new Error(
+      `Production deploys must run from ${DEFAULT_BRANCH}. Current branch: ${currentBranch}.`,
+    );
+  }
+
+  if (options.branch && options.branch !== DEFAULT_BRANCH) {
+    throw new Error(
+      `Production deploys always use the ${DEFAULT_BRANCH} Pages branch label.`,
+    );
+  }
+}
+
+function expectedSupabaseProjectRef(options) {
+  const role = projectRole(options);
+  if (role === 'staging') {
+    return STAGING_SUPABASE_PROJECT_REF;
+  }
+  if (role === 'production') {
+    return PRODUCTION_SUPABASE_PROJECT_REF;
+  }
+  return null;
+}
+
+function ensureLaneSupabaseAlignment(envValues, options) {
+  const expectedProjectRef = expectedSupabaseProjectRef(options);
+  if (!expectedProjectRef) {
+    return;
+  }
+
+  const actualProjectRef = supabaseProjectRefFromUrl(envValues.VITE_SUPABASE_URL ?? '');
+  if (actualProjectRef === expectedProjectRef) {
+    return;
+  }
+
+  throw new Error(
+    `${projectRole(options)} deploy is pointed at ${actualProjectRef ?? 'an unknown Supabase project'} instead of ${expectedProjectRef}. Fix the lane env before deploying.`,
+  );
+}
+
+function annotateBuildEnv(envValues, options) {
+  const annotated = {
+    ...envValues,
+    HOLDFAST_BUILD_ID:
+      envValues.HOLDFAST_BUILD_ID || process.env.HOLDFAST_BUILD_ID || currentGitCommit(),
+    HOLDFAST_RELEASE_LANE:
+      envValues.HOLDFAST_RELEASE_LANE || projectRole(options),
+  };
+
+  for (const [key, value] of Object.entries(annotated)) {
+    if (value) {
+      process.env[key] = value;
+    }
+  }
+
+  return annotated;
+}
+
+function getLocalSupabaseMigrations() {
+  const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
+  if (!existsSync(migrationsDir)) {
+    return [];
+  }
+
+  return readdirSync(migrationsDir)
+    .map((fileName) => {
+      const match = fileName.match(/^(\d+)_(.+)\.sql$/u);
+      if (!match) {
+        return null;
+      }
+
+      return {
+        fileName,
+        name: match[2],
+        version: match[1],
+      };
+    })
+    .filter(Boolean);
+}
+
+async function getRemoteSupabaseMigrations(authEnv) {
+  const projectRef = supabaseProjectRefFromUrl(authEnv.supabaseUrl);
+  if (!projectRef || !authEnv.accessToken) {
+    throw new Error(
+      'Supabase migration verification needs VITE_SUPABASE_URL plus SUPABASE_ACCESS_TOKEN.',
+    );
+  }
+
+  const response = await fetch(
+    `https://api.supabase.com/v1/projects/${projectRef}/database/migrations`,
+    {
+      headers: {
+        Authorization: `Bearer ${authEnv.accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Supabase Management API GET /projects/${projectRef}/database/migrations failed with ${response.status}.`,
+    );
+  }
+
+  const migrations = await response.json();
+  if (!Array.isArray(migrations)) {
+    throw new Error(
+      `Supabase Management API returned an unexpected migration response for project ${projectRef}.`,
+    );
+  }
+
+  return migrations.map((entry) => ({
+    name: entry.name ?? null,
+    version: entry.version ?? null,
+  }));
+}
+
+async function ensureSupabaseMigrationsAligned(envValues, options) {
+  if (projectRole(options) === 'validation') {
+    return;
+  }
+
+  const supabaseUrl = envValues.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? null;
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN ?? null;
+  if (!supabaseUrl || !accessToken) {
+    throw new Error(
+      `${projectRole(options)} deploy verification needs VITE_SUPABASE_URL plus SUPABASE_ACCESS_TOKEN so the helper can confirm the target Supabase project has the repo migrations.`,
+    );
+  }
+
+  const remoteMigrations = await getRemoteSupabaseMigrations({
+    accessToken,
+    secretKey: null,
+    supabaseUrl,
+  });
+  const remoteNames = new Set(
+    remoteMigrations
+      .map((entry) => entry.name)
+      .filter(Boolean),
+  );
+
+  // Compare by migration name because the earliest remote foundation history
+  // was created with different timestamps than the checked-in local files.
+  const missing = getLocalSupabaseMigrations().filter(
+    (entry) => !remoteNames.has(entry.name),
+  );
+
+  if (!missing.length) {
+    return;
+  }
+
+  const projectRef = supabaseProjectRefFromUrl(supabaseUrl) ?? 'unknown-project';
+  const preview = missing
+    .map((entry) => `- ${entry.version} ${entry.name}`)
+    .join('\n');
+
+  throw new Error(
+    `Supabase project ${projectRef} is missing repo migrations required for the ${projectRole(
+      options,
+    )} deploy:\n${preview}\n\nApply or push those migrations before deploying this Pages lane.`,
+  );
 }
 
 async function resolveSupabaseSecretKey(authEnv) {
@@ -477,6 +667,8 @@ function printStatus(project, envValues, options) {
     );
   }
   console.log(`- Served base URL: ${currentPagesOrigin(options)}`);
+  console.log(`- Branch label: ${resolvedBranchLabel(options)}`);
+  console.log(`- Git commit: ${currentGitCommit()}`);
   console.log(`- Hosted callback: ${currentPagesCallback(options)}`);
   if (latestDeployment?.Deployment) {
     console.log(`- Latest deployment: ${latestDeployment.Deployment}`);
@@ -554,9 +746,10 @@ async function main() {
   }
 
   const envValues = loadBuildEnv(options);
-  applyLocalEnvFallbacks(envValues);
+  const mergedEnvValues = annotateBuildEnv(applyLocalEnvFallbacks(envValues), options);
 
   run('npx', ['wrangler', 'whoami']);
+  ensureProductionBranchLocked(options);
 
   const projects = getPagesProjects();
   let project =
@@ -564,9 +757,15 @@ async function main() {
     null;
   let projectExists = Boolean(project);
 
-  printStatus(project, envValues, options);
+  printStatus(project, mergedEnvValues, options);
 
   if (options.create && !projectExists) {
+    if (projectRole(options) === 'production') {
+      throw new Error(
+        'Production deploys must target the existing holdfast Pages project. Create or replace that project intentionally outside the production release path.',
+      );
+    }
+
     console.log(`Creating Pages project ${options.project}...`);
     run('npx', [
       'wrangler',
@@ -588,7 +787,9 @@ async function main() {
 
   if (options.deploy) {
     ensureProductionDeployClean(options);
-    requireBuildEnv(envValues);
+    requireBuildEnv(mergedEnvValues);
+    ensureLaneSupabaseAlignment(mergedEnvValues, options);
+    await ensureSupabaseMigrationsAligned(mergedEnvValues, options);
 
     if (!projectExists) {
       throw new Error(
@@ -597,7 +798,7 @@ async function main() {
     }
 
     if (!options.skipBuild) {
-      run('npm', ['run', 'build'], { env: envValues });
+      run('npm', ['run', 'build'], { env: mergedEnvValues });
     }
 
     console.log(`Deploying dist to ${options.project}...`);
@@ -610,8 +811,7 @@ async function main() {
       '--project-name',
       options.project,
       '--branch',
-      options.branch,
-      '--commit-dirty',
+      resolvedBranchLabel(options),
       '--upload-source-maps',
     ]);
 
@@ -629,22 +829,25 @@ async function main() {
   }
 
   if (options.authPreflight) {
-    await runHostedAuthPreflight(envValues, options);
+    ensureLaneSupabaseAlignment(mergedEnvValues, options);
+    await runHostedAuthPreflight(mergedEnvValues, options);
   }
 
   if (options.authSmoke) {
-    await runHostedAuthPreflight(envValues, options);
+    ensureLaneSupabaseAlignment(mergedEnvValues, options);
+    await runHostedAuthPreflight(mergedEnvValues, options);
     console.log(`Running hosted auth smoke against ${currentPagesOrigin(options)}...`);
-    runPlaywrightSuite(['tests/e2e/hosted-auth.spec.ts'], envValues, {
+    runPlaywrightSuite(['tests/e2e/hosted-auth.spec.ts'], mergedEnvValues, {
       PLAYWRIGHT_AUTH_SMOKE: '1',
       PLAYWRIGHT_BASE_URL: currentPagesOrigin(options),
     });
   }
 
   if (options.syncSmoke) {
-    await runHostedAuthPreflight(envValues, options);
+    ensureLaneSupabaseAlignment(mergedEnvValues, options);
+    await runHostedAuthPreflight(mergedEnvValues, options);
     console.log(`Running hosted sync smoke against ${currentPagesOrigin(options)}...`);
-    runPlaywrightSuite(['tests/e2e/hosted-sync.spec.ts'], envValues, {
+    runPlaywrightSuite(['tests/e2e/hosted-sync.spec.ts'], mergedEnvValues, {
       PLAYWRIGHT_BASE_URL: currentPagesOrigin(options),
       PLAYWRIGHT_SYNC_SMOKE: '1',
     });
@@ -659,7 +862,7 @@ async function main() {
 
     const smokeUrl = currentPagesOrigin(options);
     console.log(`Running Playwright smoke against ${smokeUrl}...`);
-    runPlaywrightSuite([], envValues, {
+    runPlaywrightSuite([], mergedEnvValues, {
       PLAYWRIGHT_BASE_URL: smokeUrl,
     });
   }

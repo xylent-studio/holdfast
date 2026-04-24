@@ -214,6 +214,12 @@ The UI should favor outcome language such as:
 
 It should avoid exposing raw timing structures as the primary user concept.
 
+The same principle now applies to whole lists:
+
+- a scheduled list lives in `Upcoming` before its day
+- a scheduled list belongs in `Now` when that day arrives
+- focusing a list is separate from scheduling, even though `Focus now` may perform both outcomes together for convenience
+
 ## Waiting On Relationship
 
 Waiting on is a meaningful product state because it changes what action is possible.
@@ -254,6 +260,34 @@ A list item:
 - keeps enough identity to support history, refinding, and source preservation
 
 List items should not automatically flood Now just because the parent list is active.
+
+### Whole-list behavior
+
+A whole list:
+- can be brought into `Now` as a first-class command object
+- can be scheduled for a future day
+- can be focused for one specific day
+- should stay one list object, not explode into duplicate top-level tasks
+
+Whole-list activation should preserve the distinction between:
+- list placement (`Bring to Now`, `Schedule`, `Remove from Now`, `Unschedule`)
+- list focus (`Focus now`, `Focus for this day`, `Remove focus`)
+
+### Finish-list outcomes
+
+Finishing a list is never a silent one-tap terminal change.
+
+Allowed finish outcomes:
+- `Archive and hide`
+- `Clear items for reuse`
+- `Reset checkmarks and keep items`
+- `Archive run and reset` for replenishment and checklist lists
+
+Rules:
+- finishing clears list focus references across days
+- reusable outcomes clear active scheduling from the live list that remains
+- archived-run snapshots remain searchable in Review and retrieval
+- `Archive and hide` preserves the finished list for retrieval instead of hard deleting it
 
 ### Checklist and run direction
 

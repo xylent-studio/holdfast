@@ -11,6 +11,7 @@ import {
   type MutationRecord,
   type RoutineRecord,
   type SettingsRecord,
+  type SyncBlockedReason,
   type SyncPullCursor,
   type SyncPullCursorMap,
   type WeeklyRecord,
@@ -74,6 +75,13 @@ function syncErrorMessage(error: unknown): string {
   }
 
   return "Couldn't sync yet.";
+}
+
+async function setSyncBlockedState(reason: SyncBlockedReason): Promise<void> {
+  await updateSyncState({
+    blockedReason: reason,
+    mode: reason === 'not-configured' ? 'disabled' : 'ready',
+  });
 }
 
 function isDeletedMutation(mutation: MutationRecord): boolean {
@@ -190,6 +198,22 @@ async function removeItemFromFocusEverywhere(itemId: string): Promise<void> {
   }
 }
 
+async function removeListFromFocusEverywhere(listId: string): Promise<void> {
+  const records = await db.dailyRecords.toArray();
+  const updates = records
+    .filter((record) => record.focusListIds.includes(listId))
+    .map((record) => ({
+      ...record,
+      focusListIds: record.focusListIds.filter((entry) => entry !== listId),
+      updatedAt: nowIso(),
+      syncState: 'synced' as const,
+    }));
+
+  if (updates.length) {
+    await db.dailyRecords.bulkPut(updates);
+  }
+}
+
 async function deleteLocalAttachment(attachmentId: string): Promise<void> {
   const attachment = await db.attachments.get(attachmentId);
   if (!attachment) {
@@ -215,6 +239,7 @@ async function deleteLocalListCascade(listId: string): Promise<void> {
   const listItems = await db.listItems.where('listId').equals(listId).toArray();
   await db.lists.delete(listId);
   await db.listItems.bulkDelete(listItems.map((listItem) => listItem.id));
+  await removeListFromFocusEverywhere(listId);
 }
 
 async function getLocalEntityRecord(
@@ -749,13 +774,15 @@ async function processDeletionMutation(
 async function pushPendingMutations(
   client: SupabaseClient,
   userId: string,
-): Promise<void> {
+): Promise<{ failedCount: number; lastFailureAt: string | null }> {
   const pendingMutations = (await db.mutationQueue.toArray())
     .filter(
       (mutation) =>
         mutation.status === 'pending' || mutation.status === 'failed',
     )
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  let failedCount = 0;
+  let lastFailureAt: string | null = null;
 
   for (const mutation of pendingMutations) {
     try {
@@ -776,12 +803,19 @@ async function pushPendingMutations(
         lastError: null,
       });
     } catch (error) {
+      failedCount += 1;
+      lastFailureAt = nowIso();
       await markMutationStatus(mutation.id, {
         status: 'failed',
         lastError: syncErrorMessage(error),
       });
     }
   }
+
+  return {
+    failedCount,
+    lastFailureAt,
+  };
 }
 
 async function shouldDeferToLocalPendingState(
@@ -861,7 +895,11 @@ async function putRemoteListRow(row: RemoteListRow): Promise<void> {
     return;
   }
 
-  await db.lists.put(fromRemoteListRow(row));
+  const nextList = fromRemoteListRow(row);
+  await db.lists.put(nextList);
+  if (nextList.archivedAt) {
+    await removeListFromFocusEverywhere(nextList.id);
+  }
   await acknowledgeEntityMutations('list', row.id);
 }
 
@@ -1287,22 +1325,33 @@ async function pullRemoteChanges(
 
 async function runSync(client: SupabaseClient, userId: string): Promise<void> {
   const syncState = await getCurrentSyncState();
-  await updateSyncState({ mode: 'syncing' });
+  await updateSyncState({
+    blockedReason: null,
+    mode: 'syncing',
+  });
 
   try {
-    await pushPendingMutations(client, userId);
+    const mutationSummary = await pushPendingMutations(client, userId);
     const nextPullState = await pullRemoteChanges(
       client,
       userId,
       syncState,
     );
     await updateSyncState({
+      blockedReason: null,
       lastSyncedAt: nextPullState.lastSyncedAt,
+      lastFailureAt: mutationSummary.lastFailureAt,
+      lastTransportError: null,
       mode: 'ready',
       pullCursorByStream: nextPullState.pullCursorByStream,
     });
   } catch (error) {
-    await updateSyncState({ mode: 'error' });
+    await updateSyncState({
+      blockedReason: null,
+      lastFailureAt: nowIso(),
+      lastTransportError: syncErrorMessage(error),
+      mode: 'error',
+    });
     throw error;
   }
 }
@@ -1310,6 +1359,21 @@ async function runSync(client: SupabaseClient, userId: string): Promise<void> {
 export async function syncHoldfastWithSupabase(): Promise<void> {
   const client = getSupabaseBrowserClient();
   if (!client) {
+    await setSyncBlockedState('not-configured');
+    return;
+  }
+
+  const workspaceState = await getCurrentWorkspaceState();
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    await setSyncBlockedState('offline');
+    return;
+  }
+  if (workspaceState.authPromptState === 'account-mismatch') {
+    await setSyncBlockedState('account-mismatch');
+    return;
+  }
+  if (workspaceState.attachState !== 'attached') {
+    await setSyncBlockedState('detached-restore');
     return;
   }
 
@@ -1318,22 +1382,16 @@ export async function syncHoldfastWithSupabase(): Promise<void> {
   } = await client.auth.getSession();
 
   if (!session?.user?.id) {
+    await setSyncBlockedState('signed-out');
     return;
   }
 
-  const workspaceState = await getCurrentWorkspaceState();
-  if (workspaceState.attachState !== 'attached') {
-    return;
-  }
   if (
     workspaceState.ownershipState === 'member' &&
     workspaceState.boundUserId &&
     workspaceState.boundUserId !== session.user.id
   ) {
-    return;
-  }
-
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    await setSyncBlockedState('account-mismatch');
     return;
   }
 

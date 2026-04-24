@@ -1,6 +1,7 @@
 import { Suspense, lazy, useState } from 'react';
 
 import { AuthAccessActions } from '@/app/auth/AuthAccessActions';
+import { useRuntimeDiagnostics } from '@/app/runtime/useRuntimeDiagnostics';
 import { useAuth } from '@/app/auth/useAuth';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { useSync } from '@/app/sync/useSync';
@@ -12,6 +13,7 @@ import {
   conflictedLists,
   currentWeekLabel,
 } from '@/domain/logic/selectors';
+import { deriveSyncHealth } from '@/domain/logic/sync';
 import {
   removeDataFromDevice,
   updateSettings,
@@ -51,63 +53,6 @@ interface WeeklyEditorProps {
 function summarizeText(...values: string[]): string {
   const summary = values.find((value) => value.trim())?.trim() ?? 'Nothing set yet.';
   return summary.length > 120 ? `${summary.slice(0, 117).trimEnd()}...` : summary;
-}
-
-function syncStatusLabel(
-  hasConflicts: boolean,
-  configured: boolean,
-  signedIn: boolean,
-  isOnline: boolean,
-  lastSyncedAt: string | null,
-  pendingMutationCount: number,
-  syncMode: HoldfastSnapshot['syncState']['mode'],
-  authPromptState: HoldfastSnapshot['workspaceState']['authPromptState'],
-  attachState: HoldfastSnapshot['workspaceState']['attachState'],
-  ownershipState: HoldfastSnapshot['workspaceState']['ownershipState'],
-): string {
-  if (!configured) {
-    return 'Account setup is off in this build.';
-  }
-
-  if (hasConflicts) {
-    return 'Needs attention';
-  }
-
-  if (attachState === 'detached-restore') {
-    return 'Local restore only';
-  }
-
-  if (signedIn) {
-    if (syncMode === 'syncing') {
-      return 'Attached, syncing';
-    }
-
-    if (syncMode === 'error') {
-      return 'Sync needs retry';
-    }
-
-    if (!isOnline) {
-      return 'Saved offline';
-    }
-
-    if (!lastSyncedAt) {
-      return 'Attached, syncing';
-    }
-
-    if (pendingMutationCount > 0) {
-      return 'Waiting to sync';
-    }
-
-    return 'Up to date';
-  }
-
-  if (authPromptState === 'account-mismatch') {
-    return 'Needs the original account';
-  }
-
-  return ownershipState === 'member'
-    ? 'Signed out on this device'
-    : 'Not signed in';
 }
 
 function LongerViewEditor({ settings }: LongerViewEditorProps) {
@@ -297,9 +242,11 @@ function WeeklyEditor({ currentDate, weeklyRecord }: WeeklyEditorProps) {
 export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
   const auth = useAuth();
   const sync = useSync();
+  const runtime = useRuntimeDiagnostics();
   const localDataExists = hasMeaningfulLocalState(snapshot);
   const deviceWorkspaceExists =
     localDataExists || snapshot.workspaceState.ownershipState === 'member';
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [workspaceSafetyOpen, setWorkspaceSafetyOpen] = useState(false);
   const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
@@ -326,6 +273,16 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
     conflictedItems(snapshot.items).length > 0 ||
     conflictedLists(snapshot.lists).length > 0 ||
     conflictedListItems(snapshot.listItems).length > 0;
+  const syncHealth = deriveSyncHealth({
+    configured: auth.configured,
+    failedMutationCount: sync.failedMutationCount,
+    hasConflictAttention,
+    isOnline: sync.isOnline,
+    pendingMutationCount: sync.pendingMutationCount,
+    signedIn: Boolean(auth.session),
+    syncState: snapshot.syncState,
+    workspaceState: snapshot.workspaceState,
+  });
 
   const handleRemoveDataFromDevice = async (): Promise<void> => {
     const confirmed = window.confirm(
@@ -372,21 +329,9 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
         <div className="account-stack">
           <div className="account-row">
             <span>Status</span>
-            <strong>
-              {syncStatusLabel(
-                hasConflictAttention,
-                auth.configured,
-                Boolean(auth.session),
-                sync.isOnline,
-                snapshot.syncState.lastSyncedAt,
-                sync.pendingMutationCount,
-                snapshot.syncState.mode,
-                snapshot.workspaceState.authPromptState,
-                snapshot.workspaceState.attachState,
-                snapshot.workspaceState.ownershipState,
-              )}
-            </strong>
+            <strong>{syncHealth.label}</strong>
           </div>
+          <p>{syncHealth.detail}</p>
           {auth.session ? (
             <>
               <div className="account-row">
@@ -406,7 +351,7 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
                 </div>
               ) : null}
               <div className="dialog-actions">
-                {snapshot.syncState.mode === 'error' ? (
+                {syncHealth.state === 'degraded' ? (
                   <button
                     className="button ghost"
                     onClick={() => void sync.retrySync()}
@@ -440,6 +385,57 @@ export function SettingsView({ currentDate, snapshot }: SettingsViewProps) {
           )}
         </div>
       </Panel>
+
+      <ExpandablePanel
+        description="Small runtime and sync details for support and release verification."
+        isOpen={diagnosticsOpen}
+        onToggle={() => setDiagnosticsOpen((current) => !current)}
+        summary={`${runtime.buildId} / ${syncHealth.state}`}
+        title="Diagnostics"
+      >
+        <div className="account-stack">
+          <div className="account-row">
+            <span>Build</span>
+            <strong>{runtime.buildId}</strong>
+          </div>
+          <div className="account-row">
+            <span>Service worker</span>
+            <strong>{runtime.activeServiceWorkerBuildId ?? 'Not active yet'}</strong>
+          </div>
+          <div className="account-row">
+            <span>Supabase</span>
+            <strong>{runtime.supabaseHost ?? 'Not configured'}</strong>
+          </div>
+          <div className="account-row">
+            <span>Sync posture</span>
+            <strong>{syncHealth.state}</strong>
+          </div>
+          <div className="account-row">
+            <span>Blocked reason</span>
+            <strong>{snapshot.syncState.blockedReason ?? 'None'}</strong>
+          </div>
+          <div className="account-row">
+            <span>Pending changes</span>
+            <strong>{sync.pendingMutationCount}</strong>
+          </div>
+          <div className="account-row">
+            <span>Failed changes</span>
+            <strong>{sync.failedMutationCount}</strong>
+          </div>
+          <div className="account-row">
+            <span>Last sync issue</span>
+            <strong>{snapshot.syncState.lastTransportError ?? 'None'}</strong>
+          </div>
+          <div className="account-row">
+            <span>Last failure</span>
+            <strong>{snapshot.syncState.lastFailureAt ?? 'None'}</strong>
+          </div>
+          <div className="account-row">
+            <span>Last synced</span>
+            <strong>{snapshot.syncState.lastSyncedAt ?? 'Not yet'}</strong>
+          </div>
+        </div>
+      </ExpandablePanel>
 
       <ExpandablePanel
         description="Optional longer-view notes, kept out of the way."

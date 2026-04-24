@@ -17,6 +17,9 @@ import { AuthProvider } from '@/app/auth/AuthProvider';
 import { AuthRecoveryPanel } from '@/app/auth/AuthRecoveryPanel';
 import { shouldShowSessionRecovery as shouldShowRecoveryPanel } from '@/app/auth/recovery';
 import { useAuth } from '@/app/auth/useAuth';
+import { AppRecoveryScreen } from '@/app/runtime/AppRecoveryScreen';
+import { RuntimeErrorBoundary } from '@/app/runtime/RuntimeErrorBoundary';
+import { clearRuntimeRecoveryAttempt } from '@/app/runtime/runtime-recovery';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { SyncProvider } from '@/app/sync/SyncProvider';
 import { AppShell } from '@/app/shell/AppShell';
@@ -28,7 +31,7 @@ import {
   addContextForLocation,
   currentListIdForPath,
 } from '@/domain/logic/capture';
-import { bootstrapHoldfast, useHoldfastSnapshot } from '@/storage/local/api';
+import { type HoldfastSnapshot, useHoldfastSnapshotState } from '@/storage/local/api';
 import { LoadingPanel } from '@/shared/ui/LoadingPanel';
 
 const InboxView = lazy(async () =>
@@ -75,7 +78,7 @@ function RoutedListView({
   currentDate: string;
   highlightListItemId: string | null;
   onOpenItem: (itemId: string) => void;
-  snapshot: NonNullable<ReturnType<typeof useHoldfastSnapshot>>;
+  snapshot: HoldfastSnapshot;
 }) {
   const params = useParams<{ listId: string }>();
   if (!params.listId) {
@@ -97,6 +100,7 @@ function AppRoutes() {
   const today = todayDateKey();
   const [nowDate, setNowDate] = useState(today);
   const [upcomingDate, setUpcomingDate] = useState(today);
+  const [listRouteDate, setListRouteDate] = useState(today);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const auth = useAuth();
@@ -109,16 +113,21 @@ function AppRoutes() {
       ? nowDate
       : location.pathname === '/upcoming'
         ? upcomingDate
-        : todayDateKey();
-  const snapshot = useHoldfastSnapshot(routeDate);
-
-  useEffect(() => {
-    void bootstrapHoldfast();
-  }, []);
+        : location.pathname.startsWith('/lists/')
+          ? listRouteDate
+          : todayDateKey();
+  const snapshotState = useHoldfastSnapshotState(routeDate);
+  const snapshot = snapshotState.snapshot;
 
   useEffect(() => {
     void preloadCoreOfflineSurface();
   }, []);
+
+  useEffect(() => {
+    if (snapshotState.status === 'ready') {
+      clearRuntimeRecoveryAttempt();
+    }
+  }, [snapshotState.status]);
 
   const selectedItem = useMemo(
     () => snapshot?.items.find((item) => item.id === selectedItemId) ?? null,
@@ -129,12 +138,17 @@ function AppRoutes() {
     location.search,
   );
   const currentListId = currentListIdForPath(location.pathname);
-  const openList = (listId: string, highlightListItemId?: string | null): void => {
+  const openList = (
+    listId: string,
+    highlightListItemId?: string | null,
+    contextDate: string = todayDateKey(),
+  ): void => {
     const nextSearchParams = new URLSearchParams();
     if (highlightListItemId) {
       nextSearchParams.set('item', highlightListItemId);
     }
 
+    setListRouteDate(contextDate);
     const suffix = nextSearchParams.toString();
     navigate(`/lists/${listId}${suffix ? `?${suffix}` : ''}`);
   };
@@ -167,7 +181,19 @@ function AppRoutes() {
     return <AuthCallbackView />;
   }
 
-  if (!snapshot) {
+  if (snapshotState.status === 'error') {
+    return (
+      <AppRecoveryScreen
+        error={
+          snapshotState.error ?? new Error('Holdfast could not open this device workspace.')
+        }
+        mode="storage"
+        onRetry={snapshotState.retry}
+      />
+    );
+  }
+
+  if (snapshotState.status !== 'ready' || !snapshot) {
     return <LoadingPanel layout="screen" />;
   }
 
@@ -180,11 +206,14 @@ function AppRoutes() {
   }
 
   return (
-    <>
+    <RuntimeErrorBoundary
+      fallback={(error) => <AppRecoveryScreen error={error} mode="runtime" />}
+    >
         <AppShell
           currentDate={routeDate}
           onAdd={() => setQuickAddOpen(true)}
           onChangeDate={changeRouteDate}
+          onOpenListsHome={() => navigate('/lists')}
           onOpenSettings={() => navigate('/settings')}
           showDateControls={
             location.pathname === '/now' || location.pathname === '/upcoming'
@@ -207,7 +236,9 @@ function AppRoutes() {
                 <NowView
                   currentDate={nowDate}
                   onOpenItem={setSelectedItemId}
-                  onOpenList={openList}
+                  onOpenList={(listId, highlightListItemId) =>
+                    openList(listId, highlightListItemId, nowDate)
+                  }
                   snapshot={snapshot}
                 />
               }
@@ -228,6 +259,9 @@ function AppRoutes() {
                 <UpcomingView
                   currentDate={upcomingDate}
                   onOpenItem={setSelectedItemId}
+                  onOpenList={(listId, highlightListItemId) =>
+                    openList(listId, highlightListItemId, upcomingDate)
+                  }
                   snapshot={snapshot}
                 />
               }
@@ -242,7 +276,9 @@ function AppRoutes() {
                     navigate('/now');
                   }}
                   onOpenItem={setSelectedItemId}
-                  onOpenList={openList}
+                  onOpenList={(listId, highlightListItemId) =>
+                    openList(listId, highlightListItemId, todayDateKey())
+                  }
                   snapshot={snapshot}
                 />
               }
@@ -251,7 +287,7 @@ function AppRoutes() {
               path="/lists"
               element={
                 <ListsHomeView
-                  onOpenList={openList}
+                  onOpenList={(listId) => openList(listId, null, todayDateKey())}
                   snapshot={snapshot}
                 />
               }
@@ -290,7 +326,7 @@ function AppRoutes() {
           <ItemDetailsDialog
             currentDate={routeDate}
             isFocused={Boolean(
-              snapshot?.currentDay.focusItemIds.includes(selectedItem.id),
+              snapshot.currentDay.focusItemIds.includes(selectedItem.id),
             )}
             item={selectedItem}
             isOpen
@@ -301,7 +337,7 @@ function AppRoutes() {
           />
         </Suspense>
       ) : null}
-    </>
+    </RuntimeErrorBoundary>
   );
 }
 

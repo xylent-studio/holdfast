@@ -124,6 +124,58 @@ export async function waitForRemoteItemByTitle(
   );
 }
 
+export async function waitForRemoteListByTitle(
+  userId: string,
+  title: string,
+  timeoutMs?: number,
+) {
+  return pollFor(
+    async () => {
+      const { data, error } = await authClient()
+        .from('lists')
+        .select('id,title,kind,updated_at')
+        .eq('user_id', userId)
+        .eq('title', title)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return data ?? null;
+    },
+    `remote list "${title}"`,
+    timeoutMs,
+  );
+}
+
+export async function waitForRemoteListItemByTitle(
+  userId: string,
+  listId: string,
+  title: string,
+  timeoutMs?: number,
+) {
+  return pollFor(
+    async () => {
+      const { data, error } = await authClient()
+        .from('list_items')
+        .select('id,list_id,title,status,now_date,updated_at')
+        .eq('user_id', userId)
+        .eq('list_id', listId)
+        .eq('title', title)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return data ?? null;
+    },
+    `remote list item "${title}"`,
+    timeoutMs,
+  );
+}
+
 export async function waitForRemoteItemTitle(
   userId: string,
   itemId: string,
@@ -190,7 +242,7 @@ export async function reloadUntilTextVisible(
     await page.reload({ waitUntil: 'networkidle' });
     const match = page.getByText(text, { exact: true });
     if (await match.count()) {
-      await expect(match).toBeVisible();
+      await expect(match.first()).toBeVisible();
       return;
     }
 

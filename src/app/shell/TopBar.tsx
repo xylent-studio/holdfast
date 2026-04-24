@@ -6,6 +6,7 @@ interface TopBarProps {
   currentDate: DateKey;
   onAdd: () => void;
   onChangeDate: (value: DateKey) => void;
+  onOpenListsHome: () => void;
   onOpenSettings: () => void;
   showDateControls: boolean;
   viewPath: string;
@@ -34,6 +35,7 @@ export function TopBar({
   currentDate,
   onAdd,
   onChangeDate,
+  onOpenListsHome,
   onOpenSettings,
   showDateControls,
   viewPath,
@@ -43,6 +45,7 @@ export function TopBar({
   const delta =
     (new Date(`${currentDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86_400_000;
   const title = topBarTitle(viewPath);
+  const showsListsHomeButton = viewPath.startsWith('/lists/');
 
   const dateState =
     delta === 0 ? 'Today' : delta > 0 ? `${delta} day${delta === 1 ? '' : 's'} ahead` : `${Math.abs(delta)} day${Math.abs(delta) === 1 ? '' : 's'} back`;
@@ -62,45 +65,60 @@ export function TopBar({
         ) : null}
       </div>
       <div className="topbar-actions">
-        {showDateControls ? (
+        {showDateControls || showsListsHomeButton ? (
           <div className="topbar-tools">
-            <div className="date-controls">
+            {showsListsHomeButton ? (
               <button
                 className="button ghost small"
-                onClick={() => onChangeDate(addDays(currentDate, -1))}
+                onClick={onOpenListsHome}
                 type="button"
               >
-                Back
+                All lists
               </button>
-              <button
-                className={`button small ${currentDate === today ? 'accent' : 'ghost'}`}
-                onClick={() => onChangeDate(today)}
-                type="button"
-              >
-                Today
-              </button>
-              <button
-                className="button ghost small"
-                onClick={() => onChangeDate(addDays(currentDate, 1))}
-                type="button"
-              >
-                Ahead
-              </button>
-            </div>
-            <button
-              className={`button ghost small ${showDateJump ? 'active-toggle' : ''}`}
-              onClick={() => setShowDateJump((current) => !current)}
-              type="button"
-            >
-              Choose date
-            </button>
-            {showDateJump ? (
-              <input
-                className="date-input"
-                onChange={(event) => onChangeDate(event.target.value as DateKey)}
-                type="date"
-                value={currentDate}
-              />
+            ) : null}
+            {showDateControls ? (
+              <div className="date-controls">
+                <button
+                  className="button ghost small"
+                  onClick={() => onChangeDate(addDays(currentDate, -1))}
+                  type="button"
+                >
+                  Back
+                </button>
+                <button
+                  className={`button small ${currentDate === today ? 'accent' : 'ghost'}`}
+                  onClick={() => onChangeDate(today)}
+                  type="button"
+                >
+                  Today
+                </button>
+                <button
+                  className="button ghost small"
+                  onClick={() => onChangeDate(addDays(currentDate, 1))}
+                  type="button"
+                >
+                  Ahead
+                </button>
+              </div>
+            ) : null}
+            {showDateControls ? (
+              <>
+                <button
+                  className={`button ghost small ${showDateJump ? 'active-toggle' : ''}`}
+                  onClick={() => setShowDateJump((current) => !current)}
+                  type="button"
+                >
+                  Choose date
+                </button>
+                {showDateJump ? (
+                  <input
+                    className="date-input"
+                    onChange={(event) => onChangeDate(event.target.value as DateKey)}
+                    type="date"
+                    value={currentDate}
+                  />
+                ) : null}
+              </>
             ) : null}
           </div>
         ) : null}

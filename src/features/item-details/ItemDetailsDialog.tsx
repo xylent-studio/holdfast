@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { ITEM_KIND_LABELS } from '@/domain/constants';
 import { buildListTargetGroups, inferListKind } from '@/domain/logic/list-targets';
-import type { DateKey } from '@/domain/dates';
+import { todayDateKey, type DateKey } from '@/domain/dates';
 import type { ItemKind, ItemStatus } from '@/domain/schemas/records';
 import {
   addFilesToItem,
@@ -359,8 +359,12 @@ export function ItemDetailsDialog({
               {item.status === 'today'
                 ? isFocused
                   ? 'Remove focus'
-                  : 'Add focus'
-                : 'Add focus'}
+                  : currentDate === todayDateKey()
+                    ? 'Focus now'
+                    : 'Focus for this day'
+                : currentDate === todayDateKey()
+                  ? 'Focus now'
+                  : 'Focus for this day'}
             </button>
           ) : null}
         </div>

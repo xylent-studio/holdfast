@@ -9,6 +9,7 @@ interface AppShellProps {
   currentDate: DateKey;
   onAdd: () => void;
   onChangeDate: (value: DateKey) => void;
+  onOpenListsHome: () => void;
   onOpenSettings: () => void;
   showDateControls: boolean;
   viewPath: string;
@@ -19,6 +20,7 @@ export function AppShell({
   currentDate,
   onAdd,
   onChangeDate,
+  onOpenListsHome,
   onOpenSettings,
   showDateControls,
   viewPath,
@@ -31,6 +33,7 @@ export function AppShell({
           currentDate={currentDate}
           onAdd={onAdd}
           onChangeDate={onChangeDate}
+          onOpenListsHome={onOpenListsHome}
           onOpenSettings={onOpenSettings}
           showDateControls={showDateControls}
           viewPath={viewPath}

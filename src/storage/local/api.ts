@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { liveQuery } from 'dexie';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import {
@@ -44,6 +46,7 @@ import {
 import { db } from '@/storage/local/db';
 import {
   createDefaultWorkspaceState,
+  inferWorkspaceStateFromLegacyData,
   normalizeWorkspaceStateRecord,
 } from '@/storage/local/workspace-state';
 import { downloadAttachmentBlob } from '@/storage/sync/supabase/attachments';
@@ -81,6 +84,13 @@ export interface HoldfastSnapshot {
   workspaceState: WorkspaceStateRecord;
 }
 
+export interface HoldfastSnapshotState {
+  status: 'loading' | 'ready' | 'error';
+  snapshot: HoldfastSnapshot | null;
+  error: Error | null;
+  retry: () => void;
+}
+
 export interface CreateItemInput {
   title: string;
   kind: ItemKind;
@@ -103,6 +113,12 @@ export interface CreateListInput {
   sourceItemId?: string | null;
 }
 
+export type FinishListAction =
+  | 'archive-and-hide'
+  | 'clear-items-for-reuse'
+  | 'reset-checkmarks'
+  | 'archive-run-and-reset';
+
 export interface CreateListItemInput {
   listId: string;
   title: string;
@@ -116,6 +132,9 @@ export interface UpdateListInput {
   kind?: ListKind;
   lane?: ListRecord['lane'];
   pinned?: boolean;
+  scheduledDate?: DateKey | null;
+  scheduledTime?: string | null;
+  completedAt?: string | null;
   archivedAt?: string | null;
 }
 
@@ -156,6 +175,7 @@ function defaultDailyRecord(date: string): DailyRecord {
       READINESS_CHECKS.map((check) => [check.key, false]),
     ),
     focusItemIds: [],
+    focusListIds: [],
     launchNote: '',
     closeWin: '',
     closeCarry: '',
@@ -256,6 +276,9 @@ function createListRecord(input: CreateListInput): ListRecord {
     lane: input.lane,
     pinned: input.pinned ?? false,
     sourceItemId: input.sourceItemId ?? null,
+    scheduledDate: null,
+    scheduledTime: null,
+    completedAt: null,
     archivedAt: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -329,7 +352,46 @@ async function ensureSettingsAndSync(): Promise<{
 
   let workspaceState = await db.workspaceState.get(WORKSPACE_STATE_ROW_ID);
   if (!workspaceState) {
-    workspaceState = createDefaultWorkspaceState();
+    const [itemCount, listCount, listItemCount, routineCount, attachmentCount] =
+      await Promise.all([
+        db.items.count(),
+        db.lists.count(),
+        db.listItems.count(),
+        db.routines.count(),
+        db.attachments.count(),
+      ]);
+    const [remoteRevisionCounts, hasMutationHistory] = await Promise.all([
+      Promise.all([
+        db.items.filter((record) => Boolean(record.remoteRevision)).count(),
+        db.lists.filter((record) => Boolean(record.remoteRevision)).count(),
+        db.listItems.filter((record) => Boolean(record.remoteRevision)).count(),
+        db.dailyRecords.filter((record) => Boolean(record.remoteRevision)).count(),
+        db.weeklyRecords.filter((record) => Boolean(record.remoteRevision)).count(),
+        db.routines.filter((record) => Boolean(record.remoteRevision)).count(),
+        db.settings.filter((record) => Boolean(record.remoteRevision)).count(),
+        db.attachments.filter((record) => Boolean(record.remoteRevision)).count(),
+      ]),
+      db.mutationQueue
+        .filter(
+          (record) =>
+            record.status === 'acknowledged' ||
+            record.status === 'sent' ||
+            record.status === 'failed',
+        )
+        .count(),
+    ]);
+    workspaceState = inferWorkspaceStateFromLegacyData({
+      hasLocalData:
+        itemCount > 0 ||
+        listCount > 0 ||
+        listItemCount > 0 ||
+        routineCount > 0 ||
+        attachmentCount > 0,
+      hasRemoteSyncEvidence:
+        Boolean(syncState.lastSyncedAt) ||
+        remoteRevisionCounts.some((count) => count > 0) ||
+        hasMutationHistory > 0,
+    });
     await db.workspaceState.put(workspaceState);
   } else {
     const normalized = normalizeWorkspaceStateRecord(workspaceState);
@@ -448,14 +510,62 @@ async function removeItemFromFocusEverywhere(
   return updates;
 }
 
+async function removeListFromFocusEverywhere(
+  listId: string,
+  options?: { queueMutations?: boolean },
+): Promise<DailyRecord[]> {
+  const records = await db.dailyRecords.toArray();
+  const updates = records
+    .filter((record) => record.focusListIds.includes(listId))
+    .map((record) =>
+      DailyRecordSchema.parse({
+        ...record,
+        focusListIds: record.focusListIds.filter((id) => id !== listId),
+        updatedAt: nowIso(),
+        syncState: 'pending',
+        remoteRevision: record.remoteRevision ?? null,
+      }),
+    );
+
+  if (updates.length) {
+    await db.dailyRecords.bulkPut(updates);
+    if (options?.queueMutations) {
+      for (const updated of updates) {
+        await queueMutation(
+          createMutationRecord(
+            'dailyRecord',
+            updated.date,
+            'daily.focus.changed',
+            {
+              dailyRecord: updated,
+            },
+          ),
+        );
+      }
+    }
+  }
+
+  return updates;
+}
+
 export async function bootstrapHoldfast(): Promise<void> {
   await db.transaction(
     'rw',
-    db.settings,
-    db.syncState,
-    db.workspaceState,
+    [
+      db.items,
+      db.lists,
+      db.listItems,
+      db.dailyRecords,
+      db.weeklyRecords,
+      db.routines,
+      db.settings,
+      db.attachments,
+      db.mutationQueue,
+      db.syncState,
+      db.workspaceState,
+    ],
     async () => {
-    await ensureSettingsAndSync();
+      await ensureSettingsAndSync();
     },
   );
 }
@@ -512,7 +622,15 @@ export async function removeDataFromDevice(): Promise<void> {
 
 export async function updateSyncState(
   patch: Partial<
-    Pick<SyncStateRecord, 'mode' | 'lastSyncedAt' | 'pullCursorByStream'>
+    Pick<
+      SyncStateRecord,
+      | 'mode'
+      | 'lastSyncedAt'
+      | 'blockedReason'
+      | 'lastFailureAt'
+      | 'lastTransportError'
+      | 'pullCursorByStream'
+    >
   >,
 ): Promise<SyncStateRecord> {
   return db.transaction('rw', db.syncState, async () => {
@@ -662,6 +780,204 @@ export function useHoldfastSnapshot(
     async () => getHoldfastSnapshot(currentDate),
     [currentDate],
   );
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function serializeBlobRecord(
+  record: { blob: Blob; createdAt: string; id: string; schemaVersion: number },
+) {
+  return {
+    ...record,
+    blob: {
+      size: record.blob.size,
+      type: record.blob.type,
+    },
+  };
+}
+
+export async function exportRawWorkspaceSnapshot(): Promise<{
+  blob: Blob;
+  exportedAt: string;
+  filename: string;
+}> {
+  const exportedAt = nowIso();
+  const rawSnapshot = {
+    exportedAt,
+    format: 'holdfast-recovery-raw-v1',
+    schemaVersion: SCHEMA_VERSION,
+    items: await db.items.toArray(),
+    lists: await db.lists.toArray(),
+    listItems: await db.listItems.toArray(),
+    dailyRecords: await db.dailyRecords.toArray(),
+    weeklyRecords: await db.weeklyRecords.toArray(),
+    routines: await db.routines.toArray(),
+    settings: await db.settings.toArray(),
+    attachments: await db.attachments.toArray(),
+    attachmentBlobs: (await db.attachmentBlobs.toArray()).map(
+      serializeBlobRecord,
+    ),
+    mutationQueue: await db.mutationQueue.toArray(),
+    syncState: await db.syncState.toArray(),
+    workspaceState: await db.workspaceState.toArray(),
+  };
+
+  return {
+    blob: new Blob([JSON.stringify(rawSnapshot, null, 2)], {
+      type: 'application/json',
+    }),
+    exportedAt,
+    filename: `holdfast-recovery-${exportedAt.slice(0, 10)}.json`,
+  };
+}
+
+export function useHoldfastSnapshotState(
+  currentDate: DateKey,
+): HoldfastSnapshotState {
+  const [bootstrapToken, setBootstrapToken] = useState(0);
+  const [bootstrapState, setBootstrapState] = useState<{
+    error: Error | null;
+    token: number | null;
+  }>({
+    error: null,
+    token: null,
+  });
+  const [snapshotState, setSnapshotState] = useState<{
+    date: DateKey | null;
+    error: Error | null;
+    snapshot: HoldfastSnapshot | null;
+    token: number | null;
+  }>({
+    date: null,
+    error: null,
+    snapshot: null,
+    token: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void bootstrapHoldfast()
+      .then(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setBootstrapState({
+          error: null,
+          token: bootstrapToken,
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setBootstrapState({
+          error: asError(error),
+          token: bootstrapToken,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrapToken]);
+
+  const bootstrapReady =
+    bootstrapState.token === bootstrapToken && !bootstrapState.error;
+
+  useEffect(() => {
+    if (!bootstrapReady) {
+      return;
+    }
+
+    let cancelled = false;
+    const subscription = liveQuery(() => getHoldfastSnapshot(currentDate)).subscribe({
+      next(snapshot) {
+        if (cancelled) {
+          return;
+        }
+
+        setSnapshotState({
+          date: currentDate,
+          error: null,
+          snapshot,
+          token: bootstrapToken,
+        });
+      },
+      error(error) {
+        if (cancelled) {
+          return;
+        }
+
+        setSnapshotState({
+          date: currentDate,
+          error: asError(error),
+          snapshot: null,
+          token: bootstrapToken,
+        });
+      },
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [bootstrapReady, bootstrapToken, currentDate]);
+
+  const retry = (): void => {
+    setBootstrapToken((current) => current + 1);
+  };
+
+  if (bootstrapState.token === bootstrapToken && bootstrapState.error) {
+    return {
+      status: 'error',
+      snapshot: null,
+      error: bootstrapState.error,
+      retry,
+    };
+  }
+
+  if (
+    snapshotState.token === bootstrapToken &&
+    snapshotState.date === currentDate &&
+    snapshotState.error
+  ) {
+    return {
+      status: 'error',
+      snapshot: null,
+      error: snapshotState.error,
+      retry,
+    };
+  }
+
+  if (
+    !bootstrapReady ||
+    snapshotState.token !== bootstrapToken ||
+    snapshotState.date !== currentDate ||
+    !snapshotState.snapshot
+  ) {
+    return {
+      status: 'loading',
+      snapshot:
+        snapshotState.token === bootstrapToken &&
+        snapshotState.date === currentDate
+          ? snapshotState.snapshot
+          : null,
+      error: null,
+      retry,
+    };
+  }
+
+  return {
+    status: 'ready',
+    snapshot: snapshotState.snapshot,
+    error: null,
+    retry,
+  };
 }
 
 export async function createItem(input: CreateItemInput): Promise<void> {
@@ -1099,6 +1415,144 @@ export async function setItemFocus(
         await queueMutation(
           createMutationRecord('item', itemId, 'item.updated', {
             item: updatedItem,
+          }),
+        );
+      }
+    },
+  );
+}
+
+export async function moveListToNow(
+  listId: string,
+  date: DateKey,
+): Promise<void> {
+  await db.transaction('rw', db.lists, db.mutationQueue, async () => {
+    const current = await db.lists.get(listId);
+    if (!current || current.deletedAt || current.archivedAt) {
+      return;
+    }
+
+    const updated = ListRecordSchema.parse({
+      ...current,
+      scheduledDate: date,
+      scheduledTime: null,
+      completedAt: null,
+      updatedAt: nowIso(),
+      syncState: 'pending',
+    });
+
+    await db.lists.put(updated);
+    await queueMutation(
+      createMutationRecord('list', listId, 'list.updated', { list: updated }),
+    );
+  });
+}
+
+export async function scheduleList(
+  listId: string,
+  date: DateKey,
+  time: string | null = null,
+): Promise<void> {
+  await db.transaction('rw', db.lists, db.mutationQueue, async () => {
+    const current = await db.lists.get(listId);
+    if (!current || current.deletedAt || current.archivedAt) {
+      return;
+    }
+
+    const updated = ListRecordSchema.parse({
+      ...current,
+      scheduledDate: date,
+      scheduledTime: time,
+      completedAt: null,
+      updatedAt: nowIso(),
+      syncState: 'pending',
+    });
+
+    await db.lists.put(updated);
+    await queueMutation(
+      createMutationRecord('list', listId, 'list.updated', { list: updated }),
+    );
+  });
+}
+
+export async function clearListSchedule(listId: string): Promise<void> {
+  await db.transaction('rw', db.lists, db.mutationQueue, async () => {
+    const current = await db.lists.get(listId);
+    if (!current || current.deletedAt) {
+      return;
+    }
+
+    const updated = ListRecordSchema.parse({
+      ...current,
+      scheduledDate: null,
+      scheduledTime: null,
+      updatedAt: nowIso(),
+      syncState: 'pending',
+    });
+
+    await db.lists.put(updated);
+    await queueMutation(
+      createMutationRecord('list', listId, 'list.updated', { list: updated }),
+    );
+  });
+}
+
+export async function setListFocus(
+  date: DateKey,
+  listId: string,
+  focused: boolean,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.lists,
+    db.dailyRecords,
+    db.mutationQueue,
+    async () => {
+      const list = await db.lists.get(listId);
+      if (!list || list.deletedAt || list.archivedAt) {
+        return;
+      }
+
+      await removeListFromFocusEverywhere(listId, { queueMutations: true });
+      if (!focused) {
+        return;
+      }
+
+      const timestamp = nowIso();
+      const day = await ensureDailyRecord(date);
+      const focusListIds = [...day.focusListIds.filter((id) => id !== listId), listId];
+      const updatedDay = DailyRecordSchema.parse({
+        ...day,
+        focusListIds,
+        updatedAt: timestamp,
+        syncState: 'pending',
+      });
+      const updatedList =
+        list.scheduledDate === date && list.completedAt === null
+          ? list
+          : ListRecordSchema.parse({
+              ...list,
+              scheduledDate: date,
+              scheduledTime: null,
+              completedAt: null,
+              updatedAt: timestamp,
+              syncState: 'pending',
+            });
+
+      await db.dailyRecords.put(updatedDay);
+      if (updatedList !== list) {
+        await db.lists.put(updatedList);
+      }
+
+      await queueMutation(
+        createMutationRecord('dailyRecord', date, 'daily.focus.changed', {
+          dailyRecord: updatedDay,
+        }),
+      );
+      if (updatedList !== list) {
+        await queueMutation(
+          createMutationRecord('list', listId, 'list.updated', {
+            list: updatedList,
           }),
         );
       }
@@ -1832,6 +2286,18 @@ export async function updateList(
       kind: patch.kind ?? current.kind,
       lane: patch.lane ?? current.lane,
       pinned: patch.pinned ?? current.pinned,
+      scheduledDate:
+        patch.scheduledDate === undefined
+          ? current.scheduledDate
+          : patch.scheduledDate,
+      scheduledTime:
+        patch.scheduledTime === undefined
+          ? current.scheduledTime
+          : patch.scheduledTime,
+      completedAt:
+        patch.completedAt === undefined
+          ? current.completedAt
+          : patch.completedAt,
       archivedAt:
         patch.archivedAt === undefined ? current.archivedAt : patch.archivedAt,
       updatedAt: nowIso(),
@@ -1850,6 +2316,7 @@ export async function deleteList(listId: string): Promise<void> {
     'rw',
     db.lists,
     db.listItems,
+    db.dailyRecords,
     db.mutationQueue,
     async () => {
       const current = await db.lists.get(listId);
@@ -1883,6 +2350,7 @@ export async function deleteList(listId: string): Promise<void> {
       if (deletedListItems.length) {
         await db.listItems.bulkPut(deletedListItems);
       }
+      await removeListFromFocusEverywhere(listId, { queueMutations: true });
       await queueMutation(
         createMutationRecord('list', listId, 'list.deleted', {
           listId,
@@ -2085,6 +2553,254 @@ export async function deleteListItem(listItemId: string): Promise<void> {
       );
     }
   });
+}
+
+function createArchivedListSnapshotRecord(
+  list: ListRecord,
+  currentDate: DateKey,
+  timestamp: string,
+): ListRecord {
+  return ListRecordSchema.parse({
+    ...list,
+    id: crypto.randomUUID(),
+    scheduledDate: list.scheduledDate ?? currentDate,
+    scheduledTime: list.scheduledTime,
+    completedAt: timestamp,
+    archivedAt: timestamp,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
+    syncState: 'pending',
+    remoteRevision: null,
+  });
+}
+
+function cloneListItemForArchivedSnapshot(
+  listItem: ListItemRecord,
+  listId: string,
+  position: number,
+  timestamp: string,
+): ListItemRecord {
+  return ListItemRecordSchema.parse({
+    ...listItem,
+    id: crypto.randomUUID(),
+    listId,
+    position,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
+    syncState: 'pending',
+    remoteRevision: null,
+  });
+}
+
+function resetReusableListItem(
+  listItem: ListItemRecord,
+  timestamp: string,
+): ListItemRecord {
+  if (listItem.status === 'archived') {
+    return ListItemRecordSchema.parse({
+      ...listItem,
+      nowDate: null,
+      updatedAt: timestamp,
+      syncState: 'pending',
+    });
+  }
+
+  return ListItemRecordSchema.parse({
+    ...listItem,
+    status: 'open',
+    nowDate: null,
+    completedAt: null,
+    archivedAt: null,
+    updatedAt: timestamp,
+    syncState: 'pending',
+  });
+}
+
+export async function finishList(
+  listId: string,
+  action: FinishListAction,
+  currentDate: DateKey,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.lists,
+    db.listItems,
+    db.dailyRecords,
+    db.mutationQueue,
+    async () => {
+      const list = await db.lists.get(listId);
+      if (!list || list.deletedAt || list.archivedAt) {
+        return;
+      }
+
+      if (
+        action === 'archive-run-and-reset' &&
+        !['replenishment', 'checklist'].includes(list.kind)
+      ) {
+        return;
+      }
+
+      if (action !== 'archive-and-hide' && list.kind === 'reference') {
+        return;
+      }
+
+      const timestamp = nowIso();
+      const listItems = (await db.listItems.where('listId').equals(listId).toArray())
+        .filter((entry) => !entry.deletedAt)
+        .sort((left, right) => left.position - right.position);
+
+      await removeListFromFocusEverywhere(listId, { queueMutations: true });
+
+      if (action === 'archive-and-hide') {
+        const archivedList = ListRecordSchema.parse({
+          ...list,
+          completedAt: timestamp,
+          archivedAt: list.archivedAt ?? timestamp,
+          updatedAt: timestamp,
+          syncState: 'pending',
+        });
+
+        await db.lists.put(archivedList);
+        await queueMutation(
+          createMutationRecord('list', archivedList.id, 'list.updated', {
+            list: archivedList,
+          }),
+        );
+        return;
+      }
+
+      if (action === 'clear-items-for-reuse') {
+        const deletedItems = listItems.map((entry) =>
+          ListItemRecordSchema.parse({
+            ...entry,
+            deletedAt: timestamp,
+            nowDate: null,
+            updatedAt: timestamp,
+            syncState: 'pending',
+          }),
+        );
+        const resetList = ListRecordSchema.parse({
+          ...list,
+          scheduledDate: null,
+          scheduledTime: null,
+          completedAt: null,
+          updatedAt: timestamp,
+          syncState: 'pending',
+        });
+
+        if (deletedItems.length) {
+          await db.listItems.bulkPut(deletedItems);
+        }
+        await db.lists.put(resetList);
+        for (const entry of deletedItems) {
+          await queueMutation(
+            createMutationRecord('listItem', entry.id, 'list-item.deleted', {
+              listItemId: entry.id,
+              listId,
+              remoteRevision: entry.remoteRevision,
+            }),
+          );
+        }
+        await queueMutation(
+          createMutationRecord('list', resetList.id, 'list.updated', {
+            list: resetList,
+          }),
+        );
+        return;
+      }
+
+      if (action === 'reset-checkmarks') {
+        const resetItems = listItems.map((entry) =>
+          entry.status === 'done' || entry.nowDate
+            ? resetReusableListItem(entry, timestamp)
+            : entry,
+        );
+        const changedItems = resetItems.filter((entry) => entry !== listItems.find((item) => item.id === entry.id));
+        const resetList = ListRecordSchema.parse({
+          ...list,
+          scheduledDate: null,
+          scheduledTime: null,
+          completedAt: null,
+          updatedAt: timestamp,
+          syncState: 'pending',
+        });
+
+        if (changedItems.length) {
+          await db.listItems.bulkPut(changedItems);
+        }
+        await db.lists.put(resetList);
+        for (const entry of changedItems) {
+          await queueMutation(
+            createMutationRecord('listItem', entry.id, 'list-item.updated', {
+              listItem: entry,
+            }),
+          );
+        }
+        await queueMutation(
+          createMutationRecord('list', resetList.id, 'list.updated', {
+            list: resetList,
+          }),
+        );
+        return;
+      }
+
+      const archivedSnapshot = createArchivedListSnapshotRecord(
+        list,
+        currentDate,
+        timestamp,
+      );
+      const archivedSnapshotItems = listItems.map((entry, index) =>
+        cloneListItemForArchivedSnapshot(entry, archivedSnapshot.id, index, timestamp),
+      );
+      const resetItems = listItems
+        .map((entry) => resetReusableListItem(entry, timestamp))
+        .filter((entry) => entry !== null);
+      const resetList = ListRecordSchema.parse({
+        ...list,
+        scheduledDate: null,
+        scheduledTime: null,
+        completedAt: null,
+        updatedAt: timestamp,
+        syncState: 'pending',
+      });
+
+      await db.lists.put(archivedSnapshot);
+      if (archivedSnapshotItems.length) {
+        await db.listItems.bulkPut(archivedSnapshotItems);
+      }
+      if (resetItems.length) {
+        await db.listItems.bulkPut(resetItems);
+      }
+      await db.lists.put(resetList);
+
+      await queueMutation(
+        createMutationRecord('list', archivedSnapshot.id, 'list.created', {
+          list: archivedSnapshot,
+        }),
+      );
+      for (const entry of archivedSnapshotItems) {
+        await queueMutation(
+          createMutationRecord('listItem', entry.id, 'list-item.created', {
+            listItem: entry,
+          }),
+        );
+      }
+      for (const entry of resetItems) {
+        await queueMutation(
+          createMutationRecord('listItem', entry.id, 'list-item.updated', {
+            listItem: entry,
+          }),
+        );
+      }
+      await queueMutation(
+        createMutationRecord('list', resetList.id, 'list.updated', {
+          list: resetList,
+        }),
+      );
+    },
+  );
 }
 
 export async function updateRoutine(

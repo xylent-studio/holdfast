@@ -9,22 +9,32 @@ import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
 const createListItemMock = vi.fn();
 const createTaskFromListItemMock = vi.fn();
 const deleteListItemMock = vi.fn();
+const finishListMock = vi.fn();
+const moveListToNowMock = vi.fn();
 const promoteListItemToNowMock = vi.fn();
 const replaceListItemWithLatestSavedVersionMock = vi.fn();
 const replaceListWithLatestSavedVersionMock = vi.fn();
+const scheduleListMock = vi.fn();
+const setListFocusMock = vi.fn();
+const clearListScheduleMock = vi.fn();
 const updateListMock = vi.fn();
 const updateListItemMock = vi.fn();
 
 vi.mock('@/storage/local/api', () => ({
+  clearListSchedule: (...args: unknown[]) => clearListScheduleMock(...args),
   createListItem: (...args: unknown[]) => createListItemMock(...args),
   createTaskFromListItem: (...args: unknown[]) =>
     createTaskFromListItemMock(...args),
   deleteListItem: (...args: unknown[]) => deleteListItemMock(...args),
+  finishList: (...args: unknown[]) => finishListMock(...args),
+  moveListToNow: (...args: unknown[]) => moveListToNowMock(...args),
   promoteListItemToNow: (...args: unknown[]) => promoteListItemToNowMock(...args),
   replaceListItemWithLatestSavedVersion: (...args: unknown[]) =>
     replaceListItemWithLatestSavedVersionMock(...args),
   replaceListWithLatestSavedVersion: (...args: unknown[]) =>
     replaceListWithLatestSavedVersionMock(...args),
+  scheduleList: (...args: unknown[]) => scheduleListMock(...args),
+  setListFocus: (...args: unknown[]) => setListFocusMock(...args),
   updateList: (...args: unknown[]) => updateListMock(...args),
   updateListItem: (...args: unknown[]) => updateListItemMock(...args),
 }));
@@ -42,6 +52,9 @@ function makeSnapshot(): HoldfastSnapshot {
         lane: 'home',
         pinned: true,
         sourceItemId: null,
+        scheduledDate: null,
+        scheduledTime: null,
+        completedAt: null,
         archivedAt: null,
         createdAt: '2026-04-20T08:00:00.000Z',
         updatedAt: '2026-04-20T09:00:00.000Z',
@@ -96,6 +109,7 @@ function makeSnapshot(): HoldfastSnapshot {
         sleepSetup: false,
       },
       focusItemIds: [],
+      focusListIds: [],
       launchNote: '',
       closeWin: '',
       closeCarry: '',
@@ -147,9 +161,14 @@ describe('ListView', () => {
     createListItemMock.mockReset();
     createTaskFromListItemMock.mockReset();
     deleteListItemMock.mockReset();
+    finishListMock.mockReset();
+    moveListToNowMock.mockReset();
     promoteListItemToNowMock.mockReset();
     replaceListItemWithLatestSavedVersionMock.mockReset();
     replaceListWithLatestSavedVersionMock.mockReset();
+    scheduleListMock.mockReset();
+    setListFocusMock.mockReset();
+    clearListScheduleMock.mockReset();
     updateListMock.mockReset();
     updateListItemMock.mockReset();
   });
@@ -206,5 +225,33 @@ describe('ListView', () => {
         nowDate: null,
       });
     });
+  });
+
+  it('opens the finish sheet for an active list run', async () => {
+    const snapshot = makeSnapshot();
+    snapshot.lists[0] = {
+      ...snapshot.lists[0]!,
+      syncState: 'pending',
+      scheduledDate: '2026-04-20',
+    };
+    snapshot.currentDay.focusListIds = ['list-1'];
+
+    render(
+      <ListView
+        currentDate="2026-04-20"
+        listId="list-1"
+        onOpenItem={vi.fn()}
+        snapshot={snapshot}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish list' }));
+
+    expect(
+      screen.getByRole('heading', { name: 'Finish Groceries' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Archive run and reset/i }),
+    ).toBeInTheDocument();
   });
 });

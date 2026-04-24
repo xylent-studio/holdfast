@@ -29,8 +29,29 @@ import {
 import { getSupabaseBrowserClient } from '@/storage/sync/supabase/client';
 import type { SyncAuthPromptState } from '@/domain/schemas/records';
 
+const AUTH_RESTORE_TIMEOUT_MS = 15_000;
+
 function friendlyErrorMessage(fallback: string, error: unknown): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then((value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      });
+  });
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -85,7 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     void (async () => {
-      const restored = await maybeRestoreSupabaseSessionFromUrl(client);
+      const restored = await withTimeout(
+        maybeRestoreSupabaseSessionFromUrl(client),
+        AUTH_RESTORE_TIMEOUT_MS,
+        "Couldn't restore your session yet.",
+      );
       if (cancelled) {
         return;
       }
@@ -105,7 +130,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const { data, error: sessionError } = await client.auth.getSession();
+      const { data, error: sessionError } = await withTimeout(
+        client.auth.getSession(),
+        AUTH_RESTORE_TIMEOUT_MS,
+        "Couldn't restore your session yet.",
+      );
         if (cancelled) {
           return;
         }

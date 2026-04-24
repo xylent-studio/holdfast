@@ -16,6 +16,7 @@ import {
   type SettingsRecord,
   type WeeklyRecord,
 } from '@/domain/schemas/records';
+import { READINESS_CHECKS, SCHEMA_VERSION } from '@/domain/constants';
 
 export const HOLDFAST_ATTACHMENTS_BUCKET = 'holdfast-attachments';
 
@@ -62,6 +63,9 @@ export interface RemoteListRow {
   lane: ListRecord['lane'];
   pinned: boolean;
   source_item_id: string | null;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
+  completed_at: string | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -97,6 +101,7 @@ export interface RemoteDailyRecordRow {
   closed_at: string | null;
   readiness: DailyRecord['readiness'];
   focus_item_ids: string[];
+  focus_list_ids: string[];
   launch_note: string;
   close_win: string;
   close_carry: string;
@@ -183,6 +188,23 @@ function remoteRevision(row: { server_updated_at?: string; updated_at?: string }
   return row.server_updated_at ?? row.updated_at ?? null;
 }
 
+function currentSchemaVersion(): typeof SCHEMA_VERSION {
+  return SCHEMA_VERSION;
+}
+
+function normalizeRemoteReadiness(
+  readiness: Partial<DailyRecord['readiness']> | null | undefined,
+): DailyRecord['readiness'] {
+  const current =
+    readiness && typeof readiness === 'object'
+      ? readiness
+      : {};
+
+  return Object.fromEntries(
+    READINESS_CHECKS.map((check) => [check.key, Boolean(current[check.key])]),
+  ) as DailyRecord['readiness'];
+}
+
 export function toRemoteItemRow(
   userId: string,
   item: ItemRecord,
@@ -214,7 +236,7 @@ export function toRemoteItemRow(
 export function fromRemoteItemRow(row: RemoteItemRow): ItemRecord {
   return ItemRecordSchema.parse({
     id: row.id,
-    schemaVersion: row.schema_version,
+    schemaVersion: currentSchemaVersion(),
     title: row.title,
     kind: row.kind,
     lane: row.lane,
@@ -250,6 +272,9 @@ export function toRemoteListRow(
     lane: list.lane,
     pinned: list.pinned,
     source_item_id: list.sourceItemId,
+    scheduled_date: list.scheduledDate,
+    scheduled_time: list.scheduledTime,
+    completed_at: list.completedAt,
     archived_at: list.archivedAt,
     created_at: list.createdAt,
     updated_at: list.updatedAt,
@@ -260,12 +285,15 @@ export function toRemoteListRow(
 export function fromRemoteListRow(row: RemoteListRow): ListRecord {
   return ListRecordSchema.parse({
     id: row.id,
-    schemaVersion: row.schema_version,
+    schemaVersion: currentSchemaVersion(),
     title: row.title,
     kind: row.kind,
     lane: row.lane,
     pinned: row.pinned,
     sourceItemId: row.source_item_id,
+    scheduledDate: row.scheduled_date ?? null,
+    scheduledTime: row.scheduled_time ?? null,
+    completedAt: row.completed_at ?? null,
     archivedAt: row.archived_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -303,7 +331,7 @@ export function fromRemoteListItemRow(
 ): ListItemRecord {
   return ListItemRecordSchema.parse({
     id: row.id,
-    schemaVersion: row.schema_version,
+    schemaVersion: currentSchemaVersion(),
     listId: row.list_id,
     title: row.title,
     body: row.body,
@@ -333,6 +361,7 @@ export function toRemoteDailyRecordRow(
     closed_at: dailyRecord.closedAt,
     readiness: dailyRecord.readiness,
     focus_item_ids: dailyRecord.focusItemIds,
+    focus_list_ids: dailyRecord.focusListIds,
     launch_note: dailyRecord.launchNote,
     close_win: dailyRecord.closeWin,
     close_carry: dailyRecord.closeCarry,
@@ -349,11 +378,12 @@ export function fromRemoteDailyRecordRow(
 ): DailyRecord {
   return DailyRecordSchema.parse({
     date: row.date,
-    schemaVersion: row.schema_version,
+    schemaVersion: currentSchemaVersion(),
     startedAt: row.started_at,
     closedAt: row.closed_at,
-    readiness: row.readiness,
+    readiness: normalizeRemoteReadiness(row.readiness),
     focusItemIds: row.focus_item_ids,
+    focusListIds: row.focus_list_ids ?? [],
     launchNote: row.launch_note,
     closeWin: row.close_win,
     closeCarry: row.close_carry,
@@ -388,7 +418,7 @@ export function fromRemoteWeeklyRecordRow(
 ): WeeklyRecord {
   return WeeklyRecordSchema.parse({
     weekStart: row.week_start,
-    schemaVersion: row.schema_version,
+    schemaVersion: currentSchemaVersion(),
     focus: row.focus,
     protect: row.protect,
     notes: row.notes,
@@ -423,7 +453,7 @@ export function toRemoteRoutineRow(
 export function fromRemoteRoutineRow(row: RemoteRoutineRow): RoutineRecord {
   return RoutineRecordSchema.parse({
     id: row.id,
-    schemaVersion: row.schema_version,
+    schemaVersion: currentSchemaVersion(),
     title: row.title,
     lane: row.lane,
     destination: row.destination,
@@ -457,7 +487,7 @@ export function toRemoteSettingsRow(
 export function fromRemoteSettingsRow(row: RemoteSettingsRow): SettingsRecord {
   return SettingsRecordSchema.parse({
     id: 'settings',
-    schemaVersion: row.schema_version,
+    schemaVersion: currentSchemaVersion(),
     direction: row.direction,
     standards: row.standards,
     why: row.why,
@@ -493,7 +523,7 @@ export function fromRemoteAttachmentRow(
 ): AttachmentRecord {
   return AttachmentRecordSchema.parse({
     id: row.id,
-    schemaVersion: row.schema_version,
+    schemaVersion: currentSchemaVersion(),
     itemId: row.item_id,
     blobId: row.id,
     kind: row.kind,

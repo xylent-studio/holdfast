@@ -242,6 +242,7 @@ describe('HoldfastDatabase migration', () => {
     expect(DailyRecordSchema.parse(dailyRecords[0]).schemaVersion).toBe(
       SCHEMA_VERSION,
     );
+    expect(DailyRecordSchema.parse(dailyRecords[0]).focusListIds).toEqual([]);
     expect(WeeklyRecordSchema.parse(weeklyRecords[0]).schemaVersion).toBe(
       SCHEMA_VERSION,
     );
@@ -272,6 +273,9 @@ describe('HoldfastDatabase migration', () => {
     ).toMatchObject({
       schemaVersion: SCHEMA_VERSION,
       mode: 'ready',
+      blockedReason: 'signed-out',
+      lastFailureAt: null,
+      lastTransportError: null,
     });
     expect(
       normalizeWorkspaceStateRecord(

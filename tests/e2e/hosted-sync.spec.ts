@@ -9,6 +9,8 @@ import {
   reloadUntilTextVisible,
   waitForRemoteAttachment,
   waitForRemoteItemByTitle,
+  waitForRemoteListByTitle,
+  waitForRemoteListItemByTitle,
   waitForRemoteItemTitle,
 } from './hosted-auth.helpers';
 
@@ -16,6 +18,7 @@ const syncSmokeEnabled = process.env.PLAYWRIGHT_SYNC_SMOKE === '1';
 
 test.describe('hosted sync smoke', () => {
   const createdUserIds = new Set<string>();
+  test.describe.configure({ timeout: 60_000 });
 
   test.skip(
     !syncSmokeEnabled || !baseUrl,
@@ -165,6 +168,84 @@ test.describe('hosted sync smoke', () => {
 
       await secondPage.goto('/inbox', { waitUntil: 'networkidle' });
       await reloadUntilTextVisible(secondPage, title);
+    } finally {
+      await firstContext.close();
+      await secondContext.close();
+    }
+  });
+
+  test('syncs list creation and list items without leaving settings stuck in retry', async ({
+    browser,
+  }) => {
+    const email = `holdfast-lists-${Date.now()}@example.com`;
+    const firstLink = await createMagicLink(email);
+    createdUserIds.add(firstLink.userId);
+
+    const firstContext = await browser.newContext();
+    const secondContext = await browser.newContext();
+    const firstPage = await firstContext.newPage();
+    const secondPage = await secondContext.newPage();
+
+    try {
+      await consumeMagicLink(firstLink.actionLink, firstPage);
+      await openSignedInSettings(firstPage);
+      await firstPage.goto('/lists', { waitUntil: 'networkidle' });
+      await expect(
+        firstPage.getByRole('heading', { name: 'Lists', exact: true }),
+      ).toBeVisible();
+
+      const secondLink = await createMagicLink(email);
+      createdUserIds.add(secondLink.userId);
+      expect(firstLink.userId).toBe(secondLink.userId);
+
+      await consumeMagicLink(secondLink.actionLink, secondPage);
+      await openSignedInSettings(secondPage);
+      await secondPage.goto('/lists', { waitUntil: 'networkidle' });
+      await expect(
+        secondPage.getByRole('heading', { name: 'Lists', exact: true }),
+      ).toBeVisible();
+
+      const listTitle = `Hosted sync groceries ${Date.now()}`;
+      const listItemTitle = `Milk ${Date.now()}`;
+
+      await firstPage.getByRole('button', { name: 'New list' }).click();
+      await firstPage.getByLabel('Title').fill(listTitle);
+      await firstPage.getByRole('button', { name: 'Create list' }).click();
+
+      const remoteList = await waitForRemoteListByTitle(firstLink.userId, listTitle);
+      await firstPage.goto('/lists', { waitUntil: 'networkidle' });
+      await reloadUntilTextVisible(firstPage, listTitle);
+      await firstPage
+        .locator('.item-card')
+        .filter({ hasText: listTitle })
+        .first()
+        .getByRole('button', { name: 'Open list' })
+        .click();
+      await expect(firstPage.getByPlaceholder(`Add to ${listTitle}`)).toBeVisible();
+
+      const listInput = firstPage.getByPlaceholder(`Add to ${listTitle}`);
+      await listInput.fill(listItemTitle);
+      await listInput.press('Enter');
+      await expect(firstPage.getByText(listItemTitle, { exact: true })).toBeVisible();
+
+      await waitForRemoteListItemByTitle(
+        firstLink.userId,
+        remoteList.id,
+        listItemTitle,
+      );
+
+      await firstPage.goto('/settings', { waitUntil: 'networkidle' });
+      await reloadUntilTextVisible(firstPage, 'Up to date');
+
+      await secondPage.goto('/lists', { waitUntil: 'networkidle' });
+      await reloadUntilTextVisible(secondPage, listTitle);
+      await secondPage
+        .locator('.item-card')
+        .filter({ hasText: listTitle })
+        .first()
+        .getByRole('button', { name: 'Open list' })
+        .click();
+      await reloadUntilTextVisible(secondPage, listItemTitle);
     } finally {
       await firstContext.close();
       await secondContext.close();

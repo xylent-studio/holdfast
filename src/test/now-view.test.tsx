@@ -80,6 +80,7 @@ function makeSnapshot(items: ItemWithAttachments[] = []): HoldfastSnapshot {
           sleepSetup: false,
         },
         focusItemIds: [],
+        focusListIds: [],
         launchNote: '',
         closeWin: 'Shipped something hard',
         closeCarry: 'Buy batteries',
@@ -105,6 +106,7 @@ function makeSnapshot(items: ItemWithAttachments[] = []): HoldfastSnapshot {
           sleepSetup: false,
         },
         focusItemIds: [],
+        focusListIds: [],
         launchNote: '',
         closeWin: '',
         closeCarry: '',
@@ -142,6 +144,7 @@ function makeSnapshot(items: ItemWithAttachments[] = []): HoldfastSnapshot {
         sleepSetup: false,
       },
       focusItemIds: [],
+      focusListIds: [],
       launchNote: '',
       closeWin: '',
       closeCarry: '',
@@ -194,6 +197,7 @@ describe('NowView', () => {
       <NowView
         currentDate="2026-04-20"
         onOpenItem={vi.fn()}
+        onOpenList={vi.fn()}
         snapshot={makeSnapshot()}
       />,
     );
@@ -211,6 +215,7 @@ describe('NowView', () => {
       <NowView
         currentDate="2026-04-20"
         onOpenItem={vi.fn()}
+        onOpenList={vi.fn()}
         snapshot={makeSnapshot([
           makeItem({
             title: 'Due today',
@@ -237,5 +242,64 @@ describe('NowView', () => {
     expect(
       screen.queryByRole('heading', { name: 'Next up' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('shows focused whole lists separately from list-item promotions', () => {
+    const snapshot = makeSnapshot();
+    snapshot.lists = [
+      {
+        id: 'list-1',
+        schemaVersion: SCHEMA_VERSION,
+        title: 'Groceries',
+        kind: 'replenishment',
+        lane: 'home',
+        pinned: false,
+        sourceItemId: null,
+        scheduledDate: '2026-04-20',
+        scheduledTime: null,
+        completedAt: null,
+        archivedAt: null,
+        createdAt: '2026-04-20T08:00:00.000Z',
+        updatedAt: '2026-04-20T08:00:00.000Z',
+        deletedAt: null,
+        syncState: 'pending',
+        remoteRevision: null,
+      },
+    ];
+    snapshot.listItems = [
+      {
+        id: 'list-item-1',
+        schemaVersion: SCHEMA_VERSION,
+        listId: 'list-1',
+        title: 'Eggs',
+        body: '',
+        status: 'open',
+        position: 0,
+        sourceItemId: null,
+        nowDate: '2026-04-20',
+        completedAt: null,
+        archivedAt: null,
+        createdAt: '2026-04-20T08:00:00.000Z',
+        updatedAt: '2026-04-20T08:00:00.000Z',
+        deletedAt: null,
+        syncState: 'pending',
+        remoteRevision: null,
+      },
+    ];
+    snapshot.currentDay.focusListIds = ['list-1'];
+
+    render(
+      <NowView
+        currentDate="2026-04-20"
+        onOpenItem={vi.fn()}
+        onOpenList={vi.fn()}
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Lists in play' })).toBeInTheDocument();
+    expect(screen.getAllByText('Groceries').length).toBeGreaterThan(0);
+    expect(screen.getByText('From lists')).toBeInTheDocument();
+    expect(screen.getByText('Eggs')).toBeInTheDocument();
   });
 });

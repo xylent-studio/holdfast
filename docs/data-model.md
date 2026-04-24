@@ -81,6 +81,9 @@ Key fields:
 - `lane`
 - `pinned`
 - `sourceItemId`
+- `scheduledDate`
+- `scheduledTime`
+- `completedAt`
 - `archivedAt`
 - `deletedAt`
 - `syncState`
@@ -92,6 +95,12 @@ List kinds should cover:
 - checklist
 - project
 - reference
+
+Notes:
+
+- `scheduledDate` and `scheduledTime` place a whole list into `Upcoming` or `Now` as a first-class day object
+- `completedAt` records a finished archived run or archived live list state
+- whole-list focus is day-specific and lives on `DailyRecord`, not on the list row itself
 
 ### ListItem
 
@@ -124,6 +133,7 @@ Key fields:
 - `closedAt`
 - `readiness`
 - `focusItemIds`
+- `focusListIds`
 - `launchNote`
 - `closeWin`
 - `closeCarry`
@@ -211,12 +221,17 @@ Key fields:
 - `provider`
 - `mode`
 - `lastSyncedAt`
+- `blockedReason`
+- `lastTransportError`
+- `lastFailureAt`
 - `pullCursorByStream`
 
 Notes:
 
 - `pullCursorByStream` keeps a stable `(server_updated_at, primary key)` cursor per remote stream so tied timestamps do not get skipped on later pulls
 - `lastSyncedAt` remains a transport watermark for status and legacy compatibility, not the only pull boundary anymore
+- `blockedReason` explains why the device cannot sync yet without pretending it is a transport failure
+- `lastTransportError` and `lastFailureAt` preserve the last degraded sync outcome for diagnostics and support
 
 ### WorkspaceStateRecord
 
@@ -233,7 +248,7 @@ Notes:
 
 - workspace ownership is intentionally separate from sync transport health
 - wrong-account protection and signed-out recovery are driven from this record, not from `syncState`
-- a restored backup stays local-only while signed out, but it auto-attaches when the user restores while signed in or signs in later with the same account
+- restored backup work auto-attaches on sign-in as part of the normal upgrade path, while wrong-account protection still blocks unsafe attachment
 
 ### PrototypeRecoverySessionRecord
 
@@ -314,6 +329,7 @@ Current Supabase mapping:
 - `user_id`-scoped RLS policies on every user-owned table
 - storage policies that scope attachment access to the owning authenticated user
 - a browser sync engine translating local mutation records into remote upserts, deletes, and pull-based replica updates
+- remote row normalization that upgrades older `schema_version` shapes in memory before local Zod parsing when nullable fields or day/list additions are missing
 
 ## Migration Note
 

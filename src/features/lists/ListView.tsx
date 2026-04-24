@@ -1,19 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { LIST_KIND_LABELS } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
+import { todayDateKey } from '@/domain/dates';
+import { activeListItemsForDisplay } from '@/domain/logic/selectors';
 import {
+  clearListSchedule,
   createTaskFromListItem,
   createListItem,
   deleteListItem,
+  finishList,
+  moveListToNow,
   promoteListItemToNow,
   reopenAllDoneListItems,
   replaceListItemWithLatestSavedVersion,
   replaceListWithLatestSavedVersion,
+  scheduleList,
+  setListFocus,
   updateList,
   updateListItem,
+  type FinishListAction,
   type HoldfastSnapshot,
 } from '@/storage/local/api';
+import { FinishListDialog } from '@/features/lists/FinishListDialog';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Panel } from '@/shared/ui/Panel';
 
@@ -45,6 +54,12 @@ export function ListView({
   const [listItemConflictError, setListItemConflictError] = useState<
     string | null
   >(null);
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [finishBusy, setFinishBusy] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
+  const scheduleDateRef = useRef<HTMLInputElement | null>(null);
+  const scheduleTimeRef = useRef<HTMLInputElement | null>(null);
+
   const list = snapshot.lists.find((entry) => entry.id === listId) ?? null;
   const items = useMemo(
     () =>
@@ -56,6 +71,16 @@ export function ListView({
   const openItems = items.filter((entry) => entry.status === 'open');
   const doneItems = items.filter((entry) => entry.status === 'done');
   const archivedItems = items.filter((entry) => entry.status === 'archived');
+  const activeItems = useMemo(
+    () => activeListItemsForDisplay(snapshot.listItems, listId),
+    [listId, snapshot.listItems],
+  );
+  const isToday = currentDate === todayDateKey();
+  const isFocused = Boolean(
+    list && (snapshot.currentDay.focusListIds ?? []).includes(list.id),
+  );
+  const isActiveList =
+    Boolean(list?.scheduledDate && list.scheduledDate <= currentDate) || isFocused;
   const listDescription = (() => {
     if (!list) {
       return '';
@@ -63,14 +88,14 @@ export function ListView({
 
     switch (list.kind) {
       case 'replenishment':
-        return 'Keep a reusable list without losing what you already picked up.';
+        return 'Bring the whole list into Now when you are actually doing the run.';
       case 'checklist':
-        return 'Keep a repeatable checklist without turning it into a project board.';
+        return 'Use the full list in context, cross things off, then choose how the run should finish.';
       case 'reference':
-        return 'Keep saved things close without pretending they all belong in Now.';
+        return 'Keep the list available without pretending it always belongs in command view.';
       case 'project':
       default:
-        return 'Keep a living list without turning it into command clutter.';
+        return 'Use the list as a working surface without turning it into duplicate tasks unless you mean to.';
     }
   })();
 
@@ -95,11 +120,6 @@ export function ListView({
     );
   }
 
-  const currentListDescription =
-    list.kind === 'reference'
-      ? 'What is still worth keeping close here.'
-      : 'What still belongs on this list right now.';
-
   const handleQuickAdd = async (): Promise<void> => {
     if (!draft.trim()) {
       return;
@@ -110,6 +130,14 @@ export function ListView({
       title: draft.trim(),
     });
     setDraft('');
+  };
+
+  const handleSchedule = async (): Promise<void> => {
+    await scheduleList(
+      list.id,
+      (scheduleDateRef.current?.value || currentDate) as DateKey,
+      scheduleTimeRef.current?.value.trim() || null,
+    );
   };
 
   const handleUseLatestSavedList = async (): Promise<void> => {
@@ -139,6 +167,9 @@ export function ListView({
         kind: list.kind,
         lane: list.lane,
         pinned: list.pinned,
+        scheduledDate: list.scheduledDate,
+        scheduledTime: list.scheduledTime,
+        completedAt: list.completedAt,
         archivedAt: list.archivedAt,
       });
     } catch (error) {
@@ -206,7 +237,30 @@ export function ListView({
     }
   };
 
-  const renderListItemCard = (entry: (typeof items)[number]) => {
+  const handleFinish = async (action: FinishListAction): Promise<void> => {
+    setFinishError(null);
+    setFinishBusy(true);
+
+    try {
+      await finishList(list.id, action, currentDate);
+      setFinishOpen(false);
+      setDoneOpen(false);
+    } catch (error) {
+      setFinishError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Couldn't finish this list yet.",
+      );
+    } finally {
+      setFinishBusy(false);
+    }
+  };
+
+  const renderListItemCard = (
+    entry: (typeof items)[number],
+    options?: { activeRun?: boolean },
+  ) => {
+    const activeRun = options?.activeRun ?? false;
     const sourceItem = entry.sourceItemId
       ? snapshot.items.find((item) => item.id === entry.sourceItemId) ?? null
       : null;
@@ -219,7 +273,7 @@ export function ListView({
       <div
         className={`item-card day-result ${
           highlightListItemId === entry.id ? 'focus' : ''
-        }`}
+        }${activeRun && entry.status === 'done' ? ' crossed-off' : ''}`}
         data-list-item-id={entry.id}
         key={entry.id}
       >
@@ -229,16 +283,14 @@ export function ListView({
             {isConflict ? <span className="chip small">Needs attention</span> : null}
             {entry.nowDate ? <span className="chip small">In Now</span> : null}
             {entry.status === 'done' ? (
-              <span className="chip small">Done</span>
+              <span className="chip small">Crossed off</span>
             ) : null}
             {entry.status === 'archived' ? (
               <span className="chip small">Archived</span>
             ) : null}
           </div>
         </div>
-        {entry.body.trim() ? (
-          <p>{entry.body}</p>
-        ) : null}
+        {entry.body.trim() ? <p>{entry.body}</p> : null}
         {isConflict ? (
           <div className="recovery-note">
             <strong>This list item changed in two places.</strong>
@@ -284,7 +336,7 @@ export function ListView({
               onClick={() => void updateListItem(entry.id, { status: 'done' })}
               type="button"
             >
-              Done
+              {activeRun ? 'Cross off' : 'Done'}
             </button>
           )}
           {entry.status === 'open' && list.kind !== 'reference' ? (
@@ -370,25 +422,102 @@ export function ListView({
             <p>{listDescription}</p>
           </div>
           <div className="chip-row">
-            <span className="chip small">
-              {openItems.length} current
-            </span>
+            <span className="chip small">{openItems.length} current</span>
             {doneItems.length ? (
               <span className="chip small">{doneItems.length} done</span>
             ) : null}
+            {list.scheduledDate ? (
+              <span className="chip small">
+                {list.scheduledDate > currentDate ? 'Scheduled' : 'In Now'}
+              </span>
+            ) : null}
+            {isFocused ? <span className="chip active">Focus</span> : null}
             {list.syncState === 'conflict' ? (
               <span className="chip small">Needs attention</span>
             ) : null}
             {list.pinned ? <span className="chip active">Pinned</span> : null}
+          </div>
+        </div>
+
+        <div className="dialog-actions wrap">
+          <button
+            className="button ghost small"
+            onClick={() => void updateList(list.id, { pinned: !list.pinned })}
+            type="button"
+          >
+            {list.pinned ? 'Unpin' : 'Pin'}
+          </button>
+          <button
+            className="button ghost small"
+            onClick={() => void moveListToNow(list.id, currentDate)}
+            type="button"
+          >
+            Bring to Now
+          </button>
+          <button
+            className="button ghost small"
+            onClick={() => void setListFocus(currentDate, list.id, true)}
+            type="button"
+          >
+            {isToday ? 'Focus now' : 'Focus for this day'}
+          </button>
+          {isFocused ? (
             <button
               className="button ghost small"
-              onClick={() => void updateList(list.id, { pinned: !list.pinned })}
+              onClick={() => void setListFocus(currentDate, list.id, false)}
               type="button"
             >
-              {list.pinned ? 'Unpin' : 'Pin'}
+              Remove focus
+            </button>
+          ) : null}
+          {list.scheduledDate ? (
+            <button
+              className="button ghost small"
+              onClick={() => void clearListSchedule(list.id)}
+              type="button"
+            >
+              {list.scheduledDate > currentDate ? 'Unschedule' : 'Remove from Now'}
+            </button>
+          ) : null}
+          <button
+            className="button ghost small"
+            onClick={() => {
+              setFinishError(null);
+              setFinishOpen(true);
+            }}
+            type="button"
+          >
+            Finish list
+          </button>
+        </div>
+
+        <div
+          className="inline-form wrap"
+          key={`${list.id}:${list.scheduledDate ?? ''}:${list.scheduledTime ?? ''}:${currentDate}`}
+        >
+          <label className="field-stack grow">
+            <span>Schedule for</span>
+            <input
+              defaultValue={list.scheduledDate ?? currentDate}
+              ref={scheduleDateRef}
+              type="date"
+            />
+          </label>
+          <label className="field-stack">
+            <span>Time</span>
+            <input
+              defaultValue={list.scheduledTime ?? ''}
+              ref={scheduleTimeRef}
+              type="time"
+            />
+          </label>
+          <div className="dialog-actions align-end">
+            <button className="button ghost small" onClick={() => void handleSchedule()} type="button">
+              Schedule
             </button>
           </div>
         </div>
+
         {list.syncState === 'conflict' ? (
           <div className="recovery-note">
             <strong>This list changed in two places.</strong>
@@ -419,6 +548,7 @@ export function ListView({
             ) : null}
           </div>
         ) : null}
+
         <label className="field-stack">
           <span>Add to this list</span>
           <div className="inline-form">
@@ -447,17 +577,27 @@ export function ListView({
 
       <Panel>
         <div className="panel-header">
-          <h2>Current</h2>
-          <p>{currentListDescription}</p>
+          <h2>{isActiveList ? 'Working now' : 'Current'}</h2>
+          <p>
+            {isActiveList
+              ? 'Open items stay first. Crossed-off items stay visible lower while you work the list.'
+              : list.kind === 'reference'
+                ? 'What is still worth keeping close here.'
+                : 'What still belongs on this list right now.'}
+          </p>
         </div>
-        {openItems.length ? (
-          <div className="item-list">{openItems.map(renderListItemCard)}</div>
+        {(isActiveList ? activeItems : openItems).length ? (
+          <div className="item-list">
+            {(isActiveList ? activeItems : openItems).map((entry) =>
+              renderListItemCard(entry, { activeRun: isActiveList }),
+            )}
+          </div>
         ) : (
           <EmptyState>Nothing current in this list right now.</EmptyState>
         )}
       </Panel>
 
-      {doneItems.length ? (
+      {!isActiveList && doneItems.length ? (
         <Panel>
           <div className="panel-header split">
             <div>
@@ -484,7 +624,7 @@ export function ListView({
             </div>
           </div>
           {doneOpen ? (
-            <div className="item-list">{doneItems.map(renderListItemCard)}</div>
+            <div className="item-list">{doneItems.map((entry) => renderListItemCard(entry))}</div>
           ) : (
             <div className="empty-inline">
               Done items stay out of the way until you need them.
@@ -500,10 +640,25 @@ export function ListView({
             <p>Older list items kept for retrieval, not current work.</p>
           </div>
           <div className="item-list">
-            {archivedItems.map(renderListItemCard)}
+            {archivedItems.map((entry) => renderListItemCard(entry))}
           </div>
         </Panel>
       ) : null}
+
+      <FinishListDialog
+        busy={finishBusy}
+        error={finishError}
+        isOpen={finishOpen}
+        list={list}
+        onClose={() => {
+          if (finishBusy) {
+            return;
+          }
+          setFinishOpen(false);
+          setFinishError(null);
+        }}
+        onConfirm={(action) => void handleFinish(action)}
+      />
     </div>
   );
 }

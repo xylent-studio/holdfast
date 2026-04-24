@@ -180,6 +180,9 @@ export function ReviewView({
                           {result.doneCount ? (
                             <span className="chip small">{result.doneCount} done</span>
                           ) : null}
+                          {result.list.archivedAt ? (
+                            <span className="chip small">Archived run</span>
+                          ) : null}
                         </div>
                       </div>
                       <div className="chip-row">
@@ -214,6 +217,9 @@ export function ReviewView({
                         <span className="chip small">{result.listItem.status}</span>
                         {result.listItem.nowDate ? (
                           <span className="chip small">In Now</span>
+                        ) : null}
+                        {result.list.archivedAt ? (
+                          <span className="chip small">Archived run</span>
                         ) : null}
                       </div>
                     </div>

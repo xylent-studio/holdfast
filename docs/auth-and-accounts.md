@@ -57,9 +57,14 @@ Auth returns through `/auth/callback`.
 
 The callback surface should:
 
-- restore the session
-- return the user to the right app state
+- let the shared auth provider finish session restore
+- return the user to the right app state only after ownership checks pass
 - avoid blank or broken-feeling transitions
+
+Implementation rule:
+
+- `AuthProvider` is the single owner of callback completion, session restore, and wrong-account rejection
+- `AuthCallbackView` should only reflect that state while the provider finishes the handoff
 
 After that, session restore should be quiet.
 If the user is already signed in, the app should reopen local state quickly and let sync catch up in the background.
@@ -148,6 +153,11 @@ Restore direction:
 - restoring while signed in should re-attach that workspace to the current account and let sync catch up
 - restoring while signed out should stay local until the user signs in
 - when the user signs in after a restore, the restored workspace should attach automatically unless wrong-account protection blocks it
+
+Upgrade direction for older local installs:
+
+- if older local data already shows member-owned sync evidence but the device is missing `workspaceState`, bootstrap should repair that marker as `member`
+- the repaired workspace should come back as session-recoverable, not as a fresh guest device
 
 Current safety guard:
 

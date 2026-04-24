@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { SCHEMA_VERSION } from '@/domain/constants';
 import {
   createDefaultWorkspaceState,
+  inferWorkspaceStateFromLegacyData,
   normalizeWorkspaceStateRecord,
 } from '@/storage/local/workspace-state';
 import {
@@ -19,7 +20,10 @@ describe('createDefaultSyncState', () => {
     });
 
     expect(result.mode).toBe('disabled');
+    expect(result.blockedReason).toBe('not-configured');
+    expect(result.lastFailureAt).toBeNull();
     expect(result.lastSyncedAt).toBeNull();
+    expect(result.lastTransportError).toBeNull();
     expect(result.provider).toBe('supabase');
     expect(result.pullCursorByStream).toEqual(createDefaultSyncPullCursorMap());
   });
@@ -33,6 +37,9 @@ describe('normalizeSyncStateRecord', () => {
       provider: 'supabase',
       mode: 'ready',
       lastSyncedAt: null,
+      blockedReason: null,
+      lastFailureAt: null,
+      lastTransportError: null,
       pullCursorByStream: {
         items: { updatedAt: '2026-04-18T08:00:00.000Z', id: 'item-1' },
       },
@@ -82,6 +89,19 @@ describe('workspace state helpers', () => {
       ownershipState: 'member',
       boundUserId: '11111111-1111-4111-8111-111111111111',
       authPromptState: 'none',
+      attachState: 'attached',
+    });
+  });
+
+  it('infers a member workspace when legacy sync evidence exists without a workspace marker', () => {
+    const result = inferWorkspaceStateFromLegacyData({
+      hasLocalData: true,
+      hasRemoteSyncEvidence: true,
+    });
+
+    expect(result).toMatchObject({
+      ownershipState: 'member',
+      authPromptState: 'session-expired',
       attachState: 'attached',
     });
   });

@@ -71,6 +71,7 @@ The quiet library for list surfaces. It should help the user:
 - get back to the right list quickly
 - search lists without turning Review into a second home screen
 - create a list when the user wants a real list surface, not just another capture
+- bring a whole list into Now or schedule it without turning it into duplicate tasks
 - keep repeated list access calm and secondary to command work
 
 ## Product Object Direction
@@ -93,6 +94,13 @@ Within that spine, Holdfast should support several real object types:
 - attachments and preserved context
 
 Lists are now a first-class top-level destination, but they still should not compete with the rest of the product for meaning. `Lists` is the quiet library home for list surfaces, while contextual list routes remain the place for item-level work.
+
+Whole lists are also first-class day objects:
+
+- they can be scheduled for a future day
+- they can be brought into `Now`
+- they can be focused for one specific day
+- they finish through an explicit decision sheet, not through silent automatic clearing
 
 ## Product Boundaries
 

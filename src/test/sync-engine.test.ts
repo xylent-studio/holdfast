@@ -8,6 +8,7 @@ const USER_ID = '11111111-1111-4111-8111-111111111111';
 
 const harness = vi.hoisted(() => {
   const state = {
+    clientAvailable: true,
     conflictItemId: null as string | null,
     syncedItemId: null as string | null,
     pullQueryCount: 0,
@@ -168,12 +169,15 @@ vi.mock('@/storage/local/api', async () => {
 });
 
 vi.mock('@/storage/sync/supabase/client', () => ({
-  getSupabaseBrowserClient: () => ({
-    auth: {
-      getSession: harness.getSessionMock,
-    },
-    from: harness.fromMock,
-  }),
+  getSupabaseBrowserClient: () =>
+    harness.state.clientAvailable
+      ? {
+          auth: {
+            getSession: harness.getSessionMock,
+          },
+          from: harness.fromMock,
+        }
+      : null,
 }));
 
 import { createItem } from '@/storage/local/api';
@@ -191,6 +195,7 @@ beforeEach(async () => {
     value: true,
     configurable: true,
   });
+  harness.state.clientAvailable = true;
   harness.state.conflictItemId = null;
   harness.state.syncedItemId = null;
   harness.state.pullQueryCount = 0;
@@ -207,6 +212,101 @@ afterEach(async () => {
 });
 
 describe('syncHoldfastWithSupabase', () => {
+  it('records a blocked state when the browser client is unavailable', async () => {
+    harness.state.clientAvailable = false;
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    expect(harness.updateSyncStateMock).toHaveBeenCalledWith({
+      blockedReason: 'not-configured',
+      mode: 'disabled',
+    });
+  });
+
+  it('records a blocked state when the device is offline', async () => {
+    harness.getCurrentWorkspaceStateMock.mockResolvedValue({
+      attachState: 'attached',
+      ownershipState: 'member',
+      boundUserId: USER_ID,
+      authPromptState: 'none',
+    });
+    Object.defineProperty(navigator, 'onLine', {
+      value: false,
+      configurable: true,
+    });
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    expect(harness.updateSyncStateMock).toHaveBeenCalledWith({
+      blockedReason: 'offline',
+      mode: 'ready',
+    });
+  });
+
+  it('records a blocked state for restored work that is not attached yet', async () => {
+    harness.getCurrentWorkspaceStateMock.mockResolvedValue({
+      attachState: 'detached-restore',
+      ownershipState: 'device-guest',
+      boundUserId: null,
+      authPromptState: 'none',
+    });
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    expect(harness.updateSyncStateMock).toHaveBeenCalledWith({
+      blockedReason: 'detached-restore',
+      mode: 'ready',
+    });
+  });
+
+  it('records a blocked state when there is no signed-in session', async () => {
+    harness.getSessionMock.mockResolvedValue({
+      data: {
+        session: null,
+      },
+      error: null,
+    });
+    harness.getCurrentWorkspaceStateMock.mockResolvedValue({
+      attachState: 'attached',
+      ownershipState: 'member',
+      boundUserId: USER_ID,
+      authPromptState: 'none',
+    });
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    expect(harness.updateSyncStateMock).toHaveBeenCalledWith({
+      blockedReason: 'signed-out',
+      mode: 'ready',
+    });
+  });
+
+  it('records a blocked state when the signed-in account does not match the bound workspace owner', async () => {
+    harness.getSessionMock.mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: '22222222-2222-4222-8222-222222222222',
+          },
+        },
+      },
+      error: null,
+    });
+    harness.getCurrentWorkspaceStateMock.mockResolvedValue({
+      attachState: 'attached',
+      ownershipState: 'member',
+      boundUserId: USER_ID,
+      authPromptState: 'none',
+    });
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    expect(harness.updateSyncStateMock).toHaveBeenCalledWith({
+      blockedReason: 'account-mismatch',
+      mode: 'ready',
+    });
+  });
+
   it('continues after a conflicted mutation, marks it failed, and still completes the pull', async () => {
     harness.getSessionMock.mockResolvedValue({
       data: {
@@ -294,11 +394,18 @@ describe('syncHoldfastWithSupabase', () => {
       remoteRevision: 'server-item-synced',
     });
     expect(harness.state.pullQueryCount).toBeGreaterThan(0);
-    expect(harness.updateSyncStateMock).toHaveBeenNthCalledWith(1, {
-      mode: 'syncing',
-    });
+    expect(harness.updateSyncStateMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        blockedReason: null,
+        mode: 'syncing',
+      }),
+    );
     expect(harness.updateSyncStateMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        blockedReason: null,
+        lastFailureAt: expect.any(String),
+        lastTransportError: null,
         mode: 'ready',
         lastSyncedAt: expect.any(String),
         pullCursorByStream: expect.any(Object),

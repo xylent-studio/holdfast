@@ -948,6 +948,7 @@ function buildImportedDailyRecord(
     focusItemIds: legacyDay.focusLegacyKeys
       .map((legacyKey) => itemIdByLegacyKey.get(legacyKey) ?? null)
       .filter((value): value is string => Boolean(value)),
+    focusListIds: [],
     launchNote: legacyDay.launchNote,
     closeWin: legacyDay.closeWin,
     closeCarry: legacyDay.closeCarry,
@@ -1092,6 +1093,9 @@ function mergeDailyRecord(
     focusItemIds: Array.from(
       new Set([...current.focusItemIds, ...imported.focusItemIds]),
     ),
+    focusListIds: Array.from(
+      new Set([...current.focusListIds, ...imported.focusListIds]),
+    ),
     launchNote: mergeText(current.launchNote, imported.launchNote),
     closeWin: mergeText(current.closeWin, imported.closeWin),
     closeCarry: mergeText(current.closeCarry, imported.closeCarry),
@@ -1163,6 +1167,7 @@ function isEmptyDailyRecordForUndo(record: DailyRecord): boolean {
     !record.closedAt &&
     Object.values(record.readiness).every((value) => value === false) &&
     !record.focusItemIds.length &&
+    !record.focusListIds.length &&
     !record.launchNote &&
     !record.closeWin &&
     !record.closeCarry &&
@@ -1549,6 +1554,9 @@ async function softlyUndoDailyRecordFromImportedState(
     },
     focusItemIds: current.focusItemIds.filter(
       (itemId) => !imported.focusItemIds.includes(itemId),
+    ),
+    focusListIds: current.focusListIds.filter(
+      (listId) => !imported.focusListIds.includes(listId),
     ),
     launchNote:
       imported.launchNote && current.launchNote === imported.launchNote

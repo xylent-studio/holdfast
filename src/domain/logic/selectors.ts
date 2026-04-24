@@ -96,6 +96,15 @@ export function getFocusItems<T extends ItemRecord>(
     .filter((item): item is T => Boolean(item && !item.deletedAt));
 }
 
+export function focusedListsForDay<T extends ListRecord>(
+  day: DailyRecord,
+  lists: T[],
+): T[] {
+  return (day.focusListIds ?? [])
+    .map((id) => lists.find((list) => list.id === id))
+    .filter((list): list is T => Boolean(list && !list.deletedAt && !list.archivedAt));
+}
+
 export function getQueueItemsForToday<T extends ItemRecord>(
   day: DailyRecord,
   items: T[],
@@ -119,6 +128,80 @@ export function listItemsForNow<T extends ListItemRecord>(
         item.nowDate === currentDate,
     )
     .sort((left, right) => left.position - right.position);
+}
+
+export function listsForNow<T extends ListRecord>(
+  lists: T[],
+  currentDate: string,
+): T[] {
+  return lists
+    .filter(
+      (list) =>
+        !list.deletedAt &&
+        !list.archivedAt &&
+        list.scheduledDate === currentDate,
+    )
+    .sort((left, right) =>
+      `${left.scheduledDate ?? ''}${left.scheduledTime ?? ''}${left.updatedAt}`.localeCompare(
+        `${right.scheduledDate ?? ''}${right.scheduledTime ?? ''}${right.updatedAt}`,
+      ),
+    );
+}
+
+export function overdueLists<T extends ListRecord>(
+  lists: T[],
+  currentDate: string,
+): T[] {
+  return lists
+    .filter(
+      (list) =>
+        !list.deletedAt &&
+        !list.archivedAt &&
+        Boolean(list.scheduledDate) &&
+        list.scheduledDate < currentDate,
+    )
+    .sort((left, right) =>
+      `${left.scheduledDate ?? ''}${left.scheduledTime ?? ''}${left.updatedAt}`.localeCompare(
+        `${right.scheduledDate ?? ''}${right.scheduledTime ?? ''}${right.updatedAt}`,
+      ),
+    );
+}
+
+export function scheduledLists<T extends ListRecord>(
+  lists: T[],
+  currentDate: string,
+): T[] {
+  return lists
+    .filter(
+      (list) =>
+        !list.deletedAt &&
+        !list.archivedAt &&
+        Boolean(list.scheduledDate) &&
+        list.scheduledDate > currentDate,
+    )
+    .sort((left, right) =>
+      `${left.scheduledDate ?? ''}${left.scheduledTime ?? ''}${left.updatedAt}`.localeCompare(
+        `${right.scheduledDate ?? ''}${right.scheduledTime ?? ''}${right.updatedAt}`,
+      ),
+    );
+}
+
+export function activeListItemsForDisplay<T extends ListItemRecord>(
+  listItems: T[],
+  listId: string,
+): T[] {
+  return listItems
+    .filter(
+      (item) =>
+        item.listId === listId &&
+        !item.deletedAt &&
+        item.status !== 'archived',
+    )
+    .sort((left, right) => {
+      const leftRank = left.status === 'done' ? 1 : 0;
+      const rightRank = right.status === 'done' ? 1 : 0;
+      return leftRank - rightRank || left.position - right.position;
+    });
 }
 
 export function overdueItems<T extends ItemRecord>(

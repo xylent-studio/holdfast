@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Holdfast legacy service worker bootstrap</title>
+  </head>
+  <body>
+    <p id="status">Registering legacy service worker...</p>
+    <script type="module">
+      async function waitForController() {
+        if (navigator.serviceWorker.controller) {
+          return;
+        }
+
+        await new Promise((resolve) => {
+          navigator.serviceWorker.addEventListener('controllerchange', resolve, {
+            once: true,
+          });
+        });
+      }
+
+      await navigator.serviceWorker.register('/test-legacy-sw.js');
+      await navigator.serviceWorker.ready;
+      await waitForController();
+      document.getElementById('status').textContent =
+        'Legacy service worker ready';
+    </script>
+  </body>
+</html>

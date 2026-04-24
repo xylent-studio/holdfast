@@ -78,8 +78,10 @@ Focus is the short list inside `Now`.
 Rules:
 
 - focus items are still normal items
+- focused lists are also valid command objects for a specific day
 - focus stays intentionally limited
 - adding focus pulls a top-level item into `Now` if needed
+- focusing a list for a day also brings that list into `Now` for that day
 - moving something to `Now` does not silently focus it
 
 ## 3. In-Play Work
@@ -87,7 +89,9 @@ Rules:
 `Now` combines:
 
 - focused items
+- focused whole lists
 - top-level notes and tasks in play
+- whole lists brought into the current day without focus
 - list items explicitly promoted into `Now`
 - overdue pressure
 - due-today planned work whose scheduled date has arrived
@@ -103,6 +107,8 @@ Modes:
 - Waiting on
 
 `Scheduled` is date-based and should show all scheduled work from the selected date forward, grouped by date. `Undated` is alive without a date. `Waiting on` means the user is blocked by a person, system, or event, not just deferring.
+
+Whole lists can also be scheduled. Before their day arrives they should appear in `Upcoming > Scheduled` alongside scheduled top-level items. When their day arrives they belong in `Now`.
 
 ## 5. Lists and repeated structure
 
@@ -120,10 +126,17 @@ Rules:
 - list items stay attached to their list surface by default
 - list surfaces should lead with what is current in that list right now
 - done items should stay secondary and can remain hidden until the user asks for them
+- a whole list can be brought into `Now`, scheduled for a future day, and focused for a specific day
+- whole-list activation should render inline in `Now` and `Upcoming` as a compact expandable card, not as duplicated top-level tasks
+- when a whole list is active, crossed-off items should stay visible lower in the run instead of disappearing
 - sending a list item to `Now` should keep it as a list item through `nowDate`, not clone it into a separate task
 - they become top-level tasks only through an explicit `Create task` action
 - a capture can be sent to a list, preserving `sourceItemId`, while the original capture archives out of active circulation
 - a top-level task or note can also move into a list, preserving `sourceItemId` and archiving the original out of active circulation
+- finishing a whole list must always open an explicit finish decision, not silently pick one
+- replenishment and checklist lists should support `Archive run and reset`
+- reusable live-list outcomes should also include `Clear items for reuse` and `Reset checkmarks and keep items`
+- `Archive and hide` means preserve it for retrieval while removing it from active library surfaces, not hard delete
 - recurring checklists should grow toward template-plus-run behavior
 - reference collections should preserve things without pretending everything is actionable
 - `Lists` owns pinned, recent, and searchable list-library access

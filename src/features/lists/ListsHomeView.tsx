@@ -90,15 +90,20 @@ export function ListsHomeView({
       <div className="eyebrow">
         {eyebrow ?? `${LIST_KIND_LABELS[entry.list.kind]} list`}
       </div>
-      <div className="item-title-row">
-        <h3>{entry.list.title}</h3>
-        <div className="chip-row">
-          <span className="chip small">{entry.openCount} current</span>
-          {entry.doneCount ? (
-            <span className="chip small">{entry.doneCount} done</span>
-          ) : null}
+        <div className="item-title-row">
+          <h3>{entry.list.title}</h3>
+          <div className="chip-row">
+            <span className="chip small">{entry.openCount} current</span>
+            {entry.doneCount ? (
+              <span className="chip small">{entry.doneCount} done</span>
+            ) : null}
+            {entry.list.scheduledDate ? (
+              <span className="chip small">
+                {entry.list.scheduledDate > snapshot.currentDate ? 'Scheduled' : 'In Now'}
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
       <p>
         {entry.previewTitles.length
           ? entry.previewTitles.join(' | ')

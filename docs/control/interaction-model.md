@@ -57,6 +57,8 @@ It should answer:
 Now should prioritize:
 - current active items
 - focused items
+- focused whole lists
+- whole lists in play for the selected day
 - quick movement, completion, and schedule actions
 - day context only when it reduces cold start or carry friction
 
@@ -74,6 +76,11 @@ List-related things should only reach Now when:
 - the user explicitly promotes them
 - the list surface itself is part of current-day command work
 - the product has a clear reason to surface them as action now
+
+When a whole list reaches Now:
+- it should appear as an inline expandable list card, not as duplicated top-level tasks
+- crossed-off items should stay visible lower in the active run
+- finishing the list should always require an explicit finish decision
 
 ## Inbox
 Inbox is the least demanding place in the app.
@@ -104,6 +111,7 @@ It should answer:
 
 Upcoming should prioritize:
 - scheduled items
+- scheduled whole lists
 - undated items
 - waiting-on items
 - calm scanning
@@ -231,6 +239,15 @@ List item rules:
 - they should only reach Now through an explicit promotion or task-creation action
 - sending a list item to `Now` should preserve one identity and mark it with `nowDate`
 - they should keep enough identity to support history and refinding without pretending every list item is a top-level task
+
+Whole-list rules:
+- a whole list can be brought into Now for a specific day
+- a whole list can be scheduled into Upcoming for a future day
+- a whole list can be focused for one specific day without creating duplicate top-level tasks
+- list focus should remain separate from list placement, even when `Focus now` is the ergonomic command
+- `Bring to Now` should not silently focus the list
+- `Finish list` should always open a decision sheet
+- reusable finish outcomes should be kind-aware rather than one-size-fits-all
 
 ## Preservation and retrieval rules
 Holdfast is not only for action. It is also for keeping things that matter.
