@@ -65,17 +65,18 @@ test.describe('hosted auth smoke', () => {
     await clearSupabaseSession(page);
     await page.reload({ waitUntil: 'networkidle' });
 
+    const main = page.getByRole('main');
     await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
     await expect(
-      page.getByText('Sign in again to keep this device in sync.'),
-    ).toBeVisible();
+      main.getByText('Sign in again to keep this device in sync.'),
+    ).toHaveCount(2);
     await expect(
-      page.getByText(
+      main.getByText(
         "We'll keep what's already here and attach it to your account here first.",
       ),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Continue with Google' }),
+      main.getByRole('button', { name: 'Continue with Google' }),
     ).toBeVisible();
   });
 
@@ -94,19 +95,24 @@ test.describe('hosted auth smoke', () => {
 
     await clearSupabaseSession(page);
     await page.reload({ waitUntil: 'networkidle' });
+    const main = page.getByRole('main');
     await expect(
-      page.getByText('Sign in again to keep this device in sync.'),
-    ).toBeVisible();
+      main.getByText('Sign in again to keep this device in sync.'),
+    ).toHaveCount(2);
 
     await consumeMagicLink(secondLink.actionLink, page);
     await page.goto('/settings', { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
     await expect(
-      page.getByText("This device is still holding another account's workspace."),
-    ).toBeVisible();
-    await expect(page.getByText('Needs the original account')).toBeVisible();
+      main.getByText("This device is still holding another account's workspace."),
+    ).toHaveCount(2);
     await expect(
-      page.getByRole('button', { name: 'Continue with Google' }),
+      main.getByText(
+        "We'll keep what's already here and attach it to your account here first.",
+      ),
+    ).toBeVisible();
+    await expect(
+      main.getByRole('button', { name: 'Continue with Google' }),
     ).toBeVisible();
     await expect(page.getByText(secondEmail, { exact: true })).toHaveCount(0);
   });
