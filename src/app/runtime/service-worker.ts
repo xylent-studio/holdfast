@@ -53,6 +53,7 @@ function installRuntimeGuards(): void {
 }
 
 async function registerServiceWorker(): Promise<void> {
+  const hadController = Boolean(navigator.serviceWorker.controller);
   const registration = await navigator.serviceWorker.register('/sw.js');
   const triggerSkipWaiting = (worker: ServiceWorker | null): void => {
     worker?.postMessage({ type: 'HOLDFAST_SKIP_WAITING' });
@@ -80,6 +81,10 @@ async function registerServiceWorker(): Promise<void> {
   });
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) {
+      return;
+    }
+
     if (!shouldReloadForControllerChange()) {
       return;
     }

@@ -77,11 +77,13 @@ test('keeps the shell reachable offline after the first load', async ({
 }) => {
   await page.goto('/');
   await page.waitForFunction(async () => {
-    const registration = await navigator.serviceWorker.getRegistration();
-    return Boolean(registration?.active);
+    const registration = await navigator.serviceWorker.ready;
+    return registration.active?.state === 'activated';
   });
-  await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  await page.waitForFunction(async () => {
+    await navigator.serviceWorker.ready;
+    return Boolean(navigator.serviceWorker.controller);
+  });
 
   await context.setOffline(true);
   const shellAvailableOffline = await page.evaluate(async () => {
