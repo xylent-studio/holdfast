@@ -1,6 +1,15 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
+const focusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
 interface ModalProps {
   children: ReactNode;
   closeOnBackdrop?: boolean;
@@ -19,6 +28,11 @@ export function Modal({
   title,
 }: ModalProps) {
   const sheetRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -41,7 +55,49 @@ export function Modal({
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape' && closeOnEscape) {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== 'Tab' || !sheetRef.current) {
+        return;
+      }
+
+      const focusableElements = Array.from(
+        sheetRef.current.querySelectorAll<HTMLElement>(focusableSelector),
+      ).filter(
+        (element) =>
+          !element.hasAttribute('disabled') &&
+          element.getAttribute('aria-hidden') !== 'true' &&
+          element.tabIndex >= 0 &&
+          window.getComputedStyle(element).display !== 'none' &&
+          window.getComputedStyle(element).visibility !== 'hidden',
+      );
+
+      if (!focusableElements.length) {
+        event.preventDefault();
+        sheetRef.current.focus();
+        return;
+      }
+
+      const firstElement = focusableElements[0]!;
+      const lastElement = focusableElements[focusableElements.length - 1]!;
+      const activeElement =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+
+      if (event.shiftKey) {
+        if (!activeElement || activeElement === firstElement) {
+          event.preventDefault();
+          lastElement.focus();
+        }
+        return;
+      }
+
+      if (!activeElement || activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
       }
     };
 
@@ -52,7 +108,7 @@ export function Modal({
       document.removeEventListener('keydown', handleKeyDown);
       previousActiveElement?.focus();
     };
-  }, [closeOnEscape, isOpen, onClose]);
+  }, [closeOnEscape, isOpen]);
 
   if (!isOpen) {
     return null;

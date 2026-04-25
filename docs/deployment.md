@@ -101,6 +101,7 @@ Current use:
 - hosted shell smoke
 - service-worker and offline shell checks
 - risky UI and release checks that should not touch production
+- direct-upload release candidates deploy to the `main` branch label inside the staging project so `https://holdfast-staging.pages.dev` serves the exact staged build under test
 
 Current posture:
 
@@ -217,17 +218,18 @@ Current repo/backend foundation already includes:
 
 1. Run `npm run release:staging` for a release candidate pass.
 2. That staging pass should cover local lint, typecheck, unit tests, local Playwright, staging deploy, staging auth smoke, and staging sync smoke.
-3. Review the staged build on `https://holdfast-staging.pages.dev`.
+3. Review the staged build on `https://holdfast-staging.pages.dev`; branch alias URLs are not the release gate because the public staging root is the surface that must be proven.
 4. Use `npm run release:prod` for the locked production repair or promotion path.
-5. `release:prod` now runs local validation again, deploys production from committed `main`, runs hosted production shell/auth/sync smoke, then redeploys the same commit to staging and reruns staged shell/auth/sync smoke to realign the lanes.
+5. `release:prod` now runs local validation again, deploys and validates staging for the current committed `main` SHA, then deploys production and runs hosted production shell/auth/sync smoke only after staging passes.
 6. Production deploys now refuse release-affecting dirty files by default. The helper ignores the unrelated local-only `scripts/rehydrate-agent.ps1` dirtiness, but everything else should be committed or stashed first.
 7. Production deploys must target the existing `holdfast` Pages project on `main`; the release helper no longer treats production project creation as part of the normal path.
-8. Staging and production deploys fail early when the target Supabase migration history is missing checked-in repo migrations by name. Keep `SUPABASE_ACCESS_TOKEN` available in the shell or local env so that guard can run.
-9. Keep the validation project out of the normal release path. Use it only when staging or production should remain untouched.
-10. Verify service-worker install/update and offline shell behavior on the hosted build when the release changes those surfaces.
-11. Run broader multi-device sync, offline, attachment, and list-surface smoke on real accounts when auth, sync, or attachment behavior changes materially.
-12. Decide later whether to keep or redirect the `*.pages.dev` hostnames.
-13. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
+8. Production deploys refuse to run unless local `HEAD` matches `origin/main`, unless an explicit emergency override is passed for a documented repair.
+9. Staging and production deploys fail early when the target Supabase migration history is missing checked-in repo migrations by name. Keep `SUPABASE_ACCESS_TOKEN` available in the shell or local env so that guard can run.
+10. Keep the validation project out of the normal release path. Use it only when staging or production should remain untouched.
+11. Verify service-worker install/update and offline shell behavior on the hosted build when the release changes those surfaces.
+12. Run broader multi-device sync, offline, attachment, and list-surface smoke on real accounts when auth, sync, or attachment behavior changes materially.
+13. Decide later whether to keep or redirect the `*.pages.dev` hostnames.
+14. If Git integration becomes necessary later, replace the direct-upload project intentionally instead of assuming an in-place mode switch.
 
 ## GitHub Hosted Smoke Secrets
 

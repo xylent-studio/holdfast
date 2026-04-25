@@ -245,6 +245,7 @@ describe('ListView', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'Manage list' }));
     fireEvent.click(screen.getByRole('button', { name: 'Finish list' }));
 
     expect(
@@ -253,5 +254,71 @@ describe('ListView', () => {
     expect(
       screen.getByRole('button', { name: /Archive run and reset/i }),
     ).toBeInTheDocument();
+  });
+
+  it('hides redundant list-item Bring to Now when the whole list is already active', () => {
+    const snapshot = makeSnapshot();
+    snapshot.lists[0] = {
+      ...snapshot.lists[0]!,
+      syncState: 'pending',
+      scheduledDate: '2026-04-20',
+    };
+
+    render(
+      <ListView
+        currentDate="2026-04-20"
+        listId="list-1"
+        onOpenItem={vi.fn()}
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Bring to Now' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Create task' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens archived lists as retrieval-only snapshots and focuses matched rows', async () => {
+    const snapshot = makeSnapshot();
+    snapshot.lists[0] = {
+      ...snapshot.lists[0]!,
+      archivedAt: '2026-04-20T20:00:00.000Z',
+      syncState: 'pending',
+    };
+    snapshot.listItems[0] = {
+      ...snapshot.listItems[0]!,
+      status: 'done',
+      completedAt: '2026-04-20T19:00:00.000Z',
+    };
+
+    render(
+      <ListView
+        currentDate="2026-04-20"
+        highlightListItemId="list-item-1"
+        listId="list-1"
+        onOpenItem={vi.fn()}
+        snapshot={snapshot}
+      />,
+    );
+
+    expect(screen.getByText('Archived snapshot')).toBeVisible();
+    expect(
+      screen.getByText(
+        'Archived lists stay searchable for reference. They are not active work surfaces.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Manage list' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Done' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-list-item-id="list-item-1"]'),
+      ).toHaveFocus();
+    });
   });
 });

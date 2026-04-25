@@ -209,10 +209,25 @@ The UI should favor outcome language such as:
 
 - Schedule
 - Keep in Upcoming
-- Move to Now
+- Bring to Now
 - Save to Inbox
 
 It should avoid exposing raw timing structures as the primary user concept.
+
+Fast-routing schedule actions should require explicit confirmation before changing state.
+Using tomorrow as the suggested default is acceptable.
+Silently assigning tomorrow is not.
+
+Route-owned movement rules:
+- Inbox should use placement-strip labels such as `Now`, `Schedule`, `Keep undated`, `Waiting on`, `List`, and `Archive`
+- `Now` should reserve strong move language for overdue recovery and keep normal in-play cards focused on command actions such as `Focus now`
+- `Upcoming` should use section-specific move verbs instead of one generic `Move to Now` label across every section
+- item details should inherit the origin surface so no-op choices read as `Keep in Inbox`, `Keep scheduled`, `Keep undated`, or `Keep waiting`
+
+Overdue should stay explicit without taking over the screen:
+- `Now` may collapse overdue behind a summary row such as `Overdue (N)`
+- recovery stays available through `Bring to Now`
+- do not multiply overdue surfaces elsewhere just because the state exists
 
 The same principle now applies to whole lists:
 
@@ -305,6 +320,15 @@ Replenishment lists should support:
 - a persistent named container
 - an active current run
 - remembered past completion without turning the product into a shopping-history dashboard
+
+Reference-list surface rules:
+- reference lists are valid first-class lists
+- their default visible surface should emphasize finding and keeping, not finishing
+- task-heavy management actions should remain secondary
+
+Replenishment-list surface rules:
+- replenishment runs should keep `Add again`
+- they should not default to surfacing `Create task` as if every replenishment row were a project task
 
 ## No Duplicate Later State
 

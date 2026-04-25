@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { DateKey } from '@/domain/dates';
 import { BottomNav } from '@/app/shell/BottomNav';
 import { TopBar } from '@/app/shell/TopBar';
+import { useCompactLayout } from '@/shared/ui/useCompactLayout';
 
 interface AppShellProps {
   children: ReactNode;
@@ -25,6 +26,8 @@ export function AppShell({
   showDateControls,
   viewPath,
 }: AppShellProps) {
+  const compactLayout = useCompactLayout();
+
   return (
     <div className="app-shell">
       <div className="app-backdrop" />
@@ -39,6 +42,16 @@ export function AppShell({
           viewPath={viewPath}
         />
         <main className="app-content">{children}</main>
+        {compactLayout ? (
+          <button
+            aria-label="Add capture"
+            className="button accent mobile-add-button"
+            onClick={onAdd}
+            type="button"
+          >
+            Add
+          </button>
+        ) : null}
         <BottomNav viewPath={viewPath} />
       </div>
     </div>

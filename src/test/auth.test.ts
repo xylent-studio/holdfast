@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   hasAuthOwnerMismatch,
+  hasUnresolvedMemberOwner,
   resolveSignedOutAuthPromptState,
   signedInAuthPatch,
   signedOutAuthPatch,
 } from '@/app/auth/sync-state';
-import { shouldShowAuthLanding } from '@/app/auth/gating';
+import {
+  resolveShellAccessMode,
+  shouldWaitForShellAccess,
+} from '@/app/auth/gating';
 import { shouldShowSessionRecovery } from '@/app/auth/recovery';
 import { hasMeaningfulLocalState } from '@/app/auth/workspace';
 import { SCHEMA_VERSION } from '@/domain/constants';
@@ -193,6 +197,25 @@ describe('auth sync state guards', () => {
     ).toBe(false);
   });
 
+  it('flags legacy member workspaces whose owner cannot be proven', () => {
+    const snapshot = makeSnapshot();
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
+      boundUserId: null,
+      authPromptState: 'session-expired',
+    };
+
+    expect(hasUnresolvedMemberOwner(snapshot.workspaceState)).toBe(true);
+
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+    };
+
+    expect(hasUnresolvedMemberOwner(snapshot.workspaceState)).toBe(false);
+  });
+
   it('builds signed-in and signed-out auth patches without touching sync mode', () => {
     const snapshot = makeSnapshot();
     snapshot.workspaceState = {
@@ -264,7 +287,7 @@ describe('auth sync state guards', () => {
 });
 
 describe('shouldShowSessionRecovery', () => {
-  it('suppresses the recovery panel after an explicit sign-out', () => {
+  it('keeps recovery visible for member workspaces even after an explicit sign-out', () => {
     const snapshot = makeSnapshot();
     snapshot.workspaceState = {
       ...snapshot.workspaceState,
@@ -273,9 +296,7 @@ describe('shouldShowSessionRecovery', () => {
       boundUserId: '11111111-1111-4111-8111-111111111111',
     };
 
-    expect(shouldShowSessionRecovery(snapshot.workspaceState, false)).toBe(
-      false,
-    );
+    expect(shouldShowSessionRecovery(snapshot.workspaceState, false)).toBe(true);
   });
 
   it('shows recovery when member-owned local work loses its session', () => {
@@ -296,30 +317,88 @@ describe('shouldShowSessionRecovery', () => {
   });
 });
 
-describe('shouldShowAuthLanding', () => {
-  it('shows the landing for a clean signed-out device', () => {
+describe('resolveShellAccessMode', () => {
+  it('keeps a clean signed-out device in the guest shell', () => {
     expect(
-      shouldShowAuthLanding({
+      resolveShellAccessMode({
         authConfigured: true,
         authReady: true,
-        hasLocalData: false,
         hasSession: false,
-        shouldShowSessionRecovery: false,
+        path: '/now',
         snapshotReady: true,
+        workspaceState: makeSnapshot().workspaceState,
       }),
-    ).toBe(true);
+    ).toBe('guest-shell');
   });
 
-  it('does not show the landing when a member workspace needs recovery', () => {
+  it('routes signed-out member workspaces into recovery', () => {
+    const snapshot = makeSnapshot();
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
+      authPromptState: 'session-expired',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+    };
+
     expect(
-      shouldShowAuthLanding({
+      resolveShellAccessMode({
         authConfigured: true,
         authReady: true,
-        hasLocalData: false,
         hasSession: false,
-        shouldShowSessionRecovery: true,
+        path: '/review',
         snapshotReady: true,
+        workspaceState: snapshot.workspaceState,
+      }),
+    ).toBe('member-recovery');
+  });
+
+  it('blocks normal routes for wrong-account recovery', () => {
+    const snapshot = makeSnapshot();
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'member',
+      authPromptState: 'account-mismatch',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+    };
+
+    expect(
+      resolveShellAccessMode({
+        authConfigured: true,
+        authReady: true,
+        hasSession: false,
+        path: '/inbox',
+        snapshotReady: true,
+        workspaceState: snapshot.workspaceState,
+      }),
+    ).toBe('wrong-account-recovery');
+  });
+});
+
+describe('shouldWaitForShellAccess', () => {
+  it('waits for auth restoration only for member workspaces', () => {
+    const guestSnapshot = makeSnapshot();
+    const memberSnapshot = makeSnapshot();
+    memberSnapshot.workspaceState = {
+      ...memberSnapshot.workspaceState,
+      ownershipState: 'member',
+      boundUserId: '11111111-1111-4111-8111-111111111111',
+    };
+
+    expect(
+      shouldWaitForShellAccess({
+        authConfigured: true,
+        authReady: false,
+        snapshotReady: true,
+        workspaceState: guestSnapshot.workspaceState,
       }),
     ).toBe(false);
+    expect(
+      shouldWaitForShellAccess({
+        authConfigured: true,
+        authReady: false,
+        snapshotReady: true,
+        workspaceState: memberSnapshot.workspaceState,
+      }),
+    ).toBe(true);
   });
 });

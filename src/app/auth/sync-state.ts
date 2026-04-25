@@ -19,6 +19,12 @@ export function hasAuthOwnerMismatch(
   );
 }
 
+export function hasUnresolvedMemberOwner(
+  current: WorkspaceStateRecord,
+): boolean {
+  return current.ownershipState === 'member' && !current.boundUserId;
+}
+
 export function signedInAuthPatch(nextRemoteUserId: string): AuthSyncPatch {
   return {
     ownershipState: 'member',

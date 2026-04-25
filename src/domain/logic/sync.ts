@@ -92,17 +92,6 @@ export function deriveSyncHealth({
     };
   }
 
-  if (syncState.mode === 'syncing' || (signedIn && pendingMutationCount > 0)) {
-    return {
-      detail: 'This device is catching up quietly in the background.',
-      failedMutationCount,
-      label: 'Syncing...',
-      pendingMutationCount,
-      blockedReason,
-      state: 'syncing',
-    };
-  }
-
   if (syncState.mode === 'error' || failedMutationCount > 0) {
     return {
       detail:
@@ -117,6 +106,17 @@ export function deriveSyncHealth({
       pendingMutationCount,
       blockedReason,
       state: 'degraded',
+    };
+  }
+
+  if (syncState.mode === 'syncing' || (signedIn && pendingMutationCount > 0)) {
+    return {
+      detail: 'This device is catching up quietly in the background.',
+      failedMutationCount,
+      label: 'Syncing...',
+      pendingMutationCount,
+      blockedReason,
+      state: 'syncing',
     };
   }
 

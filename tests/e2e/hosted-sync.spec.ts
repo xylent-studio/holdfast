@@ -8,13 +8,23 @@ import {
   openSignedInSettings,
   reloadUntilTextVisible,
   waitForRemoteAttachment,
+  waitForRemoteFocusedList,
   waitForRemoteItemByTitle,
   waitForRemoteListByTitle,
   waitForRemoteListItemByTitle,
+  waitForRemoteListScheduledDate,
   waitForRemoteItemTitle,
 } from './hosted-auth.helpers';
 
 const syncSmokeEnabled = process.env.PLAYWRIGHT_SYNC_SMOKE === '1';
+
+function currentLocalDateKey(): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 test.describe('hosted sync smoke', () => {
   const createdUserIds = new Set<string>();
@@ -84,7 +94,7 @@ test.describe('hosted sync smoke', () => {
         firstPage.getByRole('dialog', { name: 'Item details' }),
       ).toBeVisible();
 
-      await firstPage.locator('.file-button input[type="file"]').setInputFiles({
+      await firstPage.locator('.file-input-hidden[type="file"]').setInputFiles({
         mimeType: 'text/plain',
         name: attachmentName,
         buffer: Buffer.from('Holdfast hosted sync proof\n'),
@@ -335,6 +345,73 @@ test.describe('hosted sync smoke', () => {
           .locator('article.item-card')
           .filter({ hasText: offlineTitle }),
       ).toHaveCount(1);
+    } finally {
+      await firstContext.close();
+      await secondContext.close();
+    }
+  });
+
+  test('syncs whole-list activation and focus into another signed-in context', async ({
+    browser,
+  }) => {
+    const email = `holdfast-list-run-${Date.now()}@example.com`;
+    const firstLink = await createMagicLink(email);
+    createdUserIds.add(firstLink.userId);
+
+    const firstContext = await browser.newContext();
+    const secondContext = await browser.newContext();
+    const firstPage = await firstContext.newPage();
+    const secondPage = await secondContext.newPage();
+    const today = currentLocalDateKey();
+
+    try {
+      await consumeMagicLink(firstLink.actionLink, firstPage);
+      await openSignedInSettings(firstPage);
+      await firstPage.goto('/lists', { waitUntil: 'networkidle' });
+      await expect(
+        firstPage.getByRole('heading', { name: 'Lists', exact: true }),
+      ).toBeVisible();
+
+      const secondLink = await createMagicLink(email);
+      createdUserIds.add(secondLink.userId);
+      expect(firstLink.userId).toBe(secondLink.userId);
+
+      await consumeMagicLink(secondLink.actionLink, secondPage);
+      await openSignedInSettings(secondPage);
+
+      const listTitle = `Hosted grocery run ${Date.now()}`;
+      const listItemTitle = `Milk ${Date.now()}`;
+
+      await firstPage.getByRole('button', { name: 'New list' }).click();
+      await firstPage.getByLabel('Title').fill(listTitle);
+      await firstPage.getByRole('button', { name: 'Replenishment' }).click();
+      await firstPage.getByRole('button', { name: 'Create list' }).click();
+
+      const remoteList = await waitForRemoteListByTitle(firstLink.userId, listTitle);
+      const listInput = firstPage.getByPlaceholder(`Add to ${listTitle}`);
+      await listInput.fill(listItemTitle);
+      await listInput.press('Enter');
+      await waitForRemoteListItemByTitle(
+        firstLink.userId,
+        remoteList.id,
+        listItemTitle,
+      );
+
+      await firstPage.getByRole('button', { name: 'Manage list' }).click();
+      await firstPage.getByRole('button', { name: 'Focus now' }).click();
+
+      await waitForRemoteListScheduledDate(firstLink.userId, remoteList.id, today, 30_000);
+      await waitForRemoteFocusedList(firstLink.userId, today, remoteList.id, 30_000);
+
+      await secondPage.goto('/now', { waitUntil: 'networkidle' });
+      await reloadUntilTextVisible(secondPage, listTitle);
+
+      const listCard = secondPage
+        .locator('.active-list-card')
+        .filter({ hasText: listTitle })
+        .first();
+      await expect(listCard).toBeVisible();
+      await expect(listCard.getByText('Focus', { exact: true })).toBeVisible();
     } finally {
       await firstContext.close();
       await secondContext.close();

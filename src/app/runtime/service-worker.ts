@@ -55,6 +55,10 @@ function installRuntimeGuards(): void {
 async function registerServiceWorker(): Promise<void> {
   const hadController = Boolean(navigator.serviceWorker.controller);
   const registration = await navigator.serviceWorker.register('/sw.js');
+  if (!registration) {
+    return;
+  }
+
   const triggerSkipWaiting = (worker: ServiceWorker | null): void => {
     worker?.postMessage({ type: 'HOLDFAST_SKIP_WAITING' });
   };

@@ -40,10 +40,13 @@ test.describe('hosted auth smoke', () => {
     expect(link.generatedRedirect?.startsWith(baseUrl)).toBe(true);
 
     await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Now' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
     await expect(
-      page.getByRole('heading', {
-        name: 'Keep the real-life things you need close.',
-      }),
+      page.getByText(
+        'Using Holdfast locally on this device. Sign in when you want this workspace attached for sync.',
+      ),
     ).toBeVisible();
 
     await consumeMagicLink(link.actionLink, page);

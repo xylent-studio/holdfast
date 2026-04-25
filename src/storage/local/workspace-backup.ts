@@ -859,6 +859,7 @@ async function applyWorkspaceBackup(
       db.attachments,
       db.attachmentBlobs,
       db.mutationQueue,
+      db.prototypeRecoverySessions,
       db.workspaceRestoreSessions,
       db.syncState,
       db.workspaceState,
@@ -874,6 +875,7 @@ async function applyWorkspaceBackup(
       await db.attachments.clear();
       await db.attachmentBlobs.clear();
       await db.mutationQueue.clear();
+      await db.prototypeRecoverySessions.clear();
       await db.syncState.clear();
       await db.workspaceState.clear();
 

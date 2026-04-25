@@ -24,12 +24,13 @@ Use for the actions that truly move the product forward:
 - Done
 - Search
 - Schedule
+- Confirm
 
 ### Secondary actions
 Use for utility, recovery, or lower-frequency moves:
 - Archive
 - Retry
-- Move to Now
+- Bring to Now
 - Plan for later
 - Finish day
 - Add photo
@@ -101,6 +102,18 @@ Inbox should avoid:
 
 Inbox is the fallback for uncertainty, not the mandatory funnel for every add.
 
+Inbox move language should stay direct and even-weight:
+- `Now`
+- `Schedule`
+- `Keep undated`
+- `Waiting on`
+- `List`
+- `Archive`
+
+Inbox should use an explicit schedule confirmation surface before assigning a date.
+Prefilling tomorrow is acceptable.
+Silently assigning tomorrow is not.
+
 ## Upcoming
 Upcoming is where things stay alive without crowding now.
 
@@ -129,6 +142,15 @@ Upcoming should avoid:
 - forcing the user to think in backend terms
 
 Do not add a duplicate fuzzy `Later` state if Upcoming already covers the real need.
+
+Upcoming move language should follow the section:
+- `Scheduled` -> `Bring to Now`, `Move to Waiting on`, `Archive`
+- `Undated` -> `Schedule`, `Bring to Now`, `Move to Waiting on`, `Archive`
+- `Waiting on` -> `Bring to Now`, `Keep in Upcoming`, `Archive`
+
+Do not repeat one generic `Move to Now` label across every Upcoming section when the local meaning is different.
+
+`Undated -> Schedule` should also use an explicit confirmation surface instead of silently choosing tomorrow.
 
 ## Review
 Review is for retrieval and pattern recognition.
@@ -231,10 +253,13 @@ Lists should not:
 - compete with Now, Inbox, Upcoming, and Review for top-level meaning
 - turn the library home into a second dashboard
 - force every list item to behave like a normal task
+- open with every management control already visible
 
 List item rules:
 - list items are children of a list surface
 - they should be searchable globally
+- archived list snapshots are retrieval surfaces, not active editing surfaces
+- opening an archived list from Review should focus the matched row without exposing run, routing, add, or delete controls
 - they should be visible in Review and retrieval results
 - they should only reach Now through an explicit promotion or task-creation action
 - sending a list item to `Now` should preserve one identity and mark it with `nowDate`
@@ -248,6 +273,27 @@ Whole-list rules:
 - `Bring to Now` should not silently focus the list
 - `Finish list` should always open a decision sheet
 - reusable finish outcomes should be kind-aware rather than one-size-fits-all
+
+Reference-list rules:
+- reference lists belong in the list library
+- default visible controls should stay calm
+- do not foreground `Finish list`, `Create task`, or always-open scheduling controls on reference lists
+- activation can still exist, but it should live behind quieter management affordances
+
+Replenishment-list rules:
+- keep `Add again`
+- do not foreground `Create task` as a normal visible action
+
+Movement controls should be owned by the route surface:
+- Inbox owns fast routing strips
+- Now owns command-forward emphasis and overdue recovery
+- Upcoming owns section-specific move verbs
+- item details inherits the route origin and acts as the full fallback surface rather than the default movement language for every screen
+
+On compact mobile surfaces:
+- show one obvious next action first
+- keep at most one emphasized action per card
+- push lower-frequency controls behind details, expansion, or overflow instead of rendering full control stacks by default
 
 ## Preservation and retrieval rules
 Holdfast is not only for action. It is also for keeping things that matter.
@@ -266,6 +312,8 @@ These preserved things should:
 - avoid being forced into fake task semantics
 - remain quieter than the underlying storage model
 
+Review search results should show the real match reasons and use row-specific list-result wording such as `Open matching item` when the result is a list row rather than a whole list.
+
 ## Schedule rules
 Scheduling should feel like deciding an outcome, not filling a form.
 
@@ -280,6 +328,8 @@ Avoid turning scheduling into:
 - a heavy modal ceremony
 - calendar-management theater
 - a field collection exercise
+
+Fast schedule actions on Inbox, Upcoming, and whole-list surfaces should use a lightweight confirmation step with a suggested date and optional time.
 
 ## Closeout rules
 Closing the day is a supportive behavior, not a ritual the product should demand.

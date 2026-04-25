@@ -152,6 +152,8 @@ describe('InboxView', () => {
 
     expect(screen.getByText('Place it')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Now' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Schedule' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Keep undated' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Complete task/i }),

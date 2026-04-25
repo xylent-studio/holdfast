@@ -22,6 +22,11 @@ interface RoutineDraft {
   weekdays: number[];
 }
 
+interface RoutineDraftState {
+  base: RoutineDraft;
+  draft: RoutineDraft;
+}
+
 function buildRoutineDraft(routine: RoutineRecord): RoutineDraft {
   return {
     active: routine.active,
@@ -41,26 +46,42 @@ function sameWeekdays(left: number[], right: number[]): boolean {
   );
 }
 
-function isRoutineDirty(routine: RoutineRecord, draft: RoutineDraft): boolean {
+function sameRoutineDraft(left: RoutineDraft, right: RoutineDraft): boolean {
   return (
-    routine.title !== draft.title ||
-    routine.destination !== draft.destination ||
-    !sameWeekdays(routine.weekdays, draft.weekdays) ||
-    (routine.scheduledTime ?? '') !== draft.scheduledTime ||
-    routine.notes !== draft.notes ||
-    routine.active !== draft.active
+    left.title === right.title &&
+    left.destination === right.destination &&
+    sameWeekdays(left.weekdays, right.weekdays) &&
+    left.scheduledTime === right.scheduledTime &&
+    left.notes === right.notes &&
+    left.active === right.active &&
+    left.lane === right.lane
   );
 }
 
 function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
-  const [draft, setDraft] = useState<RoutineDraft>(() =>
-    buildRoutineDraft(routine),
-  );
+  const incomingDraft = buildRoutineDraft(routine);
+  const [draftState, setDraftState] = useState<RoutineDraftState>(() => ({
+    base: incomingDraft,
+    draft: incomingDraft,
+  }));
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'saving'>(
     'idle',
   );
 
-  const dirty = isRoutineDirty(routine, draft);
+  const wasDirty = !sameRoutineDraft(draftState.draft, draftState.base);
+  const hasIncomingRefresh = !sameRoutineDraft(incomingDraft, draftState.base);
+
+  if (hasIncomingRefresh) {
+    setDraftState({
+      base: incomingDraft,
+      draft: wasDirty ? draftState.draft : incomingDraft,
+    });
+  }
+
+  const activeBase = hasIncomingRefresh ? incomingDraft : draftState.base;
+  const activeDraft =
+    hasIncomingRefresh && !wasDirty ? incomingDraft : draftState.draft;
+  const dirty = !sameRoutineDraft(activeDraft, activeBase);
 
   const handleSave = async (): Promise<void> => {
     if (!dirty) {
@@ -69,24 +90,34 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
 
     setSaveState('saving');
     await updateRoutine(routine.id, {
-      active: draft.active,
-      destination: draft.destination,
-      lane: draft.lane,
-      notes: draft.notes,
-      scheduledTime: draft.scheduledTime || null,
-      title: draft.title,
-      weekdays: draft.weekdays,
+      active: activeDraft.active,
+      destination: activeDraft.destination,
+      lane: activeDraft.lane,
+      notes: activeDraft.notes,
+      scheduledTime: activeDraft.scheduledTime || null,
+      title: activeDraft.title,
+      weekdays: activeDraft.weekdays,
+    });
+    setDraftState({
+      base: activeDraft,
+      draft: activeDraft,
     });
     setSaveState('saved');
   };
 
   const toggleWeekday = (value: number): void => {
     setSaveState('idle');
-    setDraft((current) => ({
+    const sourceDraft = dirty ? draftState.draft : activeDraft;
+    setDraftState((current) => ({
       ...current,
-      weekdays: current.weekdays.includes(value)
-        ? current.weekdays.filter((entry) => entry !== value)
-        : [...current.weekdays, value].sort((left, right) => left - right),
+      draft: {
+        ...(dirty ? current.draft : activeDraft),
+        weekdays: sourceDraft.weekdays.includes(value)
+          ? sourceDraft.weekdays.filter((entry) => entry !== value)
+          : [...sourceDraft.weekdays, value].sort(
+              (left, right) => left - right,
+            ),
+      },
     }));
   };
 
@@ -97,10 +128,16 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
         <input
           onChange={(event) => {
             setSaveState('idle');
-            setDraft((current) => ({ ...current, title: event.target.value }));
+            setDraftState((current) => ({
+              ...current,
+              draft: {
+                ...(dirty ? current.draft : activeDraft),
+                title: event.target.value,
+              },
+            }));
           }}
           type="text"
-          value={draft.title}
+          value={activeDraft.title}
         />
       </label>
       <div className="grid two">
@@ -109,12 +146,15 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
           <select
             onChange={(event) => {
               setSaveState('idle');
-              setDraft((current) => ({
+              setDraftState((current) => ({
                 ...current,
-                destination: event.target.value as 'today' | 'upcoming',
+                draft: {
+                  ...(dirty ? current.draft : activeDraft),
+                  destination: event.target.value as 'today' | 'upcoming',
+                },
               }));
             }}
-            value={draft.destination}
+            value={activeDraft.destination}
           >
             <option value="today">Now</option>
             <option value="upcoming">Upcoming</option>
@@ -127,13 +167,16 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
           <input
             onChange={(event) => {
               setSaveState('idle');
-              setDraft((current) => ({
+              setDraftState((current) => ({
                 ...current,
-                scheduledTime: event.target.value,
+                draft: {
+                  ...(dirty ? current.draft : activeDraft),
+                  scheduledTime: event.target.value,
+                },
               }));
             }}
             type="time"
-            value={draft.scheduledTime}
+            value={activeDraft.scheduledTime}
           />
         </label>
         <label className="field-stack">
@@ -141,12 +184,15 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
           <select
             onChange={(event) => {
               setSaveState('idle');
-              setDraft((current) => ({
+              setDraftState((current) => ({
                 ...current,
-                active: event.target.value === 'active',
+                draft: {
+                  ...(dirty ? current.draft : activeDraft),
+                  active: event.target.value === 'active',
+                },
               }));
             }}
-            value={draft.active ? 'active' : 'off'}
+            value={activeDraft.active ? 'active' : 'off'}
           >
             <option value="active">Active</option>
             <option value="off">Off</option>
@@ -158,7 +204,7 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
         <div className="chip-row">
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => (
             <button
-              className={`chip ${draft.weekdays.includes(index) ? 'active' : ''}`}
+              className={`chip ${activeDraft.weekdays.includes(index) ? 'active' : ''}`}
               key={`${routine.id}-${index}`}
               onClick={() => toggleWeekday(index)}
               type="button"
@@ -173,10 +219,16 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
         <textarea
           onChange={(event) => {
             setSaveState('idle');
-            setDraft((current) => ({ ...current, notes: event.target.value }));
+            setDraftState((current) => ({
+              ...current,
+              draft: {
+                ...(dirty ? current.draft : activeDraft),
+                notes: event.target.value,
+              },
+            }));
           }}
           rows={3}
-          value={draft.notes}
+          value={activeDraft.notes}
         />
       </label>
       <div className="dialog-actions spread">
@@ -195,7 +247,10 @@ function RoutineEditorCard({ routine }: { routine: RoutineRecord }) {
             className="button ghost"
             disabled={!dirty}
             onClick={() => {
-              setDraft(buildRoutineDraft(routine));
+              setDraftState((current) => ({
+                ...current,
+                draft: current.base,
+              }));
               setSaveState('idle');
             }}
             type="button"
@@ -228,7 +283,7 @@ export function RoutineSetupPanel({ routines }: RoutineSetupPanelProps) {
         <div className="item-list">
           {routines.map((routine) => (
             <RoutineEditorCard
-              key={`${routine.id}-${routine.updatedAt}`}
+              key={routine.id}
               routine={routine}
             />
           ))}

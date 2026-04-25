@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { LIST_KIND_LABELS } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
 import type { ReviewMatchReason } from '@/domain/logic/selectors';
+import type { ItemSurfaceContext } from '@/domain/logic/surface-actions';
 import {
   conflictedItems,
   conflictedListItems,
@@ -21,7 +22,7 @@ import { Panel } from '@/shared/ui/Panel';
 interface ReviewViewProps {
   currentDate: DateKey;
   onJumpToDate: (date: DateKey) => void;
-  onOpenItem: (itemId: string) => void;
+  onOpenItem: (itemId: string, origin: ItemSurfaceContext) => void;
   onOpenList: (listId: string, highlightListItemId?: string | null) => void;
   snapshot: HoldfastSnapshot;
 }
@@ -128,11 +129,11 @@ export function ReviewView({
                           currentDate,
                           result.item.attachments,
                         ),
-                        ...result.matchedOn
-                          .slice(0, 2)
-                          .map((reason) => matchReasonLabel(reason)),
+                        ...result.matchedOn.map((reason) =>
+                          matchReasonLabel(reason),
+                        ),
                       ]}
-                      onOpen={() => onOpenItem(result.item.id)}
+                      onOpen={() => onOpenItem(result.item.id, { route: 'review' })}
                     />
                   );
                 }
@@ -240,7 +241,7 @@ export function ReviewView({
                         onClick={() => onOpenList(result.list.id, result.listItem.id)}
                         type="button"
                       >
-                        Open list
+                        Open matching item
                       </button>
                     </div>
                   </div>
@@ -272,7 +273,7 @@ export function ReviewView({
                 item={item}
                 key={item.id}
                 meta={itemMeta(item, currentDate, item.attachments)}
-                onOpen={() => onOpenItem(item.id)}
+                onOpen={() => onOpenItem(item.id, { route: 'review' })}
               />
             ))}
             {conflictLists.map((list) => (
@@ -411,7 +412,7 @@ export function ReviewView({
                       item={item}
                       key={item.id}
                       meta={itemMeta(item, currentDate, item.attachments)}
-                      onOpen={() => onOpenItem(item.id)}
+                      onOpen={() => onOpenItem(item.id, { route: 'review' })}
                     />
                   ))
                 ) : (

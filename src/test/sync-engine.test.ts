@@ -12,6 +12,8 @@ const harness = vi.hoisted(() => {
     conflictItemId: null as string | null,
     syncedItemId: null as string | null,
     pullQueryCount: 0,
+    remoteItemRows: [] as Array<Record<string, unknown>>,
+    beforeItemUpsertResolve: null as null | (() => Promise<void> | void),
   };
 
   function createQueryClient(table: string) {
@@ -48,7 +50,24 @@ const harness = vi.hoisted(() => {
     };
 
     const resolveUpsert = () => {
+      if (queryState.table === 'items' && queryState.payload && harness.state.beforeItemUpsertResolve) {
+        return Promise.resolve(harness.state.beforeItemUpsertResolve()).then(() => {
+          harness.state.beforeItemUpsertResolve = null;
+          return resolveUpsertPayload();
+        });
+      }
+
+      return Promise.resolve(resolveUpsertPayload());
+    };
+
+    const resolveUpsertPayload = () => {
       if (queryState.table === 'items' && queryState.payload?.id === state.syncedItemId) {
+        state.remoteItemRows = [
+          {
+            ...(queryState.payload as Record<string, unknown>),
+            server_updated_at: 'server-item-synced',
+          },
+        ];
         return {
           data: {
             server_updated_at: 'server-item-synced',
@@ -68,6 +87,9 @@ const harness = vi.hoisted(() => {
     const resolveAwaited = () => {
       if (queryState.selected === '*') {
         state.pullQueryCount += 1;
+        if (queryState.table === 'items') {
+          return { data: state.remoteItemRows, error: null };
+        }
         return { data: [], error: null };
       }
 
@@ -126,7 +148,7 @@ const harness = vi.hoisted(() => {
         return Promise.resolve(resolveRemoteExisting());
       },
       single() {
-        return Promise.resolve(resolveUpsert());
+        return resolveUpsert();
       },
       then(
         onFulfilled: ((value: unknown) => unknown) | undefined,
@@ -181,6 +203,7 @@ vi.mock('@/storage/sync/supabase/client', () => ({
 }));
 
 import { createItem } from '@/storage/local/api';
+import { saveItem } from '@/storage/local/api';
 import { syncHoldfastWithSupabase } from '@/storage/sync/supabase/engine';
 
 async function resetLocalDatabase(): Promise<void> {
@@ -199,6 +222,8 @@ beforeEach(async () => {
   harness.state.conflictItemId = null;
   harness.state.syncedItemId = null;
   harness.state.pullQueryCount = 0;
+  harness.state.remoteItemRows = [];
+  harness.state.beforeItemUpsertResolve = null;
   harness.getSessionMock.mockReset();
   harness.getCurrentWorkspaceStateMock.mockReset();
   harness.getCurrentSyncStateMock.mockReset();
@@ -241,6 +266,48 @@ describe('syncHoldfastWithSupabase', () => {
       blockedReason: 'offline',
       mode: 'ready',
     });
+  });
+
+  it('keeps action-required member recovery ahead of offline status', async () => {
+    harness.getCurrentWorkspaceStateMock.mockResolvedValue({
+      attachState: 'attached',
+      ownershipState: 'member',
+      boundUserId: null,
+      authPromptState: 'session-expired',
+    });
+    Object.defineProperty(navigator, 'onLine', {
+      value: false,
+      configurable: true,
+    });
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    expect(harness.updateSyncStateMock).toHaveBeenCalledWith({
+      blockedReason: 'signed-out',
+      mode: 'ready',
+    });
+    expect(harness.getSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps wrong-account recovery ahead of offline status', async () => {
+    harness.getCurrentWorkspaceStateMock.mockResolvedValue({
+      attachState: 'attached',
+      ownershipState: 'member',
+      boundUserId: USER_ID,
+      authPromptState: 'account-mismatch',
+    });
+    Object.defineProperty(navigator, 'onLine', {
+      value: false,
+      configurable: true,
+    });
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    expect(harness.updateSyncStateMock).toHaveBeenCalledWith({
+      blockedReason: 'account-mismatch',
+      mode: 'ready',
+    });
+    expect(harness.getSessionMock).not.toHaveBeenCalled();
   });
 
   it('records a blocked state for restored work that is not attached yet', async () => {
@@ -406,15 +473,105 @@ describe('syncHoldfastWithSupabase', () => {
         blockedReason: null,
         lastFailureAt: expect.any(String),
         lastTransportError: null,
-        mode: 'ready',
+        mode: 'error',
         lastSyncedAt: expect.any(String),
         pullCursorByStream: expect.any(Object),
       }),
     );
-    expect(
-      harness.updateSyncStateMock.mock.calls.some(
-        ([patch]) => (patch as { mode?: string }).mode === 'error',
-      ),
-    ).toBe(false);
+  });
+
+  it('keeps a newer local edit pending when an older in-flight item write finishes', async () => {
+    harness.getSessionMock.mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: USER_ID,
+          },
+        },
+      },
+      error: null,
+    });
+    harness.getCurrentWorkspaceStateMock.mockResolvedValue({
+      attachState: 'attached',
+      ownershipState: 'member',
+      boundUserId: USER_ID,
+      authPromptState: 'none',
+    });
+    harness.getCurrentSyncStateMock.mockResolvedValue({
+      lastSyncedAt: null,
+      pullCursorByStream: createDefaultSyncPullCursorMap(),
+    });
+
+    await createItem({
+      title: 'Base item',
+      kind: 'task',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: '2026-04-19',
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    const baseItem = (await db.items.toArray())[0]!;
+    harness.state.syncedItemId = baseItem.id;
+    harness.state.remoteItemRows = [
+      {
+        user_id: USER_ID,
+        id: baseItem.id,
+        schema_version: 5,
+        title: 'Base item',
+        kind: 'task',
+        lane: 'admin',
+        status: 'inbox',
+        body: '',
+        source_text: null,
+        source_item_id: null,
+        capture_mode: null,
+        source_date: '2026-04-19',
+        scheduled_date: null,
+        scheduled_time: null,
+        routine_id: null,
+        completed_at: null,
+        archived_at: null,
+        created_at: baseItem.createdAt,
+        updated_at: baseItem.updatedAt,
+        deleted_at: null,
+        server_updated_at: 'server-item-synced',
+      },
+    ];
+    harness.state.beforeItemUpsertResolve = async () => {
+      await saveItem(baseItem.id, {
+        title: 'Locally changed later',
+        kind: 'task',
+        lane: 'admin',
+        status: 'inbox',
+        body: '',
+        scheduledDate: null,
+        scheduledTime: null,
+      });
+    };
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    const syncedItem = await db.items.get(baseItem.id);
+    const itemMutations = (await db.mutationQueue.toArray()).filter(
+      (mutation) => mutation.entity === 'item' && mutation.entityId === baseItem.id,
+    );
+
+    expect(syncedItem).toMatchObject({
+      title: 'Locally changed later',
+      syncState: 'synced',
+      remoteRevision: 'server-item-synced',
+    });
+    expect(itemMutations).toHaveLength(2);
+    expect(itemMutations.map((mutation) => mutation.status)).toEqual([
+      'acknowledged',
+      'acknowledged',
+    ]);
+    expect(harness.state.pullQueryCount).toBeGreaterThan(0);
   });
 });

@@ -193,6 +193,21 @@ textarea {
   gap: 0.65rem;
 }
 
+.guest-status-notice {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: flex;
+  gap: 0.85rem;
+  justify-content: space-between;
+  padding: 0.8rem 0.95rem;
+}
+
+.guest-status-notice p {
+  font-size: 0.94rem;
+}
+
 .active-toggle {
   border-color: rgba(88, 119, 100, 0.28);
 }
@@ -760,6 +775,11 @@ p {
   justify-content: flex-end;
 }
 
+.item-actions-overflow {
+  border-top: 1px solid var(--line);
+  padding-top: 0.8rem;
+}
+
 .attachment-list {
   display: grid;
   gap: 0.7rem;
@@ -784,7 +804,7 @@ p {
   color: var(--muted);
 }
 
-.file-button input {
+.file-input-hidden {
   display: none;
 }
 
@@ -842,6 +862,22 @@ p {
   color: var(--text);
 }
 
+.mobile-add-button {
+  display: none;
+}
+
+.placement-actions-compact {
+  display: none;
+}
+
+.placement-overflow summary {
+  list-style: none;
+}
+
+.placement-overflow summary::-webkit-details-marker {
+  display: none;
+}
+
 @media (min-width: 761px) {
   .auth-card {
     gap: 1.5rem;
@@ -866,6 +902,10 @@ p {
     position: static;
   }
 
+  .topbar .eyebrow {
+    display: none;
+  }
+
   .topbar-actions {
     justify-content: flex-start;
   }
@@ -873,6 +913,33 @@ p {
   .topbar-tools,
   .topbar-primary-actions {
     width: 100%;
+  }
+
+  .topbar-add-button {
+    display: none;
+  }
+
+  .mobile-add-button {
+    bottom: 5.25rem;
+    box-shadow: 0 14px 30px rgba(32, 24, 18, 0.2);
+    display: inline-flex;
+    min-height: 3.25rem;
+    padding-inline: 1.35rem;
+    position: fixed;
+    right: 1rem;
+    z-index: 35;
+  }
+
+  .topbar-tools {
+    gap: 0.5rem;
+  }
+
+  .date-controls {
+    width: 100%;
+  }
+
+  .date-controls .button {
+    flex: 1 1 0;
   }
 
   .date-input {
@@ -891,14 +958,24 @@ p {
 
   .bottom-nav-link {
     font-size: 0.84rem;
-    min-height: 2.7rem;
+    min-height: 2.75rem;
     padding: 0.55rem 0.2rem;
+  }
+
+  .placement-actions-full {
+    display: none;
+  }
+
+  .placement-actions-compact {
+    display: grid;
+    gap: 0.6rem;
   }
 
   .attachment-row,
   .account-row,
   .dialog-header,
-  .panel-header.split {
+  .panel-header.split,
+  .guest-status-notice {
     flex-direction: column;
     align-items: stretch;
   }
@@ -920,7 +997,33 @@ p {
   }
 
   .quick-add-footer .button,
-  .quick-add-actions .button {
+  .quick-add-actions .button,
+  .item-actions .button,
+  .item-actions-overflow .button,
+  .chip-row .chip,
+  .guest-status-notice .button,
+  .date-controls .button,
+  .check-button {
     width: 100%;
+  }
+
+  .button,
+  .chip,
+  .button.small,
+  .chip.small,
+  .check-button,
+  .note-badge {
+    min-height: 2.75rem;
+  }
+
+  .check-button,
+  .note-badge {
+    height: 2.75rem;
+    width: 2.75rem;
+  }
+
+  .check-button.checked,
+  .note-badge {
+    width: auto;
   }
 }

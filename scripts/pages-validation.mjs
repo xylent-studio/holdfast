@@ -34,6 +34,8 @@ Options:
   --base-url <url>    Hosted base URL for smoke tests.
   --env-file <path>   Additional env file to load before build/smoke checks.
   --allow-dirty       Allow production deploys with release-affecting dirty files.
+  --allow-unpushed-production
+                      Emergency-only: allow production deploy when HEAD is not origin/main.
   --auth-preflight    Verify Supabase-generated email links stay on the hosted origin.
   --auth-smoke        Run hosted auth smoke after preflight using server-side magic links.
   --sync-smoke        Run hosted same-account sync and attachment smoke after auth preflight.
@@ -152,6 +154,7 @@ function parseArgs(argv) {
     authSmoke: false,
     authPreflight: false,
     allowDirty: false,
+    allowUnpushedProduction: false,
     baseUrl: null,
     branch: null,
     create: false,
@@ -198,6 +201,11 @@ function parseArgs(argv) {
 
     if (arg === '--allow-dirty') {
       options.allowDirty = true;
+      continue;
+    }
+
+    if (arg === '--allow-unpushed-production') {
+      options.allowUnpushedProduction = true;
       continue;
     }
 
@@ -312,6 +320,10 @@ function currentGitCommit() {
   return currentGitValue(['rev-parse', '--short=12', 'HEAD']);
 }
 
+function currentGitFullCommit() {
+  return currentGitValue(['rev-parse', 'HEAD']);
+}
+
 function resolvedBranchLabel(options) {
   if (projectRole(options) === 'production') {
     return DEFAULT_BRANCH;
@@ -335,6 +347,25 @@ function ensureProductionBranchLocked(options) {
   if (options.branch && options.branch !== DEFAULT_BRANCH) {
     throw new Error(
       `Production deploys always use the ${DEFAULT_BRANCH} Pages branch label.`,
+    );
+  }
+
+  if (options.allowUnpushedProduction) {
+    console.log(
+      'Emergency override: allowing production deploy without HEAD == origin/main.',
+    );
+    return;
+  }
+
+  run('git', ['fetch', 'origin', DEFAULT_BRANCH]);
+  const localCommit = currentGitFullCommit();
+  const originCommit = currentGitValue(['rev-parse', `origin/${DEFAULT_BRANCH}`]);
+  if (localCommit !== originCommit) {
+    throw new Error(
+      `Production deploys must run from origin/${DEFAULT_BRANCH}. Local HEAD ${localCommit.slice(
+        0,
+        12,
+      )} does not match origin/${DEFAULT_BRANCH} ${originCommit.slice(0, 12)}.`,
     );
   }
 }
@@ -524,6 +555,9 @@ async function resolveSupabaseSecretKey(authEnv) {
     );
   }
 
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    console.log(`::add-mask::${key}`);
+  }
   process.env.SUPABASE_SECRET_KEY = key;
   return key;
 }
@@ -535,8 +569,8 @@ function loadBuildEnv(options) {
     : null;
   return {
     ...loadEnvFile(envPath),
-    ...(extraEnvPath ? loadEnvFile(extraEnvPath) : {}),
     ...process.env,
+    ...(extraEnvPath ? loadEnvFile(extraEnvPath) : {}),
   };
 }
 
@@ -774,7 +808,7 @@ async function main() {
       'create',
       options.project,
       '--production-branch',
-      options.branch,
+      resolvedBranchLabel(options),
       '--compatibility-date',
       getCompatibilityDate(),
     ]);

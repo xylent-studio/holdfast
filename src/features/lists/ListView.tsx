@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { LIST_KIND_LABELS } from '@/domain/constants';
-import type { DateKey } from '@/domain/dates';
-import { todayDateKey } from '@/domain/dates';
+import { addDays, type DateKey } from '@/domain/dates';
 import { activeListItemsForDisplay } from '@/domain/logic/selectors';
+import {
+  listItemMoveActionSpecs,
+  wholeListMoveActionSpecs,
+  type ItemSurfaceContext,
+  type SurfaceActionId,
+} from '@/domain/logic/surface-actions';
 import {
   clearListSchedule,
   createTaskFromListItem,
@@ -25,12 +30,13 @@ import {
 import { FinishListDialog } from '@/features/lists/FinishListDialog';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Panel } from '@/shared/ui/Panel';
+import { ScheduleConfirmDialog } from '@/shared/ui/ScheduleConfirmDialog';
 
 interface ListViewProps {
   currentDate: DateKey;
   highlightListItemId?: string | null;
   listId: string;
-  onOpenItem: (itemId: string) => void;
+  onOpenItem: (itemId: string, origin: ItemSurfaceContext) => void;
   snapshot: HoldfastSnapshot;
 }
 
@@ -57,8 +63,8 @@ export function ListView({
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishBusy, setFinishBusy] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
-  const scheduleDateRef = useRef<HTMLInputElement | null>(null);
-  const scheduleTimeRef = useRef<HTMLInputElement | null>(null);
+  const [managementOpen, setManagementOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const list = snapshot.lists.find((entry) => entry.id === listId) ?? null;
   const items = useMemo(
@@ -71,16 +77,18 @@ export function ListView({
   const openItems = items.filter((entry) => entry.status === 'open');
   const doneItems = items.filter((entry) => entry.status === 'done');
   const archivedItems = items.filter((entry) => entry.status === 'archived');
+  const isArchivedList = Boolean(list?.archivedAt);
   const activeItems = useMemo(
     () => activeListItemsForDisplay(snapshot.listItems, listId),
     [listId, snapshot.listItems],
   );
-  const isToday = currentDate === todayDateKey();
   const isFocused = Boolean(
     list && (snapshot.currentDay.focusListIds ?? []).includes(list.id),
   );
   const isActiveList =
-    Boolean(list?.scheduledDate && list.scheduledDate <= currentDate) || isFocused;
+    !isArchivedList &&
+    (Boolean(list?.scheduledDate && list.scheduledDate <= currentDate) ||
+      isFocused);
   const listDescription = (() => {
     if (!list) {
       return '';
@@ -104,9 +112,12 @@ export function ListView({
       return;
     }
 
-    document
-      .querySelector<HTMLElement>(`[data-list-item-id="${highlightListItemId}"]`)
-      ?.scrollIntoView({ block: 'center' });
+    const highlighted = document.querySelector<HTMLElement>(
+      `[data-list-item-id="${highlightListItemId}"]`,
+    );
+
+    highlighted?.scrollIntoView?.({ block: 'center' });
+    highlighted?.focus({ preventScroll: true });
   }, [highlightListItemId]);
 
   if (!list) {
@@ -120,6 +131,21 @@ export function ListView({
     );
   }
 
+  const wholeListMoveActions = wholeListMoveActionSpecs({
+    currentDate,
+    isFocused,
+    list,
+  });
+  const primaryWholeListAction =
+    list.kind === 'reference'
+      ? null
+      : wholeListMoveActions.find((action) => action.priority === 'primary') ??
+        wholeListMoveActions[0] ??
+        null;
+  const managementWholeListActions = wholeListMoveActions.filter(
+    (action) => action.id !== primaryWholeListAction?.id,
+  );
+
   const handleQuickAdd = async (): Promise<void> => {
     if (!draft.trim()) {
       return;
@@ -130,14 +156,6 @@ export function ListView({
       title: draft.trim(),
     });
     setDraft('');
-  };
-
-  const handleSchedule = async (): Promise<void> => {
-    await scheduleList(
-      list.id,
-      (scheduleDateRef.current?.value || currentDate) as DateKey,
-      scheduleTimeRef.current?.value.trim() || null,
-    );
   };
 
   const handleUseLatestSavedList = async (): Promise<void> => {
@@ -256,6 +274,24 @@ export function ListView({
     }
   };
 
+  const handleWholeListMoveAction = (actionId: SurfaceActionId): void => {
+    switch (actionId) {
+      case 'bring-to-now':
+        void moveListToNow(list.id, currentDate);
+        break;
+      case 'focus':
+        void setListFocus(currentDate, list.id, true);
+        break;
+      case 'remove-focus':
+        void setListFocus(currentDate, list.id, false);
+        break;
+      case 'remove-from-now':
+      case 'unschedule':
+        void clearListSchedule(list.id);
+        break;
+    }
+  };
+
   const renderListItemCard = (
     entry: (typeof items)[number],
     options?: { activeRun?: boolean },
@@ -268,6 +304,11 @@ export function ListView({
     const conflictBusy = listItemConflictBusyId === entry.id;
     const conflictError =
       listItemConflictErrorId === entry.id ? listItemConflictError : null;
+    const moveActions = listItemMoveActionSpecs({
+      list,
+      listItem: entry,
+      wholeListActive: isActiveList,
+    });
 
     return (
       <div
@@ -276,6 +317,7 @@ export function ListView({
         }${activeRun && entry.status === 'done' ? ' crossed-off' : ''}`}
         data-list-item-id={entry.id}
         key={entry.id}
+        tabIndex={highlightListItemId === entry.id ? -1 : undefined}
       >
         <div className="item-title-row">
           <h3>{entry.title}</h3>
@@ -321,93 +363,96 @@ export function ListView({
             ) : null}
           </div>
         ) : null}
-        <div className="dialog-actions">
-          {entry.status === 'done' ? (
-            <button
-              className="button ghost small"
-              onClick={() => void updateListItem(entry.id, { status: 'open' })}
-              type="button"
-            >
-              Reopen
-            </button>
-          ) : (
-            <button
-              className="button ghost small"
-              onClick={() => void updateListItem(entry.id, { status: 'done' })}
-              type="button"
-            >
-              {activeRun ? 'Cross off' : 'Done'}
-            </button>
-          )}
-          {entry.status === 'open' && list.kind !== 'reference' ? (
-            entry.nowDate ? (
+        {!isArchivedList ? (
+          <div className="dialog-actions">
+            {moveActions.map((action) => (
               <button
-                className="button ghost small"
-                onClick={() => void updateListItem(entry.id, { nowDate: null })}
+                className={`button ${action.tone === 'accent' ? 'accent' : 'ghost'} small`}
+                key={`${entry.id}-${action.id}`}
+                onClick={() => {
+                  switch (action.id) {
+                    case 'bring-to-now':
+                      void promoteListItemToNow(entry.id, currentDate);
+                      break;
+                    case 'remove-from-now':
+                      void updateListItem(entry.id, { nowDate: null });
+                      break;
+                  }
+                }}
                 type="button"
               >
-                Remove from Now
+                {action.label}
+              </button>
+            ))}
+            {entry.status === 'done' ? (
+              <button
+                className="button ghost small"
+                onClick={() => void updateListItem(entry.id, { status: 'open' })}
+                type="button"
+              >
+                Reopen
               </button>
             ) : (
               <button
                 className="button ghost small"
-                onClick={() => void promoteListItemToNow(entry.id, currentDate)}
+                onClick={() => void updateListItem(entry.id, { status: 'done' })}
                 type="button"
               >
-                Send to Now
+                {activeRun ? 'Cross off' : 'Done'}
               </button>
-            )
-          ) : null}
-          {entry.status === 'open' && list.kind !== 'reference' ? (
-            <button
-              className="button ghost small"
-              onClick={() =>
-                void createTaskFromListItem(entry.id, currentDate).then((itemId) => {
-                  if (itemId) {
-                    onOpenItem(itemId);
-                  }
-                })
-              }
-              type="button"
-            >
-              Create task
-            </button>
-          ) : null}
-          {entry.status === 'done' && list.kind === 'replenishment' ? (
-            <button
-              className="button ghost small"
-              onClick={() =>
-                void createListItem({
-                  listId: list.id,
-                  title: entry.title,
-                  body: entry.body,
-                  sourceItemId: entry.sourceItemId,
-                })
-              }
-              type="button"
-            >
-              Add again
-            </button>
-          ) : null}
-          {sourceItem && entry.status !== 'archived' ? (
-            <button
-              className="button ghost small"
-              onClick={() => onOpenItem(sourceItem.id)}
-              type="button"
-            >
-              Open original
-            </button>
-          ) : null}
-          {entry.status !== 'archived' ? (
-            <button
-              className="button danger small"
-              onClick={() => void deleteListItem(entry.id)}
-              type="button"
-            >
-              Remove
-            </button>
-          ) : null}
-        </div>
+            )}
+            {entry.status === 'open' &&
+            ['project', 'checklist'].includes(list.kind) ? (
+              <button
+                className="button ghost small"
+                onClick={() =>
+                  void createTaskFromListItem(entry.id, currentDate).then((itemId) => {
+                    if (itemId) {
+                      onOpenItem(itemId, { route: 'list', listId: list.id });
+                    }
+                  })
+                }
+                type="button"
+              >
+                Create task
+              </button>
+            ) : null}
+            {entry.status === 'done' && list.kind === 'replenishment' ? (
+              <button
+                className="button ghost small"
+                onClick={() =>
+                  void createListItem({
+                    listId: list.id,
+                    title: entry.title,
+                    body: entry.body,
+                    sourceItemId: entry.sourceItemId,
+                  })
+                }
+                type="button"
+              >
+                Add again
+              </button>
+            ) : null}
+            {sourceItem && entry.status !== 'archived' ? (
+              <button
+                className="button ghost small"
+                onClick={() => onOpenItem(sourceItem.id, { route: 'list', listId: list.id })}
+                type="button"
+              >
+                Open original
+              </button>
+            ) : null}
+            {entry.status !== 'archived' ? (
+              <button
+                className="button danger small"
+                onClick={() => void deleteListItem(entry.id)}
+                type="button"
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   };
@@ -435,88 +480,76 @@ export function ListView({
             {list.syncState === 'conflict' ? (
               <span className="chip small">Needs attention</span>
             ) : null}
+            {isArchivedList ? <span className="chip small">Archived</span> : null}
             {list.pinned ? <span className="chip active">Pinned</span> : null}
           </div>
         </div>
 
-        <div className="dialog-actions wrap">
-          <button
-            className="button ghost small"
-            onClick={() => void updateList(list.id, { pinned: !list.pinned })}
-            type="button"
-          >
-            {list.pinned ? 'Unpin' : 'Pin'}
-          </button>
-          <button
-            className="button ghost small"
-            onClick={() => void moveListToNow(list.id, currentDate)}
-            type="button"
-          >
-            Bring to Now
-          </button>
-          <button
-            className="button ghost small"
-            onClick={() => void setListFocus(currentDate, list.id, true)}
-            type="button"
-          >
-            {isToday ? 'Focus now' : 'Focus for this day'}
-          </button>
-          {isFocused ? (
+        {!isArchivedList ? (
+          <div className="dialog-actions wrap">
+            {primaryWholeListAction ? (
+              <button
+                className={`button ${primaryWholeListAction.tone === 'accent' ? 'accent' : 'ghost'} small`}
+                onClick={() => handleWholeListMoveAction(primaryWholeListAction.id)}
+                type="button"
+              >
+                {primaryWholeListAction.label}
+              </button>
+            ) : null}
             <button
               className="button ghost small"
-              onClick={() => void setListFocus(currentDate, list.id, false)}
+              onClick={() => setManagementOpen((current) => !current)}
               type="button"
             >
-              Remove focus
-            </button>
-          ) : null}
-          {list.scheduledDate ? (
-            <button
-              className="button ghost small"
-              onClick={() => void clearListSchedule(list.id)}
-              type="button"
-            >
-              {list.scheduledDate > currentDate ? 'Unschedule' : 'Remove from Now'}
-            </button>
-          ) : null}
-          <button
-            className="button ghost small"
-            onClick={() => {
-              setFinishError(null);
-              setFinishOpen(true);
-            }}
-            type="button"
-          >
-            Finish list
-          </button>
-        </div>
-
-        <div
-          className="inline-form wrap"
-          key={`${list.id}:${list.scheduledDate ?? ''}:${list.scheduledTime ?? ''}:${currentDate}`}
-        >
-          <label className="field-stack grow">
-            <span>Schedule for</span>
-            <input
-              defaultValue={list.scheduledDate ?? currentDate}
-              ref={scheduleDateRef}
-              type="date"
-            />
-          </label>
-          <label className="field-stack">
-            <span>Time</span>
-            <input
-              defaultValue={list.scheduledTime ?? ''}
-              ref={scheduleTimeRef}
-              type="time"
-            />
-          </label>
-          <div className="dialog-actions align-end">
-            <button className="button ghost small" onClick={() => void handleSchedule()} type="button">
-              Schedule
+              {managementOpen ? 'Hide list actions' : 'Manage list'}
             </button>
           </div>
-        </div>
+        ) : (
+          <div className="empty-inline">
+            Archived lists stay searchable for reference. They are not active work surfaces.
+          </div>
+        )}
+
+        {managementOpen && !isArchivedList ? (
+          <div className="dialog-actions wrap">
+            {managementWholeListActions.map((action) => (
+              <button
+                className="button ghost small"
+                key={action.id}
+                onClick={() => handleWholeListMoveAction(action.id)}
+                type="button"
+              >
+                {action.label}
+              </button>
+            ))}
+            <button
+              className="button ghost small"
+              onClick={() => setScheduleOpen(true)}
+              type="button"
+            >
+              Schedule
+            </button>
+            <button
+              className="button ghost small"
+              onClick={() => void updateList(list.id, { pinned: !list.pinned })}
+              type="button"
+            >
+              {list.pinned ? 'Unpin' : 'Pin'}
+            </button>
+            {list.kind !== 'reference' ? (
+              <button
+                className="button ghost small"
+                onClick={() => {
+                  setFinishError(null);
+                  setFinishOpen(true);
+                }}
+                type="button"
+              >
+                Finish list
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {list.syncState === 'conflict' ? (
           <div className="recovery-note">
@@ -549,47 +582,53 @@ export function ListView({
           </div>
         ) : null}
 
-        <label className="field-stack">
-          <span>Add to this list</span>
-          <div className="inline-form">
-            <input
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void handleQuickAdd();
-                }
-              }}
-              placeholder={`Add to ${list.title}`}
-              type="text"
-              value={draft}
-            />
-            <button
-              className="button accent"
-              onClick={() => void handleQuickAdd()}
-              type="button"
-            >
-              Add
-            </button>
-          </div>
-        </label>
+        {!isArchivedList ? (
+          <label className="field-stack">
+            <span>Add to this list</span>
+            <div className="inline-form">
+              <input
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void handleQuickAdd();
+                  }
+                }}
+                placeholder={`Add to ${list.title}`}
+                type="text"
+                value={draft}
+              />
+              <button
+                className="button accent"
+                onClick={() => void handleQuickAdd()}
+                type="button"
+              >
+                Add
+              </button>
+            </div>
+          </label>
+        ) : null}
       </Panel>
 
       <Panel>
         <div className="panel-header">
-          <h2>{isActiveList ? 'Working now' : 'Current'}</h2>
+          <h2>
+            {isArchivedList ? 'Archived snapshot' : isActiveList ? 'Working now' : 'Current'}
+          </h2>
           <p>
-            {isActiveList
+            {isArchivedList
+              ? 'This is preserved exactly for retrieval.'
+              : isActiveList
               ? 'Open items stay first. Crossed-off items stay visible lower while you work the list.'
               : list.kind === 'reference'
                 ? 'What is still worth keeping close here.'
                 : 'What still belongs on this list right now.'}
           </p>
         </div>
-        {(isActiveList ? activeItems : openItems).length ? (
+        {(isArchivedList ? items : isActiveList ? activeItems : openItems).length ? (
           <div className="item-list">
-            {(isActiveList ? activeItems : openItems).map((entry) =>
-              renderListItemCard(entry, { activeRun: isActiveList }),
+            {(isArchivedList ? items : isActiveList ? activeItems : openItems).map(
+              (entry) => renderListItemCard(entry, { activeRun: isActiveList }),
             )}
           </div>
         ) : (
@@ -597,7 +636,7 @@ export function ListView({
         )}
       </Panel>
 
-      {!isActiveList && doneItems.length ? (
+      {!isArchivedList && !isActiveList && doneItems.length ? (
         <Panel>
           <div className="panel-header split">
             <div>
@@ -633,7 +672,7 @@ export function ListView({
         </Panel>
       ) : null}
 
-      {archivedItems.length ? (
+      {!isArchivedList && archivedItems.length ? (
         <Panel>
           <div className="panel-header">
             <h2>Archived</h2>
@@ -659,6 +698,17 @@ export function ListView({
         }}
         onConfirm={(action) => void handleFinish(action)}
       />
+      {scheduleOpen ? (
+        <ScheduleConfirmDialog
+          confirmLabel="Schedule"
+          defaultDate={(list.scheduledDate ?? addDays(currentDate, 1)) as DateKey}
+          defaultTime={list.scheduledTime ?? ''}
+          description="Pick when this list should show up in Upcoming."
+          onClose={() => setScheduleOpen(false)}
+          onConfirm={(date, time) => scheduleList(list.id, date, time)}
+          title="Schedule this list"
+        />
+      ) : null}
     </div>
   );
 }

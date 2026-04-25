@@ -649,6 +649,29 @@ describe('whole-list activation and finish lifecycle', () => {
     });
     expect(remainingActiveItems).toEqual([]);
   });
+
+  it('keeps archived lists retrieval-only under storage commands', async () => {
+    await createList({
+      title: 'Shopping run',
+      kind: 'replenishment',
+      lane: 'home',
+    });
+
+    const [list] = await db.lists.toArray();
+    await createListItem({ listId: list!.id, title: 'Eggs' });
+    const [eggs] = await db.listItems.where('listId').equals(list!.id).toArray();
+
+    await finishList(list!.id, 'archive-and-hide', CURRENT_DATE);
+    await createListItem({ listId: list!.id, title: 'Coffee' });
+    await updateListItem(eggs!.id, { status: 'done' });
+
+    const archivedList = await db.lists.get(list!.id);
+    const listItems = await db.listItems.where('listId').equals(list!.id).toArray();
+
+    expect(archivedList?.archivedAt).toEqual(expect.any(String));
+    expect(listItems.map((item) => item.title)).toEqual(['Eggs']);
+    expect(listItems[0]?.status).toBe('open');
+  });
 });
 
 describe('item deletion sync coverage', () => {

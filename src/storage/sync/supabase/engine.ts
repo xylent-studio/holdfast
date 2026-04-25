@@ -235,6 +235,40 @@ async function deleteLocalItemCascade(itemId: string): Promise<void> {
   await removeItemFromFocusEverywhere(itemId);
 }
 
+async function itemHasUnsyncedAttachmentWork(itemId: string): Promise<boolean> {
+  const attachments = await db.attachments.where('itemId').equals(itemId).toArray();
+  const activeAttachmentIds = new Set(
+    attachments
+      .filter((attachment) => !attachment.deletedAt)
+      .map((attachment) => attachment.id),
+  );
+
+  if (!activeAttachmentIds.size) {
+    return false;
+  }
+
+  if (
+    attachments.some(
+      (attachment) =>
+        !attachment.deletedAt &&
+        (attachment.syncState !== 'synced' || !attachment.remoteRevision),
+    )
+  ) {
+    return true;
+  }
+
+  return (
+    (await db.mutationQueue
+      .filter(
+        (mutation) =>
+          mutation.entity === 'attachment' &&
+          activeAttachmentIds.has(mutation.entityId) &&
+          (mutation.status === 'pending' || mutation.status === 'failed'),
+      )
+      .count()) > 0
+  );
+}
+
 async function deleteLocalListCascade(listId: string): Promise<void> {
   const listItems = await db.listItems.where('listId').equals(listId).toArray();
   await db.lists.delete(listId);
@@ -300,19 +334,35 @@ async function putLocalEntityRecord(
   }
 }
 
+function comparableLocalRecord(record: SyncableLocalRecord): Record<string, unknown> {
+  const stable = { ...record } as Record<string, unknown>;
+  delete stable.remoteRevision;
+  delete stable.syncState;
+  return stable;
+}
+
 async function markLocalEntitySynced(
   entity: MutationRecord['entity'],
   entityId: string,
   remoteRevision: string | null,
+  expectedRecord: SyncableLocalRecord,
 ): Promise<void> {
   const current = await getLocalEntityRecord(entity, entityId);
   if (!current) {
     return;
   }
 
+  const stillCurrentVersion =
+    JSON.stringify(comparableLocalRecord(current)) ===
+    JSON.stringify(comparableLocalRecord(expectedRecord));
   await putLocalEntityRecord(entity, {
     ...current,
-    syncState: 'synced',
+    syncState:
+      current.syncState === 'conflict'
+        ? 'conflict'
+        : stillCurrentVersion
+          ? 'synced'
+          : 'pending',
     remoteRevision: remoteRevision ?? current.remoteRevision ?? null,
   });
 }
@@ -492,6 +542,9 @@ async function pushCurrentRecord(
     return;
   }
 
+  const recordAtSend = current;
+  const isRestoreMutation = mutation.type.endsWith('.restored');
+
   const remoteExisting = await fetchRemoteExisting(
     client,
     userId,
@@ -500,6 +553,7 @@ async function pushCurrentRecord(
   );
   if (
     remoteExisting &&
+    !isRestoreMutation &&
     !remoteTupleMatchesLocalBase(current, remoteExisting.serverUpdatedAt)
   ) {
     await markLocalEntityConflict(
@@ -525,6 +579,7 @@ async function pushCurrentRecord(
         mutation.entity,
         mutation.entityId,
         data?.server_updated_at ?? current.remoteRevision,
+        recordAtSend,
       );
       return;
     }
@@ -542,6 +597,7 @@ async function pushCurrentRecord(
         mutation.entity,
         mutation.entityId,
         data?.server_updated_at ?? current.remoteRevision,
+        recordAtSend,
       );
       return;
     }
@@ -559,6 +615,7 @@ async function pushCurrentRecord(
         mutation.entity,
         mutation.entityId,
         data?.server_updated_at ?? current.remoteRevision,
+        recordAtSend,
       );
       return;
     }
@@ -578,6 +635,7 @@ async function pushCurrentRecord(
         mutation.entity,
         mutation.entityId,
         data?.server_updated_at ?? current.remoteRevision,
+        recordAtSend,
       );
       return;
     }
@@ -597,6 +655,7 @@ async function pushCurrentRecord(
         mutation.entity,
         mutation.entityId,
         data?.server_updated_at ?? current.remoteRevision,
+        recordAtSend,
       );
       return;
     }
@@ -614,6 +673,7 @@ async function pushCurrentRecord(
         mutation.entity,
         mutation.entityId,
         data?.server_updated_at ?? current.remoteRevision,
+        recordAtSend,
       );
       return;
     }
@@ -633,6 +693,7 @@ async function pushCurrentRecord(
         mutation.entity,
         mutation.entityId,
         data?.server_updated_at ?? current.remoteRevision,
+        recordAtSend,
       );
       return;
     }
@@ -669,9 +730,22 @@ async function pushCurrentRecord(
         mutation.entity,
         mutation.entityId,
         data?.server_updated_at ?? attachment.remoteRevision,
+        recordAtSend,
       );
     }
   }
+}
+
+async function countPendingMutations(): Promise<number> {
+  return db.mutationQueue
+    .filter((mutation) => mutation.status === 'pending')
+    .count();
+}
+
+async function countFailedMutations(): Promise<number> {
+  return db.mutationQueue
+    .filter((mutation) => mutation.status === 'failed')
+    .count();
 }
 
 async function processDeletionMutation(
@@ -1008,6 +1082,12 @@ async function applyRemoteDeletion(
       ) {
         return;
       }
+      if (await itemHasUnsyncedAttachmentWork(recordId)) {
+        if (current) {
+          await markLocalEntityConflict('item', recordId, deletedAt);
+        }
+        return;
+      }
 
       await deleteLocalItemCascade(recordId);
       await acknowledgeEntityMutations('item', recordId);
@@ -1324,25 +1404,43 @@ async function pullRemoteChanges(
 }
 
 async function runSync(client: SupabaseClient, userId: string): Promise<void> {
-  const syncState = await getCurrentSyncState();
+  const initialSyncState = await getCurrentSyncState();
   await updateSyncState({
     blockedReason: null,
     mode: 'syncing',
   });
 
   try {
-    const mutationSummary = await pushPendingMutations(client, userId);
-    const nextPullState = await pullRemoteChanges(
-      client,
-      userId,
-      syncState,
-    );
+    let syncState = initialSyncState;
+    let lastFailureAt: string | null = null;
+    let nextPullState = {
+      lastSyncedAt: syncState.lastSyncedAt ?? nowIso(),
+      pullCursorByStream: syncState.pullCursorByStream,
+    };
+
+    for (let pass = 0; pass < 5; pass += 1) {
+      const mutationSummary = await pushPendingMutations(client, userId);
+      lastFailureAt = mutationSummary.lastFailureAt ?? lastFailureAt;
+      nextPullState = await pullRemoteChanges(client, userId, syncState);
+      syncState = {
+        ...syncState,
+        lastSyncedAt: nextPullState.lastSyncedAt,
+        pullCursorByStream: nextPullState.pullCursorByStream,
+      };
+
+      if ((await countPendingMutations()) === 0) {
+        break;
+      }
+    }
+
+    const remainingFailedMutationCount = await countFailedMutations();
+
     await updateSyncState({
       blockedReason: null,
       lastSyncedAt: nextPullState.lastSyncedAt,
-      lastFailureAt: mutationSummary.lastFailureAt,
+      lastFailureAt,
       lastTransportError: null,
-      mode: 'ready',
+      mode: remainingFailedMutationCount > 0 ? 'error' : 'ready',
       pullCursorByStream: nextPullState.pullCursorByStream,
     });
   } catch (error) {
@@ -1364,16 +1462,23 @@ export async function syncHoldfastWithSupabase(): Promise<void> {
   }
 
   const workspaceState = await getCurrentWorkspaceState();
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    await setSyncBlockedState('offline');
-    return;
-  }
   if (workspaceState.authPromptState === 'account-mismatch') {
     await setSyncBlockedState('account-mismatch');
     return;
   }
   if (workspaceState.attachState !== 'attached') {
     await setSyncBlockedState('detached-restore');
+    return;
+  }
+  if (
+    workspaceState.ownershipState === 'member' &&
+    !workspaceState.boundUserId
+  ) {
+    await setSyncBlockedState('signed-out');
+    return;
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    await setSyncBlockedState('offline');
     return;
   }
 

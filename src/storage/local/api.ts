@@ -1944,7 +1944,7 @@ export async function createListItem(
     db.mutationQueue,
     async () => {
       const list = await db.lists.get(input.listId);
-      if (!list || list.deletedAt) {
+      if (!list || list.deletedAt || list.archivedAt) {
         return;
       }
 
@@ -2377,6 +2377,10 @@ export async function updateListItem(
   await db.transaction('rw', db.lists, db.listItems, db.mutationQueue, async () => {
     const current = await db.listItems.get(listItemId);
     if (!current || current.deletedAt) {
+      return;
+    }
+    const parentList = await db.lists.get(current.listId);
+    if (!parentList || parentList.deletedAt || parentList.archivedAt) {
       return;
     }
 

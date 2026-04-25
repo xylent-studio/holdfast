@@ -149,6 +149,66 @@ export async function waitForRemoteListByTitle(
   );
 }
 
+export async function waitForRemoteListScheduledDate(
+  userId: string,
+  listId: string,
+  scheduledDate: string,
+  timeoutMs?: number,
+) {
+  return pollFor(
+    async () => {
+      const { data, error } = await authClient()
+        .from('lists')
+        .select('id,title,scheduled_date,scheduled_time,completed_at,updated_at')
+        .eq('user_id', userId)
+        .eq('id', listId)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data || data.scheduled_date !== scheduledDate) {
+        return null;
+      }
+
+      return data;
+    },
+    `remote list "${listId}" scheduled for "${scheduledDate}"`,
+    timeoutMs,
+  );
+}
+
+export async function waitForRemoteFocusedList(
+  userId: string,
+  date: string,
+  listId: string,
+  timeoutMs?: number,
+) {
+  return pollFor(
+    async () => {
+      const { data, error } = await authClient()
+        .from('daily_records')
+        .select('date,focus_list_ids,updated_at')
+        .eq('user_id', userId)
+        .eq('date', date)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data || !Array.isArray(data.focus_list_ids) || !data.focus_list_ids.includes(listId)) {
+        return null;
+      }
+
+      return data;
+    },
+    `remote daily record "${date}" focused list "${listId}"`,
+    timeoutMs,
+  );
+}
+
 export async function waitForRemoteListItemByTitle(
   userId: string,
   listId: string,

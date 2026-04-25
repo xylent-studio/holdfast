@@ -10,6 +10,7 @@ import type { Session } from '@supabase/supabase-js';
 import { AuthContext, type AuthContextValue } from '@/app/auth/context';
 import {
   hasAuthOwnerMismatch,
+  hasUnresolvedMemberOwner,
   resolveSignedOutAuthPromptState,
   signedInAuthPatch,
   signedOutAuthPatch,
@@ -68,6 +69,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const current = await getCurrentWorkspaceState();
 
       if (nextSession?.user?.id) {
+        if (hasUnresolvedMemberOwner(current)) {
+          pendingSignedOutPromptRef.current = 'session-expired';
+          await updateWorkspaceState(
+            signedOutAuthPatch(current, 'session-expired'),
+          );
+          setError(
+            'This device has synced work from an earlier account, but this install cannot prove which account owns it. Sign back into the original account after recovery, or remove this device data first.',
+          );
+          const { error: signOutError } = await client!.auth.signOut();
+          if (signOutError) {
+            pendingSignedOutPromptRef.current = null;
+            throw signOutError;
+          }
+          return null;
+        }
+
         if (hasAuthOwnerMismatch(current, nextSession.user.id)) {
           pendingSignedOutPromptRef.current = 'account-mismatch';
           await updateWorkspaceState(

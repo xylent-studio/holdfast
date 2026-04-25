@@ -172,6 +172,26 @@ function makeSnapshot(): HoldfastSnapshot {
   };
 }
 
+function makeRoutine() {
+  return {
+    id: '11111111-1111-4111-8111-111111111113',
+    schemaVersion: SCHEMA_VERSION,
+    title: 'Morning reset',
+    lane: 'admin',
+    destination: 'today',
+    weekdays: [1, 2, 3, 4, 5],
+    scheduledTime: '08:00',
+    notes: 'Start simple.',
+    active: true,
+    lastSeededDate: null,
+    createdAt: '2026-04-20T08:00:00.000Z',
+    updatedAt: '2026-04-20T08:00:00.000Z',
+    deletedAt: null,
+    syncState: 'pending',
+    remoteRevision: null,
+  } satisfies HoldfastSnapshot['routines'][number];
+}
+
 function panelFor(title: string): HTMLElement {
   return screen.getByRole('heading', { name: title }).closest('.panel')!;
 }
@@ -227,6 +247,106 @@ describe('SettingsView', () => {
       standards: '',
       why: '',
     });
+  });
+
+  it('preserves longer-view drafts and focus across background settings refreshes', () => {
+    const snapshot = makeSnapshot();
+    const { rerender } = render(
+      <SettingsView currentDate="2026-04-20" snapshot={snapshot} />,
+    );
+
+    fireEvent.click(
+      within(panelFor('Private notes')).getByRole('button', { name: 'Open' }),
+    );
+    const directionBox = screen.getByRole('textbox', {
+      name: '12-month direction',
+    });
+    directionBox.focus();
+    fireEvent.change(directionBox, {
+      target: { value: 'Drafting while sync refreshes.' },
+    });
+
+    rerender(
+      <SettingsView
+        currentDate="2026-04-20"
+        snapshot={{
+          ...snapshot,
+          settings: {
+            ...snapshot.settings,
+            direction: 'Remote background refresh.',
+            updatedAt: '2026-04-20T09:00:00.000Z',
+          },
+        }}
+      />,
+    );
+
+    expect(directionBox).toHaveValue('Drafting while sync refreshes.');
+    expect(document.activeElement).toBe(directionBox);
+  });
+
+  it('adopts background settings refreshes when the longer-view editor is clean', () => {
+    const snapshot = makeSnapshot();
+    const { rerender } = render(
+      <SettingsView currentDate="2026-04-20" snapshot={snapshot} />,
+    );
+
+    fireEvent.click(
+      within(panelFor('Private notes')).getByRole('button', { name: 'Open' }),
+    );
+
+    rerender(
+      <SettingsView
+        currentDate="2026-04-20"
+        snapshot={{
+          ...snapshot,
+          settings: {
+            ...snapshot.settings,
+            direction: 'Remote background refresh.',
+            updatedAt: '2026-04-20T09:00:00.000Z',
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole('textbox', { name: '12-month direction' }),
+    ).toHaveValue('Remote background refresh.');
+  });
+
+  it('preserves routine drafts and focus across background routine refreshes', () => {
+    const snapshot = makeSnapshot();
+    snapshot.routines = [makeRoutine()];
+    const { rerender } = render(
+      <SettingsView currentDate="2026-04-20" snapshot={snapshot} />,
+    );
+
+    fireEvent.click(
+      within(panelFor('Routines')).getByRole('button', { name: 'Open' }),
+    );
+    const routineTitle = screen.getByRole('textbox', { name: 'Title' });
+    routineTitle.focus();
+    fireEvent.change(routineTitle, {
+      target: { value: 'Draft routine title' },
+    });
+
+    rerender(
+      <SettingsView
+        currentDate="2026-04-20"
+        snapshot={{
+          ...snapshot,
+          routines: [
+            {
+              ...snapshot.routines[0]!,
+              title: 'Remote routine title',
+              updatedAt: '2026-04-20T09:00:00.000Z',
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(routineTitle).toHaveValue('Draft routine title');
+    expect(document.activeElement).toBe(routineTitle);
   });
 
   it('keeps recovery language grounded for a signed-out member workspace', () => {
@@ -286,7 +406,7 @@ describe('SettingsView', () => {
     render(<SettingsView currentDate="2026-04-20" snapshot={makeSnapshot()} />);
 
     fireEvent.click(
-      within(panelFor('Workspace safety')).getByRole('button', { name: 'Open' }),
+      within(panelFor('Device recovery')).getByRole('button', { name: 'Open' }),
     );
     const removeButton = await screen.findByRole('button', {
       name: 'Remove data from this device',
@@ -315,6 +435,70 @@ describe('SettingsView', () => {
     expect(
       screen.getByText('This device is catching up quietly in the background.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows a healthy synced state once the first sync completed cleanly', () => {
+    const snapshot = makeSnapshot();
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      lastSyncedAt: '2026-04-20T09:00:00.000Z',
+    };
+
+    render(<SettingsView currentDate="2026-04-20" snapshot={snapshot} />);
+
+    expect(screen.getByText('Up to date')).toBeInTheDocument();
+    expect(screen.getByText('This device is caught up.')).toBeInTheDocument();
+  });
+
+  it('shows a guest device as safe locally before account attach', () => {
+    mockedSession = null;
+    mockedEmail = '';
+    mockedDisplayName = null;
+    mockedProviderLabel = null;
+    const snapshot = makeSnapshot();
+    snapshot.items = [
+      {
+        id: '11111111-1111-4111-8111-111111111112',
+        schemaVersion: SCHEMA_VERSION,
+        title: 'Local capture',
+        kind: 'capture',
+        lane: 'personal',
+        status: 'inbox',
+        body: '',
+        sourceText: '',
+        sourceItemId: null,
+        captureMode: 'quick',
+        sourceDate: '2026-04-20',
+        scheduledDate: null,
+        scheduledTime: null,
+        routineId: null,
+        completedAt: null,
+        archivedAt: null,
+        createdAt: '2026-04-20T08:00:00.000Z',
+        updatedAt: '2026-04-20T08:00:00.000Z',
+        deletedAt: null,
+        syncState: 'pending',
+        remoteRevision: null,
+      },
+    ];
+    snapshot.workspaceState = {
+      ...snapshot.workspaceState,
+      ownershipState: 'device-guest',
+      boundUserId: null,
+      authPromptState: 'none',
+      attachState: 'detached',
+    };
+    snapshot.syncState = {
+      ...snapshot.syncState,
+      blockedReason: 'signed-out',
+    };
+
+    render(<SettingsView currentDate="2026-04-20" snapshot={snapshot} />);
+
+    expect(screen.getByText("Can't sync yet")).toBeInTheDocument();
+    expect(screen.getByText('Safe on this device')).toBeInTheDocument();
+    expect(screen.getByText('Guest on this device')).toBeInTheDocument();
+    expect(screen.getByText('Sign in to sync this device.')).toBeInTheDocument();
   });
 
   it('uses the saved-offline label only for blocked offline sync', () => {

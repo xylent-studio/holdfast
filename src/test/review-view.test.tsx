@@ -215,7 +215,7 @@ describe('ReviewView', () => {
       target: { value: 'coffee' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Details' }));
-    expect(onOpenItem).toHaveBeenCalledWith('item-1');
+    expect(onOpenItem).toHaveBeenCalledWith('item-1', { route: 'review' });
 
     fireEvent.change(screen.getByLabelText('Search'), {
       target: { value: 'shipped' },

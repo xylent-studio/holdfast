@@ -30,16 +30,16 @@ The schema still reserves `anonymous-user`, but that is not the V1 product path 
 
 ### First run
 
-When Supabase auth is configured and the device does not already hold meaningful local work, the user sees a short signed-out landing:
+When Supabase auth is configured and the device does not already hold meaningful local work, Holdfast should still open the requested route in the real shell as a guest workspace.
 
-- Holdfast identity
-- one-line product promise
-- `Continue with Google`
-- `Email me a sign-in link`
-- one calm trust line
+The clean signed-out posture is:
 
-This is the front door.
-It is not a feature tour and not an onboarding wizard.
+- keep `/now`, `/inbox`, `/upcoming`, `/review`, `/lists`, and `/settings` meaningful
+- let Add and local work happen immediately
+- show one small shell-level note that the device is working locally now and can attach for sync after sign-in
+- keep sign-in reachable from Settings and the shell notice
+
+This is a guest shell, not a feature tour, preview mode, or onboarding wizard.
 
 ### Existing local workspace
 
@@ -50,6 +50,17 @@ User-facing promise:
 - keep what is already here
 - attach it to the account after sign-in, then let sync catch up honestly
 - do not make sign-in feel like a threat to existing data
+
+### Recovery and wrong-account exceptions
+
+Guest shell is the default clean signed-out posture.
+
+Two cases should still stay explicit:
+
+- `member-recovery`: the device holds member-owned local work and needs the original user to sign back in
+- `wrong-account-recovery`: a different account tries to attach to a member-owned workspace and must be blocked
+
+Those recovery states should not be flattened into the calm guest-shell copy.
 
 ### Callback and restore
 
@@ -79,18 +90,24 @@ It should stay small:
 - display name if available
 - provider
 - light sync status
+- a clear line for what is safe locally on this device right now
+- a clear line for whether this device is attached for sync
+- a clear line for whether sync has ever completed successfully here
 - sign out
 - remove data from this device
 
 Not here yet:
 
 - delete account
-- storage or sync mechanics
+- storage or sync mechanics in the primary visible layer
 - provider internals
 
 `Remove data from this device` should stay separate from sign-out.
 It clears the local workspace, backups, and attachment cache on this device only.
 It should not imply account deletion.
+
+Support and diagnostics should stay secondary inside Settings.
+They are not the primary account story.
 
 ## Session Recovery
 
@@ -100,6 +117,7 @@ Good recovery language:
 
 - `Sign in again`
 - `Local work is still here.`
+- `Sign in when you want sync back.`
 
 Bad recovery language:
 
@@ -163,6 +181,9 @@ Current safety guard:
 
 - Holdfast does not silently rebind a member-owned local workspace to a different signed-in account on the same device
 - if the wrong account signs in, the app signs back out and asks for the original account instead of risking cross-account sync
+- if an upgraded local install has member-owned evidence but no bound account id, Holdfast treats that as recovery-required instead of guessing a new owner
+
+The same guard should not interfere with a clean guest shell on a new device with no prior member-owned workspace.
 
 That local workspace marker is not a full replacement for per-record remote ownership.
 Per-record `user_id` scoping now exists remotely, but richer conflict handling and hosted-provider setup still need to be finished before broad public use.
@@ -259,7 +280,7 @@ The repo now includes:
 
 - a single Supabase browser client boundary
 - auth/session state wiring in the app shell
-- a signed-out landing
+- a guest shell default entry plus explicit recovery/auth-specific surfaces
 - a callback handoff route
 - a small account surface in Settings
 - session recovery prompts that preserve local work

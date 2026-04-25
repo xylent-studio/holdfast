@@ -46,6 +46,12 @@ Status: in progress
 - make list surfaces real with a quiet dedicated `Lists` home
 - strengthen Review and retrieval so saved things are easy to refind
 
+Current evidence shaping this phase:
+
+- The 2026-04-24 [36-voice product review](/C:/dev/GitHub/Holdfast/docs/research/2026-04-24-36-voice-product-review.md) found that the underlying model is stronger than the first-run presentation.
+- The strongest near-term issues are first-run route/auth posture, list and mobile control density, silent scheduling defaults, and residual implementation/support language in primary trust surfaces.
+- The strongest ideas to protect are text-first Add, whole-list activation, retrieval-first Review, and the `Now / Inbox / Upcoming / Review / Lists` spine.
+
 ## Phase 4: Trust And Recovery Hardening
 
 - broader cross-device sync and offline replay validation

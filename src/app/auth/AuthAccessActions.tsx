@@ -5,11 +5,13 @@ import { useAuth } from '@/app/auth/useAuth';
 interface AuthAccessActionsProps {
   hasLocalData?: boolean;
   nextPath?: string;
+  trustMessage?: string;
 }
 
 export function AuthAccessActions({
   hasLocalData = false,
   nextPath,
+  trustMessage,
 }: AuthAccessActionsProps) {
   const {
     clearFeedback,
@@ -67,13 +69,15 @@ export function AuthAccessActions({
         </div>
       ) : null}
 
-      {hasLocalData ? (
+      {trustMessage ? (
+        <p className="auth-trust-line">{trustMessage}</p>
+      ) : hasLocalData ? (
         <p className="auth-trust-line">
           We&apos;ll keep what&apos;s already here and attach it to your account here first.
         </p>
       ) : (
         <p className="auth-trust-line">
-          Your stuff stays with you across devices and still works offline.
+          Use Holdfast locally first. Sign in when you want this device attached for sync.
         </p>
       )}
 

@@ -14,6 +14,7 @@ This is the entry point for understanding the repo.
 8. [docs/roadmap.md](/C:/dev/GitHub/Holdfast/docs/roadmap.md)
 9. [docs/migration/prototype-audit.md](/C:/dev/GitHub/Holdfast/docs/migration/prototype-audit.md)
 10. [docs/migration/prototype-gaps.md](/C:/dev/GitHub/Holdfast/docs/migration/prototype-gaps.md)
+11. [docs/research/README.md](/C:/dev/GitHub/Holdfast/docs/research/README.md)
 
 ## Doc Layers
 
@@ -25,6 +26,12 @@ This is the entry point for understanding the repo.
 - [docs/data-model.md](/C:/dev/GitHub/Holdfast/docs/data-model.md): current entities, state model, and mapping
 - [docs/deployment.md](/C:/dev/GitHub/Holdfast/docs/deployment.md): Cloudflare Pages release posture and setup sequence
 - [docs/roadmap.md](/C:/dev/GitHub/Holdfast/docs/roadmap.md): near-term delivery order
+- [docs/research](/C:/dev/GitHub/Holdfast/docs/research): archived research inputs and synthesized evidence that inform but do not replace the control docs
+- [docs/research/2026-04-24-readiness-audit.md](/C:/dev/GitHub/Holdfast/docs/research/2026-04-24-readiness-audit.md): blocker ledger and audit outcome for the current branch
+- [docs/research/2026-04-24-staging-release-readiness.md](/C:/dev/GitHub/Holdfast/docs/research/2026-04-24-staging-release-readiness.md): staging-gate evidence for this pass
+- [docs/research/2026-04-25-details-focus-stability.md](/C:/dev/GitHub/Holdfast/docs/research/2026-04-25-details-focus-stability.md): root-cause note and guardrail for details-dialog focus stability
+- [docs/research/2026-04-25-full-app-review.md](/C:/dev/GitHub/Holdfast/docs/research/2026-04-25-full-app-review.md): full-app review findings, fixes, validation evidence, and release posture
+- [docs/research/2026-04-25-daily-driver-rc-ledger.md](/C:/dev/GitHub/Holdfast/docs/research/2026-04-25-daily-driver-rc-ledger.md): release-candidate blocker ledger, fixed findings, remaining backlog, and gate status
 - [docs/migration](/C:/dev/GitHub/Holdfast/docs/migration): prototype audit and remaining gaps
 
 ## Operating Rule

@@ -108,7 +108,7 @@ export function TopBar({
                   onClick={() => setShowDateJump((current) => !current)}
                   type="button"
                 >
-                  Choose date
+                  Date
                 </button>
                 {showDateJump ? (
                   <input
@@ -123,7 +123,11 @@ export function TopBar({
           </div>
         ) : null}
         <div className="topbar-primary-actions">
-          <button className="button accent" onClick={onAdd} type="button">
+          <button
+            className="button accent topbar-add-button"
+            onClick={onAdd}
+            type="button"
+          >
             Add
           </button>
           <button

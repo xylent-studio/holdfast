@@ -163,17 +163,25 @@ describe('UpcomingView', () => {
 
     expect(screen.getByRole('heading', { name: 'Due today' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Tomorrow' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Bring to Now' }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole('button', { name: 'Move to Waiting on' }).length,
+    ).toBeGreaterThan(0);
   });
 
   it('uses the url-backed section filter and lets the user switch sections', () => {
     renderUpcoming('/upcoming?section=undated');
 
     expect(screen.getByRole('heading', { name: 'Undated' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Schedule' })).toBeInTheDocument();
     expect(screen.queryByText('Tomorrow')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Waiting on (1)' }));
 
     expect(screen.getByRole('heading', { name: 'Waiting' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Keep in Upcoming' }),
+    ).toBeInTheDocument();
   });
 
   it('shows scheduled whole lists alongside scheduled items', () => {

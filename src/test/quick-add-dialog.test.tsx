@@ -67,6 +67,37 @@ describe('QuickAddDialog', () => {
     );
   });
 
+  it('requires explicit date confirmation before primary scheduled Add saves', () => {
+    render(
+      <QuickAddDialog
+        context="upcoming-scheduled"
+        currentDate="2026-04-20"
+        isOpen
+        lists={[]}
+        onClose={vi.fn()}
+        onOpenList={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('What do you need to keep?'), {
+      target: { value: 'Call the dentist' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
+
+    expect(createItemMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Date')).toBeVisible();
+    expect(screen.getByLabelText('Time')).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
+
+    expect(createItemMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scheduledDate: '2026-04-21',
+        status: 'upcoming',
+      }),
+    );
+  });
+
   it('defaults to the current list on list routes', () => {
     render(
       <QuickAddDialog
@@ -139,9 +170,16 @@ describe('QuickAddDialog', () => {
     expect(screen.getByRole('button', { name: 'Scheduled' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Undated' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Waiting on' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Groceries' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'New list...' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add to list' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Create a new list' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Groceries' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Date')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to list' }));
+
+    expect(screen.getByRole('button', { name: 'Groceries' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
 
@@ -165,7 +203,7 @@ describe('QuickAddDialog', () => {
       target: { value: 'Eggs\nCheck pantry first' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Choose another place' }));
-    fireEvent.click(screen.getByRole('button', { name: 'New list...' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create a new list' }));
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Groceries' },
     });

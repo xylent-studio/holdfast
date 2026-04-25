@@ -1,14 +1,18 @@
+import { useMemo, useState } from 'react';
+
 import type { AttachmentRecord } from '@/domain/schemas/records';
+import type { SurfaceActionSpec } from '@/domain/logic/surface-actions';
 import type { ItemWithAttachments } from '@/storage/local/api';
+import { useCompactLayout } from '@/shared/ui/useCompactLayout';
 
 interface ItemCardProps {
+  actions?: SurfaceActionSpec[];
   focus?: boolean;
   item: ItemWithAttachments;
   meta: string[];
   onOpen: () => void;
-  onPrimaryAction?: () => void;
+  onAction?: (actionId: SurfaceActionSpec['id']) => void;
   onToggleDone?: () => void;
-  primaryActionLabel?: string;
 }
 
 function previewText(value: string, limit: number): string {
@@ -40,18 +44,44 @@ function countAttachments(attachments: AttachmentRecord[]): string | null {
 }
 
 export function ItemCard({
+  actions = [],
   focus = false,
   item,
   meta,
+  onAction,
   onOpen,
-  onPrimaryAction,
   onToggleDone,
-  primaryActionLabel,
 }: ItemCardProps) {
   const attachmentSummary = countAttachments(item.attachments);
   const preview = previewText(item.body, item.kind === 'task' ? 120 : 220);
   const cardClass = item.kind === 'task' ? 'task' : 'note';
   const badgeLabel = item.kind === 'capture' ? 'Capture' : 'Note';
+  const compactActionLayout = useCompactLayout();
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const { inlineActions, overflowActions } = useMemo(() => {
+    if (!compactActionLayout) {
+      return { inlineActions: actions, overflowActions: [] as SurfaceActionSpec[] };
+    }
+
+    const firstPrimary = actions.find((action) => action.priority === 'primary');
+    const firstVisible =
+      firstPrimary ??
+      actions.find((action) => action.priority === 'secondary') ??
+      actions[0] ??
+      null;
+    const firstSecondary = actions.find(
+      (action) => action.id !== firstVisible?.id && action.priority === 'secondary',
+    );
+    const inline = [firstVisible, firstSecondary].filter(
+      (action): action is SurfaceActionSpec => Boolean(action),
+    );
+    const visibleIds = new Set(inline.map((action) => action.id));
+
+    return {
+      inlineActions: inline,
+      overflowActions: actions.filter((action) => !visibleIds.has(action.id)),
+    };
+  }, [actions, compactActionLayout]);
 
   return (
     <article className={`item-card ${cardClass} ${focus ? 'focus' : ''}`}>
@@ -89,19 +119,43 @@ export function ItemCard({
         </div>
       </div>
       <div className="item-actions">
-        {primaryActionLabel && onPrimaryAction ? (
+        {inlineActions.map((action) => (
           <button
-            className="button accent"
-            onClick={onPrimaryAction}
+            className={`button ${action.tone === 'accent' ? 'accent' : action.tone === 'danger' ? 'danger' : 'ghost'} small`}
+            key={action.id}
+            onClick={() => onAction?.(action.id)}
             type="button"
           >
-            {primaryActionLabel}
+            {action.label}
+          </button>
+        ))}
+        {compactActionLayout && overflowActions.length ? (
+          <button
+            className="button ghost small"
+            onClick={() => setOverflowOpen((current) => !current)}
+            type="button"
+          >
+            {overflowOpen ? 'Less' : 'More'}
           </button>
         ) : null}
         <button className="button ghost" onClick={onOpen} type="button">
           Details
         </button>
       </div>
+      {compactActionLayout && overflowOpen && overflowActions.length ? (
+        <div className="item-actions item-actions-overflow">
+          {overflowActions.map((action) => (
+            <button
+              className={`button ${action.tone === 'accent' ? 'accent' : action.tone === 'danger' ? 'danger' : 'ghost'} small`}
+              key={`overflow-${action.id}`}
+              onClick={() => onAction?.(action.id)}
+              type="button"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }

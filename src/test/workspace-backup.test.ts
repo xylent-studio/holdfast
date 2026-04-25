@@ -29,6 +29,7 @@ vi.mock('@/storage/sync/supabase/client', () => ({
 }));
 
 import type { DateKey } from '@/domain/dates';
+import { SCHEMA_VERSION } from '@/domain/constants';
 import {
   addFilesToItem,
   createItem,
@@ -390,6 +391,31 @@ describe('workspace backup restore', () => {
       why: 'Current why',
     });
     await toggleReadiness('2026-04-25' as DateKey, 'food');
+    await db.prototypeRecoverySessions.put({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      schemaVersion: SCHEMA_VERSION,
+      source: 'browser',
+      createdAt: '2026-04-20T08:00:00.000Z',
+      undoneAt: null,
+      summary: {
+        itemCount: 1,
+        noteCount: 0,
+        routineCount: 0,
+        taskCount: 1,
+        attachmentCount: 0,
+        dayCount: 0,
+        weekCount: 0,
+      },
+      createdItemIds: ['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'],
+      createdRoutineIds: [],
+      createdAttachmentIds: [],
+      createdAttachmentBlobIds: [],
+      createdDailyRecordDates: [],
+      createdWeeklyRecordDates: [],
+      previousDailyRecords: [],
+      previousWeeklyRecords: [],
+      previousSettings: null,
+    });
 
     const result = await importWorkspaceBackupFile(backupFile);
 
@@ -427,6 +453,7 @@ describe('workspace backup restore', () => {
     expect(restoredAttachments).toHaveLength(1);
     expect(restoredAttachments[0]?.name).toBe('restore.txt');
     expect(await db.attachmentBlobs.count()).toBe(1);
+    expect(await db.prototypeRecoverySessions.count()).toBe(0);
 
     const dailyDates = (await db.dailyRecords.toArray()).map((record) => record.date);
     expect(dailyDates).toEqual(

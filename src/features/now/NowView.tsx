@@ -1,7 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { DateKey } from '@/domain/dates';
-import { todayDateKey } from '@/domain/dates';
 import {
   carrySuggestions,
   focusedListsForDay,
@@ -13,6 +12,11 @@ import {
   overdueItems,
   overdueLists,
 } from '@/domain/logic/selectors';
+import {
+  itemCardActionSpecs,
+  type ItemSurfaceContext,
+  type SurfaceActionId,
+} from '@/domain/logic/surface-actions';
 import {
   moveItemToNow,
   setItemFocus,
@@ -27,7 +31,7 @@ import { Panel } from '@/shared/ui/Panel';
 
 interface NowViewProps {
   currentDate: DateKey;
-  onOpenItem: (itemId: string) => void;
+  onOpenItem: (itemId: string, origin: ItemSurfaceContext) => void;
   onOpenList: (listId: string, highlightListItemId?: string | null) => void;
   snapshot: HoldfastSnapshot;
 }
@@ -38,7 +42,7 @@ export function NowView({
   onOpenList,
   snapshot,
 }: NowViewProps) {
-  const isToday = currentDate === todayDateKey();
+  const [showOverdue, setShowOverdue] = useState(false);
   const focusItems = useMemo(
     () => getFocusItems(snapshot.currentDay, snapshot.items),
     [snapshot.currentDay, snapshot.items],
@@ -54,15 +58,12 @@ export function NowView({
   );
   const todayNotes = queueItems.filter((item) => item.kind === 'note');
   const todayTasks = queueItems.filter((item) => item.kind === 'task');
-  const activeLists = useMemo(
-    () => {
-      const focusedListIds = new Set(focusLists.map((list) => list.id));
-      return listsForNow(snapshot.lists, currentDate).filter(
-        (list) => !focusedListIds.has(list.id),
-      );
-    },
-    [currentDate, focusLists, snapshot.lists],
-  );
+  const activeLists = useMemo(() => {
+    const focusedListIds = new Set(focusLists.map((list) => list.id));
+    return listsForNow(snapshot.lists, currentDate).filter(
+      (list) => !focusedListIds.has(list.id),
+    );
+  }, [currentDate, focusLists, snapshot.lists]);
   const listItems = useMemo(
     () => listItemsForNow(snapshot.listItems, currentDate),
     [currentDate, snapshot.listItems],
@@ -76,6 +77,32 @@ export function NowView({
     () => overdueItems(snapshot.items, currentDate),
     [currentDate, snapshot.items],
   );
+  const focusActions = itemCardActionSpecs(
+    { route: 'now', section: 'focus' },
+    currentDate,
+  );
+  const inPlayActions = itemCardActionSpecs(
+    { route: 'now', section: 'in-play' },
+    currentDate,
+  );
+  const overdueActions = itemCardActionSpecs(
+    { route: 'now', section: 'overdue' },
+    currentDate,
+  );
+
+  const handleItemAction = (itemId: string, actionId: SurfaceActionId): void => {
+    switch (actionId) {
+      case 'focus':
+        void setItemFocus(currentDate, itemId, true);
+        break;
+      case 'remove-focus':
+        void setItemFocus(currentDate, itemId, false);
+        break;
+      case 'bring-to-now':
+        void moveItemToNow(itemId, currentDate);
+        break;
+    }
+  };
 
   return (
     <div className="stack">
@@ -112,20 +139,18 @@ export function NowView({
               <div className="item-list">
                 {focusItems.map((item) => (
                   <ItemCard
+                    actions={focusActions}
                     focus
                     item={item}
                     key={item.id}
                     meta={itemMeta(item, currentDate, item.attachments)}
-                    onOpen={() => onOpenItem(item.id)}
-                    onPrimaryAction={() =>
-                      void setItemFocus(currentDate, item.id, false)
-                    }
+                    onAction={(actionId) => handleItemAction(item.id, actionId)}
+                    onOpen={() => onOpenItem(item.id, { route: 'now', section: 'focus' })}
                     onToggleDone={
                       item.kind === 'task'
                         ? () => void toggleTaskDone(item.id, currentDate)
                         : undefined
                     }
-                    primaryActionLabel="Remove focus"
                   />
                 ))}
               </div>
@@ -159,12 +184,12 @@ export function NowView({
           <div className="item-list spaced">
             {todayNotes.map((item) => (
               <ItemCard
+                actions={inPlayActions}
                 item={item}
                 key={item.id}
                 meta={itemMeta(item, currentDate, item.attachments)}
-                onOpen={() => onOpenItem(item.id)}
-                onPrimaryAction={() => void setItemFocus(currentDate, item.id, true)}
-                primaryActionLabel={isToday ? 'Focus now' : 'Focus for this day'}
+                onAction={(actionId) => handleItemAction(item.id, actionId)}
+                onOpen={() => onOpenItem(item.id, { route: 'now', section: 'in-play' })}
               />
             ))}
           </div>
@@ -173,13 +198,13 @@ export function NowView({
           <div className="item-list">
             {todayTasks.map((item) => (
               <ItemCard
+                actions={inPlayActions}
                 item={item}
                 key={item.id}
                 meta={itemMeta(item, currentDate, item.attachments)}
-                onOpen={() => onOpenItem(item.id)}
-                onPrimaryAction={() => void setItemFocus(currentDate, item.id, true)}
+                onAction={(actionId) => handleItemAction(item.id, actionId)}
+                onOpen={() => onOpenItem(item.id, { route: 'now', section: 'in-play' })}
                 onToggleDone={() => void toggleTaskDone(item.id, currentDate)}
-                primaryActionLabel={isToday ? 'Focus now' : 'Focus for this day'}
               />
             ))}
           </div>
@@ -258,36 +283,53 @@ export function NowView({
 
       {overdueListEntries.length || overdueItemEntries.length ? (
         <Panel>
-          <div className="panel-header">
-            <h2>Overdue</h2>
-            <p>Still open from before this date.</p>
+          <div className="panel-header split">
+            <div>
+              <h2>Overdue ({overdueListEntries.length + overdueItemEntries.length})</h2>
+              <p>Still open from before this date.</p>
+            </div>
+            <div className="dialog-actions">
+              <button
+                className="button ghost small"
+                onClick={() => setShowOverdue((current) => !current)}
+                type="button"
+              >
+                {showOverdue ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </div>
-          <div className="stack compact">
-            {overdueListEntries.map((list) => (
-              <ActiveListCard
-                currentDate={currentDate}
-                key={list.id}
-                list={list}
-                listItems={snapshot.listItems}
-                onOpenList={(listId) => onOpenList(listId)}
-              />
-            ))}
-            {overdueItemEntries.map((item) => (
-              <ItemCard
-                item={item}
-                key={item.id}
-                meta={itemMeta(item, currentDate, item.attachments)}
-                onOpen={() => onOpenItem(item.id)}
-                onPrimaryAction={() => void moveItemToNow(item.id, currentDate)}
-                onToggleDone={
-                  item.kind === 'task'
-                    ? () => void toggleTaskDone(item.id, currentDate)
-                    : undefined
-                }
-                primaryActionLabel="Move to Now"
-              />
-            ))}
-          </div>
+          {showOverdue ? (
+            <div className="stack compact">
+              {overdueListEntries.map((list) => (
+                <ActiveListCard
+                  currentDate={currentDate}
+                  key={list.id}
+                  list={list}
+                  listItems={snapshot.listItems}
+                  onOpenList={(listId) => onOpenList(listId)}
+                />
+              ))}
+              {overdueItemEntries.map((item) => (
+                <ItemCard
+                  actions={overdueActions}
+                  item={item}
+                  key={item.id}
+                  meta={itemMeta(item, currentDate, item.attachments)}
+                  onAction={(actionId) => handleItemAction(item.id, actionId)}
+                  onOpen={() => onOpenItem(item.id, { route: 'now', section: 'overdue' })}
+                  onToggleDone={
+                    item.kind === 'task'
+                      ? () => void toggleTaskDone(item.id, currentDate)
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-inline">
+              Overdue work stays quiet until you choose to look at it.
+            </div>
+          )}
         </Panel>
       ) : null}
     </div>

@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { ITEM_KIND_LABELS } from '@/domain/constants';
 import { buildListTargetGroups, inferListKind } from '@/domain/logic/list-targets';
-import { todayDateKey, type DateKey } from '@/domain/dates';
+import {
+  focusActionLabel,
+  placementOptionSpecs,
+  type ItemSurfaceContext,
+  type PlacementChoice,
+} from '@/domain/logic/surface-actions';
+import type { DateKey } from '@/domain/dates';
 import type { ItemKind, ItemStatus } from '@/domain/schemas/records';
 import {
   addFilesToItem,
@@ -27,18 +33,10 @@ interface ItemDetailsDialogProps {
   isOpen: boolean;
   item: ItemWithAttachments;
   lists: HoldfastSnapshot['lists'];
+  origin: ItemSurfaceContext;
   onClose: () => void;
   onOpenList: (listId: string) => void;
 }
-
-type PlacementChoice =
-  | 'inbox'
-  | 'now'
-  | 'scheduled'
-  | 'undated'
-  | 'waiting'
-  | 'list'
-  | 'archive';
 
 function formatBytes(value: number): string {
   if (!value) {
@@ -116,9 +114,11 @@ export function ItemDetailsDialog({
   isOpen,
   item,
   lists,
+  origin,
   onClose,
   onOpenList,
 }: ItemDetailsDialogProps) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [title, setTitle] = useState(item.title);
   const [body, setBody] = useState(item.body);
   const [kind, setKind] = useState<ItemKind>(item.kind);
@@ -183,6 +183,7 @@ export function ItemDetailsDialog({
   const effectiveListTargetMode =
     activeLists.length || listTargetMode === 'new' ? listTargetMode : 'new';
   const inferredNewListKind = inferListKind(newListTitle);
+  const placementOptions = placementOptionSpecs(origin, placement, kind);
 
   const selectedListTitle =
     activeLists.find((entry) => entry.id === effectiveSelectedListId)?.title ??
@@ -330,6 +331,12 @@ export function ItemDetailsDialog({
     setDownloadingAttachmentId(null);
   };
 
+  const handleAddFiles = (files: File[]): void => {
+    if (files.length) {
+      void addFilesToItem(item.id, files);
+    }
+  };
+
   const selectListTarget = (listId: string): void => {
     setListTargetMode('existing');
     setSelectedListId(listId);
@@ -359,12 +366,8 @@ export function ItemDetailsDialog({
               {item.status === 'today'
                 ? isFocused
                   ? 'Remove focus'
-                  : currentDate === todayDateKey()
-                    ? 'Focus now'
-                    : 'Focus for this day'
-                : currentDate === todayDateKey()
-                  ? 'Focus now'
-                  : 'Focus for this day'}
+                  : focusActionLabel(currentDate)
+                : focusActionLabel(currentDate)}
             </button>
           ) : null}
         </div>
@@ -413,59 +416,16 @@ export function ItemDetailsDialog({
         <div className="field-stack">
           <span>Placement</span>
           <div className="chip-row">
-            <button
-              className={`chip ${placement === 'inbox' ? 'active' : ''}`}
-              onClick={() => handlePlacementChange('inbox')}
-              type="button"
-            >
-              Keep in Inbox
-            </button>
-            <button
-              className={`chip ${placement === 'list' ? 'active' : ''}`}
-              onClick={() => handlePlacementChange('list')}
-              type="button"
-            >
-              Convert to list item
-            </button>
-            {kind !== 'capture' ? (
-              <>
-                <button
-                  className={`chip ${placement === 'now' ? 'active' : ''}`}
-                  onClick={() => handlePlacementChange('now')}
-                  type="button"
-                >
-                  Move to Now
-                </button>
-                <button
-                  className={`chip ${placement === 'scheduled' ? 'active' : ''}`}
-                  onClick={() => handlePlacementChange('scheduled')}
-                  type="button"
-                >
-                  Scheduled
-                </button>
-                <button
-                  className={`chip ${placement === 'undated' ? 'active' : ''}`}
-                  onClick={() => handlePlacementChange('undated')}
-                  type="button"
-                >
-                  Undated
-                </button>
-                <button
-                  className={`chip ${placement === 'waiting' ? 'active' : ''}`}
-                  onClick={() => handlePlacementChange('waiting')}
-                  type="button"
-                >
-                  Waiting on
-                </button>
-              </>
-            ) : null}
-            <button
-              className={`chip ${placement === 'archive' ? 'active' : ''}`}
-              onClick={() => handlePlacementChange('archive')}
-              type="button"
-            >
-              Archive
-            </button>
+            {placementOptions.map((option) => (
+              <button
+                className={`chip ${option.current ? 'active' : ''}`}
+                key={option.choice}
+                onClick={() => handlePlacementChange(option.choice)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -690,20 +650,24 @@ export function ItemDetailsDialog({
           {downloadError ? (
             <p className="auth-feedback danger">{downloadError}</p>
           ) : null}
-          <label className="button ghost file-button">
-            <input
-              multiple
-              onChange={(event) => {
-                const files = [...(event.target.files ?? [])];
-                if (files.length) {
-                  void addFilesToItem(item.id, files);
-                }
-                event.target.value = '';
-              }}
-              type="file"
-            />
+          <button
+            className="button ghost file-button"
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+          >
             Add files
-          </label>
+          </button>
+          <input
+            className="file-input-hidden"
+            multiple
+            onChange={(event) => {
+              handleAddFiles([...(event.target.files ?? [])]);
+              event.target.value = '';
+            }}
+            ref={fileInputRef}
+            tabIndex={-1}
+            type="file"
+          />
         </div>
 
         <div className="dialog-actions spread">

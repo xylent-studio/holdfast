@@ -30,12 +30,19 @@ That means local persistence is not a side mode. It is the device-level replica 
 
 The first session model should match how strong modern apps behave:
 
-- if auth is configured and the device does not already hold meaningful local work, the app should show a minimal sign-in front door
+- if auth is configured and the device does not already hold meaningful local work, the app should open the requested route in a real guest shell
 - if the device already holds meaningful local work, the app should open that workspace quickly and let the user attach it to an account from inside the app
 - if the device is offline or auth is unavailable, the local workspace should still open safely
 - creating an account should upgrade the active workspace instead of asking the user to move data by hand
 
 This is not a separate "local mode". It is the bootstrap path into the same synced product.
+
+The shell therefore needs route-aware access decisions instead of one boolean signed-out landing gate:
+
+- `guest-shell`
+- `member-recovery`
+- `wrong-account-recovery`
+- `explicit-auth-screen` for callback/auth-specific routes only
 
 ### IndexedDB instead of localStorage
 
@@ -64,6 +71,8 @@ The signed-in shell now runs a foreground-tab sync pass that:
 - pulls remote changes back into IndexedDB
 - syncs attachment binaries through Supabase Storage
 - records device sync state quietly for the UI
+- preserves newer local edits if an older in-flight remote write returns later
+- immediately drains newly-added pending mutations that appeared while a sync pass was already running
 
 This is not a service-worker or background-worker system yet.
 If there is no open signed-in tab, there are no automatic retries.
@@ -153,6 +162,7 @@ Boot and runtime recovery now follow this posture:
 
 - `AuthProvider` owns callback completion and session restore
 - `AuthCallbackView` is only a status handoff surface
+- clean signed-out routes still render the normal shell instead of a full-page auth landing
 - app boot distinguishes loading, storage failure, and runtime failure instead of hanging on `Opening Holdfast`
 - stale or legacy service workers are cleared automatically once per build before the app falls back to a manual recovery screen
 - local IndexedDB is never wiped automatically during runtime repair
@@ -160,7 +170,7 @@ Boot and runtime recovery now follow this posture:
 ## Expected Sync Model
 
 1. The app opens into a device-local workspace immediately.
-2. If auth is configured and the device is empty, the app shows the signed-out landing instead of dropping straight into the shell.
+2. If auth is configured and the device is empty, the app still renders the requested route in the guest shell and offers sign-in as a calm upgrade path.
 3. Google OAuth is the primary sign-in path, with email magic link as fallback.
 4. Once signed in, the device writes to IndexedDB immediately and prepares for background sync.
 5. Mutation records upload in the background.
@@ -174,6 +184,17 @@ Sync status now separates:
 - `syncing`: the device is actively catching up
 - `degraded`: transport failed, queued mutations failed, or conflicts need attention
 - `healthy`: the device is attached and caught up
+
+## Surface posture implications
+
+The architecture should support calmer product surfaces, not fight them.
+
+That means:
+
+- fast routing actions can require explicit confirmation without turning into settings flows
+- list-heavy surfaces should reveal management controls progressively
+- review and settings should keep support/debug posture secondary
+- route surfaces should own movement language instead of forcing generic global CTA wording
 
 ## Conflict Direction
 

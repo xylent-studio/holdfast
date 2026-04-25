@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import type { DateKey } from '@/domain/dates';
@@ -11,15 +11,28 @@ import {
   undatedUpcomingItems,
   waitingItems,
 } from '@/domain/logic/selectors';
-import { toggleTaskDone, type HoldfastSnapshot } from '@/storage/local/api';
+import {
+  defaultUpcomingScheduleDate,
+  itemCardActionSpecs,
+  type ItemSurfaceContext,
+  type SurfaceActionId,
+} from '@/domain/logic/surface-actions';
+import {
+  moveItemToNow,
+  saveItem,
+  toggleTaskDone,
+  type HoldfastSnapshot,
+  type ItemWithAttachments,
+} from '@/storage/local/api';
 import { ActiveListCard } from '@/features/lists/ActiveListCard';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
 import { Panel } from '@/shared/ui/Panel';
+import { ScheduleConfirmDialog } from '@/shared/ui/ScheduleConfirmDialog';
 
 interface UpcomingViewProps {
   currentDate: DateKey;
-  onOpenItem: (itemId: string) => void;
+  onOpenItem: (itemId: string, origin: ItemSurfaceContext) => void;
   onOpenList: (listId: string, highlightListItemId?: string | null) => void;
   snapshot: HoldfastSnapshot;
 }
@@ -31,6 +44,7 @@ export function UpcomingView({
   snapshot,
 }: UpcomingViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [scheduleItemId, setScheduleItemId] = useState<string | null>(null);
   const filter = parseUpcomingSection(searchParams.get('section'));
   const scheduled = scheduledUpcomingItems(snapshot.items, currentDate);
   const scheduledWholeLists = scheduledLists(snapshot.lists, currentDate);
@@ -65,11 +79,69 @@ export function UpcomingView({
       left.date.localeCompare(right.date),
     );
   }, [scheduled, scheduledWholeLists]);
+  const scheduledActions = itemCardActionSpecs(
+    { route: 'upcoming', section: 'scheduled' },
+    currentDate,
+  );
+  const undatedActions = itemCardActionSpecs(
+    { route: 'upcoming', section: 'undated' },
+    currentDate,
+  );
+  const waitingActions = itemCardActionSpecs(
+    { route: 'upcoming', section: 'waiting' },
+    currentDate,
+  );
+  const scheduleItem =
+    snapshot.items.find((item) => item.id === scheduleItemId) ?? null;
 
   const handleFilterChange = (nextFilter: 'scheduled' | 'undated' | 'waiting') => {
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.set('section', nextFilter);
     setSearchParams(nextSearchParams);
+  };
+
+  const persistItemPlacement = async (
+    item: ItemWithAttachments,
+    next: 'archive' | 'scheduled' | 'undated' | 'waiting',
+  ): Promise<void> => {
+    await saveItem(item.id, {
+      title: item.title,
+      body: item.body,
+      kind: item.kind,
+      lane: item.lane,
+      status:
+        next === 'archive'
+          ? 'archived'
+          : next === 'waiting'
+            ? 'waiting'
+            : 'upcoming',
+      scheduledDate:
+        next === 'scheduled' ? defaultUpcomingScheduleDate(currentDate) : null,
+      scheduledTime: next === 'scheduled' ? item.scheduledTime : null,
+    });
+  };
+
+  const handleItemAction = (
+    item: ItemWithAttachments,
+    actionId: SurfaceActionId,
+  ): void => {
+    switch (actionId) {
+      case 'bring-to-now':
+        void moveItemToNow(item.id, currentDate);
+        break;
+      case 'move-to-waiting':
+        void persistItemPlacement(item, 'waiting');
+        break;
+      case 'archive':
+        void persistItemPlacement(item, 'archive');
+        break;
+      case 'schedule':
+        setScheduleItemId(item.id);
+        break;
+      case 'keep-in-upcoming':
+        void persistItemPlacement(item, 'undated');
+        break;
+    }
   };
 
   return (
@@ -130,10 +202,17 @@ export function UpcomingView({
                     <div className="item-list">
                       {group.items.map((item) => (
                         <ItemCard
+                          actions={scheduledActions}
                           item={item}
                           key={item.id}
                           meta={itemMeta(item, currentDate, item.attachments)}
-                          onOpen={() => onOpenItem(item.id)}
+                          onAction={(actionId) => handleItemAction(item, actionId)}
+                          onOpen={() =>
+                            onOpenItem(item.id, {
+                              route: 'upcoming',
+                              section: 'scheduled',
+                            })
+                          }
                           onToggleDone={
                             item.kind === 'task'
                               ? () => void toggleTaskDone(item.id, currentDate)
@@ -155,10 +234,17 @@ export function UpcomingView({
             <div className="item-list">
               {undated.map((item) => (
                 <ItemCard
+                  actions={undatedActions}
                   item={item}
                   key={item.id}
                   meta={itemMeta(item, currentDate, item.attachments)}
-                  onOpen={() => onOpenItem(item.id)}
+                  onAction={(actionId) => handleItemAction(item, actionId)}
+                  onOpen={() =>
+                    onOpenItem(item.id, {
+                      route: 'upcoming',
+                      section: 'undated',
+                    })
+                  }
                   onToggleDone={
                     item.kind === 'task'
                       ? () => void toggleTaskDone(item.id, currentDate)
@@ -176,10 +262,17 @@ export function UpcomingView({
             <div className="item-list">
               {waiting.map((item) => (
                 <ItemCard
+                  actions={waitingActions}
                   item={item}
                   key={item.id}
                   meta={itemMeta(item, currentDate, item.attachments)}
-                  onOpen={() => onOpenItem(item.id)}
+                  onAction={(actionId) => handleItemAction(item, actionId)}
+                  onOpen={() =>
+                    onOpenItem(item.id, {
+                      route: 'upcoming',
+                      section: 'waiting',
+                    })
+                  }
                   onToggleDone={
                     item.kind === 'task'
                       ? () => void toggleTaskDone(item.id, currentDate)
@@ -193,6 +286,27 @@ export function UpcomingView({
           )
         ) : null}
       </Panel>
+      {scheduleItem ? (
+        <ScheduleConfirmDialog
+          confirmLabel="Schedule"
+          defaultDate={defaultUpcomingScheduleDate(currentDate)}
+          defaultTime={scheduleItem.scheduledTime ?? ''}
+          description="Pick when this should show up in Scheduled."
+          onClose={() => setScheduleItemId(null)}
+          onConfirm={async (date, time) => {
+            await saveItem(scheduleItem.id, {
+              title: scheduleItem.title,
+              body: scheduleItem.body,
+              kind: scheduleItem.kind,
+              lane: scheduleItem.lane,
+              status: 'upcoming',
+              scheduledDate: date,
+              scheduledTime: time,
+            });
+          }}
+          title="Schedule it"
+        />
+      ) : null}
     </div>
   );
 }

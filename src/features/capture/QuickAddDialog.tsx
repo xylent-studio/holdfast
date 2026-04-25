@@ -17,6 +17,7 @@ import {
   inferListKind,
 } from '@/domain/logic/list-targets';
 import type { DateKey } from '@/domain/dates';
+import type { ListKind } from '@/domain/schemas/records';
 import {
   createItem,
   createListItem,
@@ -97,7 +98,9 @@ function QuickAddDialogBody({
   );
   const primaryDestination = primaryAddDestinationForContext(context);
   const [rawText, setRawText] = useState('');
-  const [showDestinationPicker, setShowDestinationPicker] = useState(false);
+  const [pickerStep, setPickerStep] = useState<
+    null | 'destination' | 'list' | 'new-list'
+  >(null);
   const [selectedDestination, setSelectedDestination] = useState<AddDestination>(
     primaryDestination,
   );
@@ -106,14 +109,14 @@ function QuickAddDialogBody({
   const [chosenDate, setChosenDate] = useState<DateKey>(defaults.chosenDate);
   const [chosenTime, setChosenTime] = useState(defaults.chosenTime);
   const [newListTitle, setNewListTitle] = useState('');
+  const [newListKindOverride, setNewListKindOverride] = useState<ListKind | null>(
+    null,
+  );
   const [submitBusy, setSubmitBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const parsed = splitCapturedText(rawText);
   const canSubmit = Boolean(parsed);
-  const activeDestination = showDestinationPicker
-    ? selectedDestination
-    : primaryDestination;
   const currentListTitle = currentList?.title ?? null;
 
   const listTargetGroups = useMemo(
@@ -155,6 +158,11 @@ function QuickAddDialogBody({
   const selectedListTitle =
     activeLists.find((entry) => entry.id === effectiveSelectedListId)?.title ??
     currentListTitle;
+  const inferredNewListKind = inferListKind(newListTitle);
+  const effectiveNewListKind =
+    inferredNewListKind === 'project'
+      ? newListKindOverride ?? inferredNewListKind
+      : inferredNewListKind;
 
   const primaryActionLabel = destinationActionLabel(
     primaryDestination,
@@ -172,6 +180,13 @@ function QuickAddDialogBody({
     })
       ? 'context'
       : 'direct';
+
+  const resetPicker = (): void => {
+    setListSearch('');
+    setPickerStep(null);
+    setSelectedDestination(primaryDestination);
+    setSubmitError(null);
+  };
 
   const handleCreateItem = async (
     destination: Exclude<AddDestination, 'list' | 'new-list'>,
@@ -215,7 +230,7 @@ function QuickAddDialogBody({
     const listId = await createListWithFirstItem(
       {
         title,
-        kind: inferListKind(title),
+        kind: effectiveNewListKind,
         lane: currentList?.lane ?? 'admin',
       },
       {
@@ -261,22 +276,29 @@ function QuickAddDialogBody({
   };
 
   const showSaveToInboxSecondary = primaryDestination !== 'inbox';
-  const showScheduleFields = activeDestination === 'scheduled';
-  const canCreateNewListFromPicker =
-    selectedDestination !== 'new-list' || Boolean(newListTitle.trim());
+  const showScheduleFields =
+    pickerStep === 'destination' && selectedDestination === 'scheduled';
 
-  const selectListTarget = (listId: string): void => {
+  const openListStep = (): void => {
     setSubmitError(null);
     setSelectedDestination('list');
-    setSelectedListId(listId);
+    setPickerStep('list');
   };
 
-  const openNewListDraft = (): void => {
-    if (!newListTitle.trim() && listSearch.trim()) {
-      setNewListTitle(listSearch.trim());
-    }
-
+  const openNewListStep = (): void => {
+    setSubmitError(null);
     setSelectedDestination('new-list');
+    if (!newListTitle.trim() && parsed?.title) {
+      setNewListTitle('');
+    }
+    setPickerStep('new-list');
+  };
+
+  const selectNewListTitle = (value: string): void => {
+    setNewListTitle(value);
+    if (inferListKind(value) !== 'project') {
+      setNewListKindOverride(null);
+    }
   };
 
   return (
@@ -301,8 +323,8 @@ function QuickAddDialogBody({
         />
       </label>
 
-      {showDestinationPicker ? (
-        <>
+      {pickerStep === 'destination' ? (
+        <div className="item-card day-result quick-add-picker">
           <div className="field-stack">
             <span>Choose another place</span>
             <div className="chip-row">
@@ -320,140 +342,114 @@ function QuickAddDialogBody({
                   </button>
                 ),
               )}
-              <button
-                className={`chip ${selectedDestination === 'new-list' ? 'active' : ''}`}
-                onClick={openNewListDraft}
-                type="button"
-              >
-                {destinationLabel('new-list')}
+              <button className="chip" onClick={openListStep} type="button">
+                Add to list
+              </button>
+              <button className="chip" onClick={openNewListStep} type="button">
+                Create a new list
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
 
-          <div className="item-card day-result quick-add-picker">
-            {listSearch.trim() ? (
-              <>
-                <label className="field-stack">
-                  <span>Find a list</span>
-                  <input
-                    onChange={(event) => setListSearch(event.target.value)}
-                    placeholder="Search all lists"
-                    type="search"
-                    value={listSearch}
-                  />
-                </label>
-                <ListTargetSection
-                  lists={listTargetGroups.search}
-                  onSelect={selectListTarget}
-                  selectedListId={
-                    selectedDestination === 'list' ? effectiveSelectedListId : null
-                  }
-                  title="Matching lists"
-                />
-                {!listTargetGroups.search.length ? (
-                  <div className="empty-inline">
-                    No matching lists yet. Create a new one if this needs its own
-                    home.
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <ListTargetSection
-                  lists={listTargetGroups.current}
-                  onSelect={selectListTarget}
-                  selectedListId={
-                    selectedDestination === 'list'
-                      ? effectiveSelectedListId
-                      : null
-                  }
-                  title="Current list"
-                />
-                <ListTargetSection
-                  lists={listTargetGroups.suggested}
-                  onSelect={selectListTarget}
-                  selectedListId={
-                    selectedDestination === 'list'
-                      ? effectiveSelectedListId
-                      : null
-                  }
-                  title="Suggested lists"
-                />
-                <ListTargetSection
-                  lists={listTargetGroups.recent}
-                  onSelect={selectListTarget}
-                  selectedListId={
-                    selectedDestination === 'list'
-                      ? effectiveSelectedListId
-                      : null
-                  }
-                  title="Recent lists"
-                />
-                <ListTargetSection
-                  lists={listTargetGroups.pinned}
-                  onSelect={selectListTarget}
-                  selectedListId={
-                    selectedDestination === 'list'
-                      ? effectiveSelectedListId
-                      : null
-                  }
-                  title="Pinned lists"
-                />
-                <label className="field-stack">
-                  <span>Find a list</span>
-                  <input
-                    onChange={(event) => setListSearch(event.target.value)}
-                    placeholder="Search all lists"
-                    type="search"
-                    value={listSearch}
-                  />
-                </label>
-                {!selectableLists.length ? (
-                  <div className="empty-inline">
-                    No lists yet. Create a new one if this belongs somewhere
-                    specific.
-                  </div>
-                ) : null}
-              </>
-            )}
-            <div className="field-stack quick-add-list-cta">
-              <span>Need a new list?</span>
-              <button
-                className={`button ${selectedDestination === 'new-list' ? 'accent' : 'ghost'}`}
-                onClick={openNewListDraft}
-                type="button"
-              >
-                {selectedDestination === 'new-list'
-                  ? 'New list details below'
-                  : 'Create a new list'}
-              </button>
-            </div>
-          </div>
-
-          {selectedDestination === 'list' && !effectiveSelectedListId ? (
-            <div className="empty-inline">
-              Search for a list or create a new one first.
-            </div>
-          ) : null}
-
-          {selectedDestination === 'new-list' ? (
-            <div className="item-card day-result">
-              <ListCreatorFields
-                kind={inferListKind(newListTitle)}
-                onKindChange={() => undefined}
-                onTitleChange={setNewListTitle}
-                showKind={false}
-                title={newListTitle}
+      {pickerStep === 'list' ? (
+        <div className="item-card day-result quick-add-picker">
+          <label className="field-stack">
+            <span>Find a list</span>
+            <input
+              onChange={(event) => setListSearch(event.target.value)}
+              placeholder="Search all lists"
+              type="search"
+              value={listSearch}
+            />
+          </label>
+          {!listSearch.trim() ? (
+            <>
+              <ListTargetSection
+                lists={listTargetGroups.current}
+                onSelect={setSelectedListId}
+                selectedListId={effectiveSelectedListId}
+                title="Current list"
               />
-              {parsed ? (
-                <div className="empty-inline">
-                  First item | {parsed.title}
-                  {parsed.body ? ` | ${parsed.body}` : ''}
-                </div>
-              ) : null}
+              <ListTargetSection
+                lists={listTargetGroups.suggested}
+                onSelect={setSelectedListId}
+                selectedListId={effectiveSelectedListId}
+                title="Suggested lists"
+              />
+              <ListTargetSection
+                lists={listTargetGroups.recent}
+                onSelect={setSelectedListId}
+                selectedListId={effectiveSelectedListId}
+                title="Recent lists"
+              />
+              <ListTargetSection
+                lists={listTargetGroups.pinned}
+                onSelect={setSelectedListId}
+                selectedListId={effectiveSelectedListId}
+                title="Pinned lists"
+              />
+            </>
+          ) : null}
+          {listSearch.trim() ? (
+            <ListTargetSection
+              lists={listTargetGroups.search}
+              onSelect={setSelectedListId}
+              selectedListId={effectiveSelectedListId}
+              title="Matching lists"
+            />
+          ) : null}
+          {!selectableLists.length ? (
+            <div className="empty-inline">
+              No lists yet. Create a new one if this belongs somewhere specific.
             </div>
           ) : null}
-        </>
+          {!effectiveSelectedListId ? (
+            <div className="empty-inline">
+              Pick a list or create a new one.
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {pickerStep === 'new-list' ? (
+        <div className="item-card day-result quick-add-picker">
+          <ListCreatorFields
+            kind={effectiveNewListKind}
+            onKindChange={setNewListKindOverride}
+            onTitleChange={selectNewListTitle}
+            showKind={false}
+            title={newListTitle}
+          />
+          {inferListKind(newListTitle) === 'project' ? (
+            <div className="field-stack">
+              <span>Kind</span>
+              <div className="chip-row">
+                <button
+                  className={`chip ${effectiveNewListKind === 'project' ? 'active' : ''}`}
+                  onClick={() => setNewListKindOverride('project')}
+                  type="button"
+                >
+                  Project
+                </button>
+                <button
+                  className={`chip ${effectiveNewListKind === 'reference' ? 'active' : ''}`}
+                  onClick={() => setNewListKindOverride('reference')}
+                  type="button"
+                >
+                  Reference
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {parsed ? (
+            <div className="empty-inline">
+              First item | {parsed.title}
+              {parsed.body ? ` | ${parsed.body}` : ''}
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {showScheduleFields ? (
@@ -484,13 +480,59 @@ function QuickAddDialogBody({
           Cancel
         </button>
         <div className="dialog-actions quick-add-actions">
-          {showDestinationPicker ? (
+          {pickerStep === null ? (
+            <>
+              {showSaveToInboxSecondary ? (
+                <button
+                  className="button ghost"
+                  disabled={!canSubmit || submitBusy}
+                  onClick={() => void handleSubmitDestination('inbox')}
+                  type="button"
+                >
+                  Save to Inbox
+                </button>
+              ) : null}
+              <button
+                className="button accent"
+                disabled={!canSubmit || submitBusy}
+                onClick={() => {
+                  if (primaryDestination === 'scheduled') {
+                    setSelectedDestination('scheduled');
+                    setPickerStep('destination');
+                    return;
+                  }
+
+                  void handleSubmitDestination(primaryDestination);
+                }}
+                type="button"
+              >
+                {submitBusy ? 'Saving...' : primaryActionLabel}
+              </button>
+              <button
+                className="button ghost"
+                disabled={!canSubmit || submitBusy}
+                onClick={() => {
+                  setSelectedDestination(primaryDestination);
+                  setPickerStep('destination');
+                }}
+                type="button"
+              >
+                Choose another place
+              </button>
+            </>
+          ) : (
             <>
               <button
                 className="button ghost"
                 onClick={() => {
                   setListSearch('');
-                  setShowDestinationPicker(false);
+                  if (pickerStep === 'destination') {
+                    resetPicker();
+                    return;
+                  }
+
+                  setPickerStep('destination');
+                  setSelectedDestination(primaryDestination);
                 }}
                 type="button"
               >
@@ -511,45 +553,27 @@ function QuickAddDialogBody({
                 disabled={
                   submitBusy ||
                   !canSubmit ||
-                  (selectedDestination === 'list' && !effectiveSelectedListId) ||
-                  (selectedDestination === 'new-list' && !canCreateNewListFromPicker)
+                  (pickerStep === 'list' && !effectiveSelectedListId) ||
+                  (pickerStep === 'new-list' && !newListTitle.trim())
                 }
-                onClick={() => void handleSubmitDestination(selectedDestination)}
+                onClick={() =>
+                  void handleSubmitDestination(
+                    pickerStep === 'list'
+                      ? 'list'
+                      : pickerStep === 'new-list'
+                        ? 'new-list'
+                        : selectedDestination,
+                  )
+                }
                 type="button"
               >
-                {submitBusy ? 'Saving...' : selectedActionLabel}
-              </button>
-            </>
-          ) : (
-            <>
-              {showSaveToInboxSecondary ? (
-                <button
-                  className="button ghost"
-                  disabled={!canSubmit || submitBusy}
-                  onClick={() => void handleSubmitDestination('inbox')}
-                  type="button"
-                >
-                  Save to Inbox
-                </button>
-              ) : null}
-              <button
-                className="button accent"
-                disabled={!canSubmit || submitBusy}
-                onClick={() => void handleSubmitDestination(primaryDestination)}
-                type="button"
-              >
-                {submitBusy ? 'Saving...' : primaryActionLabel}
-              </button>
-              <button
-                className="button ghost"
-                disabled={!canSubmit || submitBusy}
-                onClick={() => {
-                  setSelectedDestination(primaryDestination);
-                  setShowDestinationPicker(true);
-                }}
-                type="button"
-              >
-                Choose another place
+                {submitBusy
+                  ? 'Saving...'
+                  : pickerStep === 'list'
+                    ? destinationActionLabel('list', selectedListTitle)
+                    : pickerStep === 'new-list'
+                      ? destinationActionLabel('new-list')
+                      : selectedActionLabel}
               </button>
             </>
           )}

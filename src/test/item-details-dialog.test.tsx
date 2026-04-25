@@ -108,6 +108,7 @@ describe('ItemDetailsDialog', () => {
           deletedAt: null,
         }}
         lists={baseLists()}
+        origin={{ route: 'inbox' }}
         onClose={vi.fn()}
         onOpenList={vi.fn()}
       />,
@@ -122,6 +123,97 @@ describe('ItemDetailsDialog', () => {
         ),
       ).toBeVisible();
     });
+  });
+
+  it('exposes attachment upload through a real keyboard-reachable button', () => {
+    render(
+      <ItemDetailsDialog
+        currentDate="2026-04-20"
+        isFocused={false}
+        isOpen
+        item={{
+          attachments: [],
+          body: '',
+          captureMode: null,
+          createdAt: '2026-04-20T08:00:00.000Z',
+          id: '22222222-2222-4222-8222-222222222222',
+          kind: 'task',
+          lane: 'admin',
+          schemaVersion: SCHEMA_VERSION,
+          scheduledDate: null,
+          scheduledTime: null,
+          sourceDate: '2026-04-20',
+          sourceItemId: null,
+          sourceText: null,
+          routineId: null,
+          completedAt: null,
+          archivedAt: null,
+          status: 'inbox',
+          syncState: 'synced',
+          remoteRevision: null,
+          title: 'Receipt',
+          updatedAt: '2026-04-20T08:00:00.000Z',
+          deletedAt: null,
+        }}
+        lists={baseLists()}
+        origin={{ route: 'inbox' }}
+        onClose={vi.fn()}
+        onOpenList={vi.fn()}
+      />,
+    );
+
+    const addFilesButton = screen.getByRole('button', { name: 'Add files' });
+
+    addFilesButton.focus();
+    expect(addFilesButton).toHaveFocus();
+  });
+
+  it('adds selected attachment files to the item', async () => {
+    render(
+      <ItemDetailsDialog
+        currentDate="2026-04-20"
+        isFocused={false}
+        isOpen
+        item={{
+          attachments: [],
+          body: '',
+          captureMode: null,
+          createdAt: '2026-04-20T08:00:00.000Z',
+          id: '22222222-2222-4222-8222-222222222222',
+          kind: 'task',
+          lane: 'admin',
+          schemaVersion: SCHEMA_VERSION,
+          scheduledDate: null,
+          scheduledTime: null,
+          sourceDate: '2026-04-20',
+          sourceItemId: null,
+          sourceText: null,
+          routineId: null,
+          completedAt: null,
+          archivedAt: null,
+          status: 'inbox',
+          syncState: 'synced',
+          remoteRevision: null,
+          title: 'Receipt',
+          updatedAt: '2026-04-20T08:00:00.000Z',
+          deletedAt: null,
+        }}
+        lists={baseLists()}
+        origin={{ route: 'inbox' }}
+        onClose={vi.fn()}
+        onOpenList={vi.fn()}
+      />,
+    );
+
+    const file = new File(['receipt'], 'receipt.txt', { type: 'text/plain' });
+    fireEvent.change(document.querySelector('.file-input-hidden')!, {
+      target: { files: [file] },
+    });
+
+    expect(addFilesToItemMock).toHaveBeenCalledWith(
+      '22222222-2222-4222-8222-222222222222',
+      [file],
+    );
   });
 
   it('surfaces a calm conflict path and can pull in the latest saved version', async () => {
@@ -158,6 +250,7 @@ describe('ItemDetailsDialog', () => {
           deletedAt: null,
         }}
         lists={baseLists()}
+        origin={{ route: 'inbox' }}
         onClose={onClose}
         onOpenList={vi.fn()}
       />,
@@ -211,6 +304,7 @@ describe('ItemDetailsDialog', () => {
           deletedAt: null,
         }}
         lists={baseLists()}
+        origin={{ route: 'inbox' }}
         onClose={onClose}
         onOpenList={vi.fn()}
       />,
@@ -227,5 +321,46 @@ describe('ItemDetailsDialog', () => {
       );
       expect(onClose).toHaveBeenCalled();
     });
+  });
+
+  it('uses contextual placement copy from the opening surface', () => {
+    render(
+      <ItemDetailsDialog
+        currentDate="2026-04-20"
+        isFocused={false}
+        isOpen
+        item={{
+          attachments: [],
+          body: '',
+          captureMode: null,
+          createdAt: '2026-04-20T08:00:00.000Z',
+          id: '22222222-2222-4222-8222-222222222222',
+          kind: 'task',
+          lane: 'admin',
+          schemaVersion: SCHEMA_VERSION,
+          scheduledDate: null,
+          scheduledTime: null,
+          sourceDate: '2026-04-20',
+          sourceItemId: null,
+          sourceText: null,
+          routineId: null,
+          completedAt: null,
+          archivedAt: null,
+          status: 'waiting',
+          syncState: 'synced',
+          remoteRevision: null,
+          title: 'Waiting item',
+          updatedAt: '2026-04-20T08:00:00.000Z',
+          deletedAt: null,
+        }}
+        lists={baseLists()}
+        origin={{ route: 'upcoming', section: 'waiting' }}
+        onClose={vi.fn()}
+        onOpenList={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Keep waiting' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bring to Now' })).toBeInTheDocument();
   });
 });

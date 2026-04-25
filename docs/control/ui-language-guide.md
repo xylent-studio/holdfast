@@ -49,13 +49,14 @@ Prefer:
 - Done
 - Archive
 - Schedule
-- Move to Now
+- Bring to Now
 - Plan for later
 - Waiting on
 - Finish day
 - Retry
 - Add photo
 - Record voice memo
+- Confirm
 
 Use with caution:
 - Delete
@@ -114,6 +115,7 @@ Prefer:
 - Add photo
 - Remove
 - Schedule
+- Confirm
 
 Avoid:
 - Save item details
@@ -135,6 +137,8 @@ Avoid:
 - Synchronization state mismatch
 - Conflict resolution required
 - Attachment upload stalled
+- Diagnostics
+- Workspace safety
 
 ### Dialogs
 Prefer:
@@ -184,12 +188,34 @@ Language should be:
 - low-friction
 - command-oriented
 
+Movement on `Now` should be contextual:
+- in-play cards emphasize `Focus now` or `Focus for this day`
+- focused cards use quiet `Remove focus`
+- overdue cards use `Bring to Now`
+- avoid generic move-out language on normal in-play cards
+
+Overdue should read as recovery, not alarm theater:
+- `Overdue (N)`
+- `Show`
+- `Hide`
+
 ## Inbox
 Language should be:
 - forgiving
 - light
 - fast
 - non-demanding
+
+Inbox routing should read like placement choices, not a dialog:
+- `Now`
+- `Schedule`
+- `Keep undated`
+- `Waiting on`
+- `List`
+- `Archive`
+
+When `Schedule` needs a date, ask for confirmation explicitly.
+Do not hide tomorrow behind a one-tap assumption.
 
 ## Upcoming
 Language should be:
@@ -198,12 +224,55 @@ Language should be:
 - not planner-ish
 - centered on `Scheduled`, `Undated`, and `Waiting on`
 
+Upcoming labels should follow the section instead of repeating one generic verb:
+- `Scheduled` -> `Bring to Now`
+- `Undated` -> `Schedule`
+- `Waiting on` -> `Keep in Upcoming` or `Bring to Now`
+
+Item details should inherit the screen context:
+- `Keep in Inbox`
+- `Bring to Now`
+- `Keep scheduled`
+- `Keep undated`
+- `Keep waiting`
+- `Convert to list item`
+- `Archive`
+
+If a date is needed, use explicit confirmation language such as:
+- `Schedule`
+- `Date`
+- `Time`
+- `Confirm`
+
 ## Review
 Language should be:
 - useful
 - honest
 - retrieval-oriented
 - not analytical for its own sake
+
+Review result actions should name the actual outcome:
+- `Open matching item` when the hit is a list row
+- avoid generic `Open list` wording when the user is jumping to a specific row
+
+## Settings
+Language should be:
+- calm
+- plain
+- low-drama
+- not support-forward by default
+
+Prefer:
+- `Device recovery`
+- `Support details`
+- `Saved on this device`
+- `Attached for sync`
+- `Sync has completed here`
+
+Avoid:
+- `Workspace safety`
+- `Diagnostics` as a primary section
+- implementation-heavy explanations in the first visible layer
 
 ## Banned patterns
 Do not ship wording that sounds like:

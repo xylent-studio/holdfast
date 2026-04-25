@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
@@ -237,11 +237,18 @@ describe('NowView', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Due today' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Move to Now' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Focus /i }),
+    ).toBeInTheDocument();
     expect(screen.queryByText('Future')).not.toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: 'Next up' }),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+
+    expect(screen.getByRole('button', { name: 'Bring to Now' })).toBeInTheDocument();
   });
 
   it('shows focused whole lists separately from list-item promotions', () => {

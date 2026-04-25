@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const STAGING_PROJECT = 'holdfast-staging';
 const STAGING_BASE_URL = 'https://holdfast-staging.pages.dev';
+const STAGING_PAGES_BRANCH = 'main';
 const PRODUCTION_PROJECT = 'holdfast';
 const PRODUCTION_BASE_URL = 'https://holdfast.xylent.studio';
 
@@ -185,6 +186,8 @@ function runStagingDeploy(envArgs = [], options = {}) {
     '--deploy',
     '--base-url',
     STAGING_BASE_URL,
+    '--branch',
+    STAGING_PAGES_BRANCH,
     ...(options.skipBuild ? ['--skip-build'] : []),
     ...envArgs,
   ]);
@@ -212,6 +215,13 @@ function runProductionRelease(options) {
 
   runLocalValidation();
 
+  const stagingEnvArgs = envArgsFor(options.stagingEnvFile);
+  printStep('Validating staging for this commit before production');
+  runStagingDeploy(stagingEnvArgs);
+  runHostedLaneSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
+  runHostedAuthSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
+  runHostedSyncSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
+
   printStep('Deploying production');
   runPagesValidation([
     '--project',
@@ -224,13 +234,6 @@ function runProductionRelease(options) {
   runHostedLaneSmoke(PRODUCTION_PROJECT, PRODUCTION_BASE_URL);
   runHostedAuthSmoke(PRODUCTION_PROJECT, PRODUCTION_BASE_URL);
   runHostedSyncSmoke(PRODUCTION_PROJECT, PRODUCTION_BASE_URL);
-
-  const stagingEnvArgs = envArgsFor(options.stagingEnvFile);
-  printStep('Realigning staging to the same fixed commit');
-  runStagingDeploy(stagingEnvArgs);
-  runHostedLaneSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
-  runHostedAuthSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
-  runHostedSyncSmoke(STAGING_PROJECT, STAGING_BASE_URL, stagingEnvArgs);
 }
 
 function main() {

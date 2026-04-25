@@ -2,12 +2,14 @@ import { useMemo, useState } from 'react';
 
 import { LIST_KIND_LABELS } from '@/domain/constants';
 import type { DateKey } from '@/domain/dates';
-import { niceDate, niceTime, todayDateKey } from '@/domain/dates';
+import { niceDate, niceTime } from '@/domain/dates';
 import { activeListItemsForDisplay } from '@/domain/logic/selectors';
+import { wholeListMoveActionSpecs } from '@/domain/logic/surface-actions';
 import type { ListItemRecord, ListRecord } from '@/domain/schemas/records';
 import {
   clearListSchedule,
   finishList,
+  moveListToNow,
   setListFocus,
   updateListItem,
   type FinishListAction,
@@ -52,6 +54,39 @@ export function ActiveListCard({
     }
     return `Scheduled for ${niceDate(list.scheduledDate)}`;
   })();
+  const moveActions = wholeListMoveActionSpecs({
+    currentDate,
+    isFocused,
+    list,
+  });
+  const primaryMoveAction =
+    list.kind === 'reference'
+      ? null
+      : moveActions.find((action) => action.priority === 'primary') ??
+        moveActions[0] ??
+        null;
+  const managementActions = moveActions.filter(
+    (action) => action.id !== primaryMoveAction?.id,
+  );
+  const canFinishList = list.kind !== 'reference';
+
+  const handleWholeListAction = (actionId: (typeof moveActions)[number]['id']): void => {
+    switch (actionId) {
+      case 'bring-to-now':
+        void moveListToNow(list.id, currentDate);
+        break;
+      case 'focus':
+        void setListFocus(currentDate, list.id, true);
+        break;
+      case 'remove-focus':
+        void setListFocus(currentDate, list.id, false);
+        break;
+      case 'remove-from-now':
+      case 'unschedule':
+        void clearListSchedule(list.id);
+        break;
+    }
+  };
 
   const handleFinish = async (action: FinishListAction): Promise<void> => {
     setFinishError(null);
@@ -88,7 +123,17 @@ export function ActiveListCard({
             {doneCount ? <span className="chip small">{doneCount} crossed off</span> : null}
           </div>
         </div>
+
         <div className="dialog-actions">
+          {primaryMoveAction ? (
+            <button
+              className={`button ${primaryMoveAction.tone === 'accent' ? 'accent' : 'ghost'} small`}
+              onClick={() => handleWholeListAction(primaryMoveAction.id)}
+              type="button"
+            >
+              {primaryMoveAction.label}
+            </button>
+          ) : null}
           <button
             className="button ghost small"
             onClick={() => setExpanded((current) => !current)}
@@ -103,37 +148,34 @@ export function ActiveListCard({
           >
             Open list
           </button>
-          <button
-            className="button ghost small"
-            onClick={() => void setListFocus(currentDate, list.id, !isFocused)}
-            type="button"
-          >
-            {isFocused
-              ? 'Remove focus'
-              : currentDate === todayDateKey()
-                ? 'Focus now'
-                : 'Focus for this day'}
-          </button>
-          <button
-            className="button ghost small"
-            onClick={() => void clearListSchedule(list.id)}
-            type="button"
-          >
-            {list.scheduledDate && list.scheduledDate > currentDate
-              ? 'Unschedule'
-              : 'Remove from Now'}
-          </button>
-          <button
-            className="button ghost small"
-            onClick={() => {
-              setFinishError(null);
-              setFinishOpen(true);
-            }}
-            type="button"
-          >
-            Finish list
-          </button>
         </div>
+
+        {expanded && (managementActions.length || canFinishList) ? (
+          <div className="dialog-actions">
+            {managementActions.map((action) => (
+              <button
+                className="button ghost small"
+                key={action.id}
+                onClick={() => handleWholeListAction(action.id)}
+                type="button"
+              >
+                {action.label}
+              </button>
+            ))}
+            {canFinishList ? (
+              <button
+                className="button ghost small"
+                onClick={() => {
+                  setFinishError(null);
+                  setFinishOpen(true);
+                }}
+                type="button"
+              >
+                Finish list
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {expanded ? (
           displayItems.length ? (

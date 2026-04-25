@@ -93,9 +93,9 @@ test('keeps the shell reachable offline after the first load', async ({
   });
 
   expect(shellAvailableOffline).toBe(true);
-  await expect(
-    page.getByRole('button', { name: 'Continue with Google' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Now' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 
   await context.setOffline(false);
 });
