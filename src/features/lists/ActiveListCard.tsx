@@ -14,6 +14,7 @@ import {
   updateListItem,
   type FinishListAction,
 } from '@/storage/local/api';
+import { SurfaceActionBar } from '@/shared/ui/SurfaceActionBar';
 
 import { FinishListDialog } from '@/features/lists/FinishListDialog';
 
@@ -124,16 +125,11 @@ export function ActiveListCard({
           </div>
         </div>
 
-        <div className="dialog-actions">
-          {primaryMoveAction ? (
-            <button
-              className={`button ${primaryMoveAction.tone === 'accent' ? 'accent' : 'ghost'} small`}
-              onClick={() => handleWholeListAction(primaryMoveAction.id)}
-              type="button"
-            >
-              {primaryMoveAction.label}
-            </button>
-          ) : null}
+        <SurfaceActionBar
+          actions={primaryMoveAction ? [primaryMoveAction] : []}
+          className="dialog-actions"
+          onAction={handleWholeListAction}
+        >
           <button
             className="button ghost small"
             onClick={() => setExpanded((current) => !current)}
@@ -148,20 +144,14 @@ export function ActiveListCard({
           >
             Open list
           </button>
-        </div>
+        </SurfaceActionBar>
 
         {expanded && (managementActions.length || canFinishList) ? (
-          <div className="dialog-actions">
-            {managementActions.map((action) => (
-              <button
-                className="button ghost small"
-                key={action.id}
-                onClick={() => handleWholeListAction(action.id)}
-                type="button"
-              >
-                {action.label}
-              </button>
-            ))}
+          <SurfaceActionBar
+            actions={managementActions}
+            className="dialog-actions"
+            onAction={handleWholeListAction}
+          >
             {canFinishList ? (
               <button
                 className="button ghost small"
@@ -174,7 +164,7 @@ export function ActiveListCard({
                 Finish list
               </button>
             ) : null}
-          </div>
+          </SurfaceActionBar>
         ) : null}
 
         {expanded ? (

@@ -102,12 +102,13 @@ Inbox should avoid:
 
 Inbox is the fallback for uncertainty, not the mandatory funnel for every add.
 
-Inbox move language should stay direct and even-weight:
+Inbox item cards should expose one direct `Place` action. `Place` opens a
+lightweight sheet with direct, even-weight destination choices:
 - `Now`
 - `Schedule`
+- `List`
 - `Keep undated`
 - `Waiting on`
-- `List`
 - `Archive`
 
 Inbox should use an explicit schedule confirmation surface before assigning a date.
@@ -285,7 +286,7 @@ Replenishment-list rules:
 - do not foreground `Create task` as a normal visible action
 
 Movement controls should be owned by the route surface:
-- Inbox owns fast routing strips
+- Inbox owns fast placement through a `Place` sheet, not a second control card under each item
 - Now owns command-forward emphasis and overdue recovery
 - Upcoming owns section-specific move verbs
 - item details inherits the route origin and acts as the full fallback surface rather than the default movement language for every screen

@@ -206,12 +206,13 @@ Language should be:
 - fast
 - non-demanding
 
-Inbox routing should read like placement choices, not a dialog:
+Inbox cards should show `Place`, not a row of route buttons under every item.
+The placement sheet should read like choices, not a settings dialog:
 - `Now`
 - `Schedule`
+- `List`
 - `Keep undated`
 - `Waiting on`
-- `List`
 - `Archive`
 
 When `Schedule` needs a date, ask for confirmation explicitly.

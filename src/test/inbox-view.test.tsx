@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SCHEMA_VERSION } from '@/domain/constants';
 import { InboxView } from '@/features/inbox/InboxView';
@@ -8,6 +8,28 @@ import type {
   ItemWithAttachments,
 } from '@/storage/local/api';
 import { createDefaultSyncPullCursorMap } from '@/storage/sync/state';
+
+const storageMocks = vi.hoisted(() => ({
+  moveItemToList: vi.fn(),
+  moveItemToNewList: vi.fn(),
+  saveItem: vi.fn(),
+  toggleTaskDone: vi.fn(),
+}));
+
+vi.mock('@/storage/local/api', async () => {
+  const actual = await vi.importActual<typeof import('@/storage/local/api')>(
+    '@/storage/local/api',
+  );
+
+  return {
+    ...actual,
+    moveItemToList: (...args: unknown[]) => storageMocks.moveItemToList(...args),
+    moveItemToNewList: (...args: unknown[]) =>
+      storageMocks.moveItemToNewList(...args),
+    saveItem: (...args: unknown[]) => storageMocks.saveItem(...args),
+    toggleTaskDone: (...args: unknown[]) => storageMocks.toggleTaskDone(...args),
+  };
+});
 
 function makeCaptureItem(): ItemWithAttachments {
   return {
@@ -141,7 +163,14 @@ function makeSnapshot(item: ItemWithAttachments): HoldfastSnapshot {
 }
 
 describe('InboxView', () => {
-  it('shows the inline placement strip for captures and hides task completion controls', () => {
+  beforeEach(() => {
+    storageMocks.moveItemToList.mockReset();
+    storageMocks.moveItemToNewList.mockReset();
+    storageMocks.saveItem.mockReset();
+    storageMocks.toggleTaskDone.mockReset();
+  });
+
+  it('shows Place inside unsorted item cards and removes the below-card placement block', () => {
     render(
       <InboxView
         currentDate="2026-04-19"
@@ -150,15 +179,141 @@ describe('InboxView', () => {
       />,
     );
 
-    expect(screen.getByText('Place it')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Now' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Schedule' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Keep undated' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Place' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
+    expect(screen.queryByText('Place it')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Now' })).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Complete task/i }),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText('Capture')).not.toHaveLength(0);
+  });
+
+  it('opens a placement sheet with the exact Inbox destinations', () => {
+    render(
+      <InboxView
+        currentDate="2026-04-19"
+        onOpenItem={vi.fn()}
+        snapshot={makeSnapshot(makeCaptureItem())}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+
+    expect(screen.getByRole('dialog', { name: 'Place item' })).toBeVisible();
+    expect(
+      ['Now', 'Schedule', 'List', 'Keep undated', 'Waiting on', 'Archive'].map(
+        (label) => screen.getByRole('button', { name: label }).textContent,
+      ),
+    ).toEqual(['Now', 'Schedule', 'List', 'Keep undated', 'Waiting on', 'Archive']);
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Place item' })).not.toBeInTheDocument();
+  });
+
+  it('requires schedule confirmation before mutating Inbox placement', () => {
+    render(
+      <InboxView
+        currentDate="2026-04-19"
+        onOpenItem={vi.fn()}
+        snapshot={makeSnapshot(makeCaptureItem())}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
+
+    expect(storageMocks.saveItem).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Schedule it' })).toBeVisible();
+  });
+
+  it('opens list targeting from the placement sheet without converting early', () => {
+    const item = makeCaptureItem();
+    const snapshot = makeSnapshot(item);
+    snapshot.lists = [
+      {
+        id: 'list-1',
+        schemaVersion: SCHEMA_VERSION,
+        title: 'Groceries',
+        kind: 'replenishment',
+        lane: 'home',
+        pinned: false,
+        sourceItemId: null,
+        scheduledDate: null,
+        scheduledTime: null,
+        completedAt: null,
+        archivedAt: null,
+        createdAt: '2026-04-19T08:00:00.000Z',
+        updatedAt: '2026-04-19T08:00:00.000Z',
+        deletedAt: null,
+        syncState: 'pending',
+        remoteRevision: null,
+      },
+    ];
+
+    render(
+      <InboxView
+        currentDate="2026-04-19"
+        onOpenItem={vi.fn()}
+        snapshot={snapshot}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    fireEvent.click(screen.getByRole('button', { name: 'List' }));
+
+    expect(storageMocks.moveItemToList).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Convert to list item' })).toBeVisible();
+  });
+
+  it('routes immediate placement choices through the shared sheet', async () => {
+    storageMocks.saveItem.mockResolvedValue(undefined);
+    const item = makeCaptureItem();
+
+    render(
+      <InboxView
+        currentDate="2026-04-19"
+        onOpenItem={vi.fn()}
+        snapshot={makeSnapshot(item)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Waiting on' }));
+
+    await waitFor(() => {
+      expect(storageMocks.saveItem).toHaveBeenCalledWith(item.id, {
+        title: item.title,
+        body: item.body,
+        kind: 'task',
+        lane: item.lane,
+        status: 'waiting',
+        scheduledDate: null,
+        scheduledTime: null,
+      });
+    });
+  });
+
+  it('does not show Place for archived Inbox rows', () => {
+    const archivedItem = {
+      ...makeCaptureItem(),
+      status: 'archived' as const,
+    };
+
+    render(
+      <InboxView
+        currentDate="2026-04-19"
+        onOpenItem={vi.fn()}
+        snapshot={makeSnapshot(archivedItem)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+
+    expect(screen.getByRole('heading', { name: archivedItem.title })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Place' })).not.toBeInTheDocument();
   });
 
   it('stays scoped to Inbox items instead of leaking all open work', () => {

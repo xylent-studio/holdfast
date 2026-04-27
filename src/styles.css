@@ -866,18 +866,6 @@ p {
   display: none;
 }
 
-.placement-actions-compact {
-  display: none;
-}
-
-.placement-overflow summary {
-  list-style: none;
-}
-
-.placement-overflow summary::-webkit-details-marker {
-  display: none;
-}
-
 @media (min-width: 761px) {
   .auth-card {
     gap: 1.5rem;
@@ -962,15 +950,6 @@ p {
     padding: 0.55rem 0.2rem;
   }
 
-  .placement-actions-full {
-    display: none;
-  }
-
-  .placement-actions-compact {
-    display: grid;
-    gap: 0.6rem;
-  }
-
   .attachment-row,
   .account-row,
   .dialog-header,
@@ -1025,5 +1004,27 @@ p {
   .check-button.checked,
   .note-badge {
     width: auto;
+  }
+}
+
+.placement-choice-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.placement-choice-grid .button {
+  justify-content: flex-start;
+  min-height: 3rem;
+  text-align: left;
+}
+
+@media (max-width: 760px) {
+  .placement-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .placement-choice-grid .button {
+    width: 100%;
   }
 }

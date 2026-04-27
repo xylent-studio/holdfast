@@ -4,6 +4,7 @@ import { addDays } from '@/domain/dates';
 import type { DateKey } from '@/domain/dates';
 import { inboxItems, itemMeta } from '@/domain/logic/selectors';
 import {
+  inboxCardActionSpecs,
   inboxPlacementActionSpecs,
   type ItemSurfaceContext,
   type SurfaceActionSpec,
@@ -15,12 +16,12 @@ import {
   toggleTaskDone,
   type HoldfastSnapshot,
 } from '@/storage/local/api';
+import { ItemPlacementDialog } from '@/features/inbox/ItemPlacementDialog';
 import { ListTargetDialog } from '@/features/lists/ListTargetDialog';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { ItemCard } from '@/shared/ui/ItemCard';
 import { Panel } from '@/shared/ui/Panel';
 import { ScheduleConfirmDialog } from '@/shared/ui/ScheduleConfirmDialog';
-import { useCompactLayout } from '@/shared/ui/useCompactLayout';
 
 interface InboxViewProps {
   currentDate: DateKey;
@@ -34,13 +35,15 @@ export function InboxView({
   snapshot,
 }: InboxViewProps) {
   const [filter, setFilter] = useState<'unsorted' | 'archived'>('unsorted');
+  const [placementItemId, setPlacementItemId] = useState<string | null>(null);
   const [scheduleItemId, setScheduleItemId] = useState<string | null>(null);
   const [listRoutingItemId, setListRoutingItemId] = useState<string | null>(null);
   const items = inboxItems(snapshot.items, filter);
+  const placementItem = items.find((item) => item.id === placementItemId) ?? null;
   const scheduleItem = items.find((item) => item.id === scheduleItemId) ?? null;
   const listRoutingItem = items.find((item) => item.id === listRoutingItemId) ?? null;
+  const cardActions = inboxCardActionSpecs();
   const placementActions = inboxPlacementActionSpecs();
-  const compactLayout = useCompactLayout();
 
   const routeItem = async (
     item: (typeof items)[number],
@@ -84,39 +87,31 @@ export function InboxView({
   ): void => {
     switch (action.id) {
       case 'now':
+        setPlacementItemId(null);
         void routeItem(item, 'now');
         break;
       case 'scheduled':
+        setPlacementItemId(null);
         setScheduleItemId(item.id);
         break;
       case 'undated':
+        setPlacementItemId(null);
         void routeItem(item, 'undated');
         break;
       case 'waiting':
+        setPlacementItemId(null);
         void routeItem(item, 'waiting');
         break;
       case 'archive':
+        setPlacementItemId(null);
         void routeItem(item, 'archive');
         break;
       case 'list':
+        setPlacementItemId(null);
         setListRoutingItemId(item.id);
         break;
     }
   };
-
-  const renderPlacementButton = (
-    item: (typeof items)[number],
-    action: SurfaceActionSpec,
-  ) => (
-    <button
-      className="chip"
-      key={action.id}
-      onClick={() => handlePlacementAction(item, action)}
-      type="button"
-    >
-      {action.label}
-    </button>
-  );
 
   return (
     <div className="stack">
@@ -145,50 +140,23 @@ export function InboxView({
         {items.length ? (
           <div className="item-list">
             {items.map((item) => (
-              <div className="stack compact" key={item.id}>
-                <ItemCard
-                  item={item}
-                  meta={itemMeta(item, currentDate, item.attachments)}
-                  onOpen={() => onOpenItem(item.id, { route: 'inbox' })}
-                  onToggleDone={
-                    item.kind === 'task'
-                      ? () => void toggleTaskDone(item.id, currentDate)
-                      : undefined
+              <ItemCard
+                actions={filter === 'unsorted' ? cardActions : []}
+                item={item}
+                key={item.id}
+                meta={itemMeta(item, currentDate, item.attachments)}
+                onAction={(actionId) => {
+                  if (actionId === 'place') {
+                    setPlacementItemId(item.id);
                   }
-                />
-                {filter === 'unsorted' ? (
-                  <div className="item-card day-result">
-                    <div className="field-stack">
-                      <span>Place it</span>
-                      {compactLayout ? (
-                        <div className="placement-actions-compact">
-                          <div className="chip-row">
-                            {placementActions
-                              .filter((action) => ['now', 'list'].includes(action.id))
-                              .map((action) => renderPlacementButton(item, action))}
-                          </div>
-                          <details className="placement-overflow">
-                            <summary className="chip">More places</summary>
-                            <div className="chip-row">
-                              {placementActions
-                                .filter(
-                                  (action) => !['now', 'list'].includes(action.id),
-                                )
-                                .map((action) => renderPlacementButton(item, action))}
-                            </div>
-                          </details>
-                        </div>
-                      ) : (
-                        <div className="chip-row">
-                          {placementActions.map((action) =>
-                            renderPlacementButton(item, action),
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+                }}
+                onOpen={() => onOpenItem(item.id, { route: 'inbox' })}
+                onToggleDone={
+                  item.kind === 'task'
+                    ? () => void toggleTaskDone(item.id, currentDate)
+                    : undefined
+                }
+              />
             ))}
           </div>
         ) : (
@@ -196,6 +164,14 @@ export function InboxView({
         )}
       </Panel>
 
+      {placementItem ? (
+        <ItemPlacementDialog
+          actions={placementActions}
+          item={placementItem}
+          onClose={() => setPlacementItemId(null)}
+          onSelect={(action) => handlePlacementAction(placementItem, action)}
+        />
+      ) : null}
       {scheduleItem ? (
         <ScheduleConfirmDialog
           confirmLabel="Schedule"

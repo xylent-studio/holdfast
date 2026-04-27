@@ -219,7 +219,7 @@ Using tomorrow as the suggested default is acceptable.
 Silently assigning tomorrow is not.
 
 Route-owned movement rules:
-- Inbox should use placement-strip labels such as `Now`, `Schedule`, `Keep undated`, `Waiting on`, `List`, and `Archive`
+- Inbox item cards should show `Place`; the placement sheet should offer `Now`, `Schedule`, `List`, `Keep undated`, `Waiting on`, and `Archive`
 - `Now` should reserve strong move language for overdue recovery and keep normal in-play cards focused on command actions such as `Focus now`
 - `Upcoming` should use section-specific move verbs instead of one generic `Move to Now` label across every section
 - item details should inherit the origin surface so no-op choices read as `Keep in Inbox`, `Keep scheduled`, `Keep undated`, or `Keep waiting`

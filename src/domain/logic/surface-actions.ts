@@ -18,6 +18,7 @@ export type ItemSurfaceContext =
   | { route: 'list'; listId?: string | null };
 
 export type SurfaceActionId =
+  | 'place'
   | 'focus'
   | 'remove-focus'
   | 'bring-to-now'
@@ -62,10 +63,21 @@ export function inboxPlacementActionSpecs(): SurfaceActionSpec[] {
   return [
     { id: 'now', label: 'Now', priority: 'secondary', tone: 'chip' },
     { id: 'scheduled', label: 'Schedule', priority: 'primary', tone: 'chip' },
+    { id: 'list', label: 'List', priority: 'secondary', tone: 'chip' },
     { id: 'undated', label: 'Keep undated', priority: 'secondary', tone: 'chip' },
     { id: 'waiting', label: 'Waiting on', priority: 'secondary', tone: 'chip' },
-    { id: 'list', label: 'List', priority: 'secondary', tone: 'chip' },
     { id: 'archive', label: 'Archive', priority: 'overflow', tone: 'chip' },
+  ];
+}
+
+export function inboxCardActionSpecs(): SurfaceActionSpec[] {
+  return [
+    {
+      id: 'place',
+      label: 'Place',
+      priority: 'primary',
+      tone: 'accent',
+    },
   ];
 }
 

@@ -31,6 +31,7 @@ import { FinishListDialog } from '@/features/lists/FinishListDialog';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Panel } from '@/shared/ui/Panel';
 import { ScheduleConfirmDialog } from '@/shared/ui/ScheduleConfirmDialog';
+import { SurfaceActionBar } from '@/shared/ui/SurfaceActionBar';
 
 interface ListViewProps {
   currentDate: DateKey;
@@ -486,16 +487,11 @@ export function ListView({
         </div>
 
         {!isArchivedList ? (
-          <div className="dialog-actions wrap">
-            {primaryWholeListAction ? (
-              <button
-                className={`button ${primaryWholeListAction.tone === 'accent' ? 'accent' : 'ghost'} small`}
-                onClick={() => handleWholeListMoveAction(primaryWholeListAction.id)}
-                type="button"
-              >
-                {primaryWholeListAction.label}
-              </button>
-            ) : null}
+          <SurfaceActionBar
+            actions={primaryWholeListAction ? [primaryWholeListAction] : []}
+            className="dialog-actions wrap"
+            onAction={handleWholeListMoveAction}
+          >
             <button
               className="button ghost small"
               onClick={() => setManagementOpen((current) => !current)}
@@ -503,7 +499,7 @@ export function ListView({
             >
               {managementOpen ? 'Hide list actions' : 'Manage list'}
             </button>
-          </div>
+          </SurfaceActionBar>
         ) : (
           <div className="empty-inline">
             Archived lists stay searchable for reference. They are not active work surfaces.
@@ -511,17 +507,11 @@ export function ListView({
         )}
 
         {managementOpen && !isArchivedList ? (
-          <div className="dialog-actions wrap">
-            {managementWholeListActions.map((action) => (
-              <button
-                className="button ghost small"
-                key={action.id}
-                onClick={() => handleWholeListMoveAction(action.id)}
-                type="button"
-              >
-                {action.label}
-              </button>
-            ))}
+          <SurfaceActionBar
+            actions={managementWholeListActions}
+            className="dialog-actions wrap"
+            onAction={handleWholeListMoveAction}
+          >
             <button
               className="button ghost small"
               onClick={() => setScheduleOpen(true)}
@@ -545,10 +535,10 @@ export function ListView({
                 }}
                 type="button"
               >
-                Finish list
-              </button>
-            ) : null}
-          </div>
+              Finish list
+            </button>
+          ) : null}
+          </SurfaceActionBar>
         ) : null}
 
         {list.syncState === 'conflict' ? (
