@@ -33,15 +33,63 @@ const harness = vi.hoisted(() => {
 
     const resolveRemoteExisting = () => {
       const recordId = queryState.filters.find(([column]) => column === 'id')?.[1];
-      if (queryState.table !== 'items' || queryState.selected !== 'server_updated_at') {
+      if (
+        queryState.table !== 'items' ||
+        (queryState.selected !== 'server_updated_at' && queryState.selected !== '*')
+      ) {
         return { data: null, error: null };
       }
 
-      if (recordId === state.conflictItemId) {
+      const existingRemoteRow =
+        recordId === state.syncedItemId
+          ? null
+          : state.remoteItemRows.find((row) => row.id === recordId);
+
+      if (existingRemoteRow) {
         return {
-          data: {
-            server_updated_at: 'server-item-conflict',
-          },
+          data:
+            queryState.selected === '*'
+              ? existingRemoteRow
+              : {
+                  server_updated_at:
+                    existingRemoteRow.server_updated_at ?? 'server-item-existing',
+                },
+          error: null,
+        };
+      }
+
+      if (recordId === state.conflictItemId) {
+        const conflictRow = {
+          user_id: USER_ID,
+          id: recordId,
+          schema_version: 5,
+          title: 'Remote conflict',
+          kind: 'task',
+          lane: 'admin',
+          status: 'inbox',
+          body: 'Remote version',
+          source_text: null,
+          source_item_id: null,
+          capture_mode: null,
+          source_date: '2026-04-19',
+          scheduled_date: null,
+          scheduled_time: null,
+          routine_id: null,
+          completed_at: null,
+          archived_at: null,
+          created_at: '2026-04-19T08:00:00.000Z',
+          updated_at: '2026-04-19T08:00:00.000Z',
+          deleted_at: null,
+          server_updated_at: 'server-item-conflict',
+        };
+
+        return {
+          data:
+            queryState.selected === '*'
+              ? conflictRow
+              : {
+                  server_updated_at: 'server-item-conflict',
+                },
           error: null,
         };
       }
@@ -372,6 +420,93 @@ describe('syncHoldfastWithSupabase', () => {
       blockedReason: 'account-mismatch',
       mode: 'ready',
     });
+  });
+
+  it('recognizes an equivalent remote row as the same pending local item', async () => {
+    harness.getSessionMock.mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: USER_ID,
+          },
+        },
+      },
+      error: null,
+    });
+    harness.getCurrentWorkspaceStateMock.mockResolvedValue({
+      attachState: 'attached',
+      ownershipState: 'member',
+      boundUserId: USER_ID,
+      authPromptState: 'none',
+    });
+    harness.getCurrentSyncStateMock.mockResolvedValue({
+      lastSyncedAt: null,
+      pullCursorByStream: createDefaultSyncPullCursorMap(),
+    });
+
+    await createItem({
+      title: 'Already reached remote',
+      kind: 'task',
+      lane: 'admin',
+      status: 'inbox',
+      body: '',
+      sourceText: null,
+      sourceItemId: null,
+      captureMode: null,
+      sourceDate: '2026-04-19',
+      scheduledDate: null,
+      scheduledTime: null,
+    });
+
+    const item = (await db.items.toArray())[0]!;
+    harness.state.remoteItemRows = [
+      {
+        user_id: USER_ID,
+        id: item.id,
+        schema_version: 5,
+        title: item.title,
+        kind: item.kind,
+        lane: item.lane,
+        status: item.status,
+        body: item.body,
+        source_text: item.sourceText,
+        source_item_id: item.sourceItemId,
+        capture_mode: item.captureMode,
+        source_date: item.sourceDate,
+        scheduled_date: item.scheduledDate,
+        scheduled_time: item.scheduledTime,
+        routine_id: item.routineId,
+        completed_at: item.completedAt,
+        archived_at: item.archivedAt,
+        created_at: item.createdAt,
+        updated_at: item.updatedAt,
+        deleted_at: item.deletedAt,
+        server_updated_at: 'server-item-existing',
+      },
+    ];
+
+    await expect(syncHoldfastWithSupabase()).resolves.toBeUndefined();
+
+    const syncedItem = await db.items.get(item.id);
+    const mutation = (await db.mutationQueue.toArray()).find(
+      (entry) => entry.entityId === item.id,
+    );
+
+    expect(syncedItem).toMatchObject({
+      syncState: 'synced',
+      remoteRevision: 'server-item-existing',
+    });
+    expect(mutation).toMatchObject({
+      status: 'acknowledged',
+      lastError: null,
+    });
+    expect(harness.updateSyncStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        blockedReason: null,
+        lastTransportError: null,
+        mode: 'ready',
+      }),
+    );
   });
 
   it('continues after a conflicted mutation, marks it failed, and still completes the pull', async () => {

@@ -43,5 +43,11 @@ Production-bundle route QA also covered `/now`, `/inbox`, `/upcoming`,
 `Add -> Place` path. No route stayed on boot, overflowed horizontally, or showed
 the old below-card placement surface.
 
+During staging promotion, the list/list-item sync smoke exposed a false-conflict
+edge: an equivalent remote row could be seen while the local row was still
+pending, leaving Settings at `Needs attention`. The sync engine now recognizes
+equivalent remote rows as the same acknowledged local work instead of treating
+them as conflicts.
+
 Remaining non-blocker: full hosted validation should still run before production
 promotion because this changes primary interaction behavior.
